@@ -1,0 +1,46 @@
+[package]
+name = "gist"
+version = "0.1.0"
+edition = "2021"
+description = "Convert files and URLs to LLM-friendly markdown"
+license = "MIT"
+repository = "https://github.com/yourname/gist"
+readme = "README.md"
+
+[[bin]]
+name = "gist"
+path = "src/main.rs"
+
+[dependencies]
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+anyhow = "1.0"
+
+# Encoding detection (Firefox-grade, handles GBK/GB18030/Big5/Shift_JIS)
+encoding_rs = "0.8"
+chardetng = "0.1"
+
+# OOXML shared infrastructure
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+quick-xml = "0.36"
+
+# Format-specific
+calamine = "0.26"        # xlsx (read-only, blazing fast)
+pulldown-cmark = "0.12"  # markdown parsing/normalization
+scraper = "0.20"         # HTML DOM
+readability = "0.3"      # main content extraction
+pdf-extract = "0.7"      # PDF text layer
+csv = "1.3"
+serde_json = "1.0"       # ipynb
+
+# HTTP (sync, small, no async runtime)
+ureq = { version = "2.10", features = ["tls"] }
+
+# Utility
+url = "2.5"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
