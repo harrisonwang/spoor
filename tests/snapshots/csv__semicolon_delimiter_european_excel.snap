@@ -1,0 +1,7 @@
+---
+source: tests/csv.rs
+expression: out
+---
+| col1 | col2 | col3 |
+| --- | --- | --- |
+| foo | bar | baz |

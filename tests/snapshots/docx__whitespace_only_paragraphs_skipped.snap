@@ -1,0 +1,5 @@
+---
+source: tests/docx.rs
+expression: out
+---
+real content

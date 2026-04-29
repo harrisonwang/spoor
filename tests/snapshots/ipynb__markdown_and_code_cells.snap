@@ -1,0 +1,13 @@
+---
+source: tests/ipynb.rs
+expression: out
+---
+# Notebook title
+Some prose.
+
+```python
+print('hello')
+42
+```
+
+Trailing markdown.

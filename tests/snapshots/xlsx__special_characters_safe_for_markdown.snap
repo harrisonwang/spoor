@@ -1,0 +1,9 @@
+---
+source: tests/xlsx.rs
+expression: out
+---
+## Sheet: Special
+
+| pipe \| | tab here | newline here |
+| --- | --- | --- |
+| smart “quote” | em — dash | 中文 mixed |

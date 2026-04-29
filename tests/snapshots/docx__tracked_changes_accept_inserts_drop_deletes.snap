@@ -1,0 +1,5 @@
+---
+source: tests/docx.rs
+expression: out
+---
+The price is 60 dollars.

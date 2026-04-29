@@ -1,0 +1,8 @@
+---
+source: tests/docx.rs
+expression: out
+---
+A claim with citation[^1] and another[^2].
+
+[^1]: First footnote source.
+[^2]: Second source, see appendix.

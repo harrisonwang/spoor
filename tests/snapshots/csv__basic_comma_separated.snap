@@ -1,0 +1,9 @@
+---
+source: tests/csv.rs
+expression: out
+---
+| Name | Score | Note |
+| --- | --- | --- |
+| Alice | 95 | first |
+| Bob | 80 | second |
+| Carol | 70 | third |

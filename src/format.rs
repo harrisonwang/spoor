@@ -1,11 +1,11 @@
 use crate::source::Source;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::fmt;
 
-/// Supported formats. Keep this in sync with extractors::extract().
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+/// Internal format enum (includes Url).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
-    Url,        // remote HTML page (after fetch, falls through to Html)
+    Url,
     Html,
     Markdown,
     Pdf,
@@ -18,9 +18,41 @@ pub enum Format {
     PlainText,
 }
 
+/// User-facing subset for `--format`. Url isn't here — it's automatic.
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+pub enum FormatArg {
+    Html,
+    Markdown,
+    Pdf,
+    Docx,
+    Xlsx,
+    Pptx,
+    Csv,
+    Ipynb,
+    Epub,
+    Text,
+}
+
+impl From<FormatArg> for Format {
+    fn from(a: FormatArg) -> Self {
+        match a {
+            FormatArg::Html => Format::Html,
+            FormatArg::Markdown => Format::Markdown,
+            FormatArg::Pdf => Format::Pdf,
+            FormatArg::Docx => Format::Docx,
+            FormatArg::Xlsx => Format::Xlsx,
+            FormatArg::Pptx => Format::Pptx,
+            FormatArg::Csv => Format::Csv,
+            FormatArg::Ipynb => Format::Ipynb,
+            FormatArg::Epub => Format::Epub,
+            FormatArg::Text => Format::PlainText,
+        }
+    }
+}
+
 impl fmt::Display for Format {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
+        f.write_str(match self {
             Format::Url => "url",
             Format::Html => "html",
             Format::Markdown => "markdown",
@@ -32,43 +64,37 @@ impl fmt::Display for Format {
             Format::Ipynb => "ipynb",
             Format::Epub => "epub",
             Format::PlainText => "text",
-        };
-        f.write_str(s)
+        })
     }
 }
 
-/// Detection priority:
-///   1. URL → Format::Url
-///   2. Magic bytes (zip, %PDF, etc.)
-///   3. File extension
-///   4. Fall back to PlainText for unknown text-looking content
+/// Detection priority: URL > magic bytes > extension > text fallback.
 pub fn detect(source: &Source) -> Result<Format> {
     if source.is_url() {
+        // Could refine here later via Content-Type sniffing.
+        if let Some(ct) = source.content_type() {
+            if ct.contains("application/pdf") {
+                return Ok(Format::Pdf);
+            }
+            if ct.contains("application/json") {
+                return Ok(Format::PlainText);
+            }
+        }
         return Ok(Format::Url);
     }
 
     let bytes = source.bytes();
 
-    // Magic bytes (most reliable)
     if let Some(f) = detect_by_magic(bytes) {
-        // For ZIP, we need extension/content sniffing to disambiguate.
-        if f == Format::Epub
-            || matches!(f, Format::Docx | Format::Xlsx | Format::Pptx)
-        {
-            // Already disambiguated inside detect_by_magic.
-            return Ok(f);
-        }
         return Ok(f);
     }
 
-    // Extension fallback
     if let Some(ext) = source.extension() {
         if let Some(f) = detect_by_ext(&ext) {
             return Ok(f);
         }
     }
 
-    // Last resort: looks like text? → PlainText
     if looks_like_text(bytes) {
         return Ok(Format::PlainText);
     }
@@ -79,31 +105,21 @@ pub fn detect(source: &Source) -> Result<Format> {
 }
 
 fn detect_by_magic(bytes: &[u8]) -> Option<Format> {
-    // PDF: %PDF-
     if bytes.starts_with(b"%PDF-") {
         return Some(Format::Pdf);
     }
-
-    // ZIP container (PK\x03\x04). Could be docx/xlsx/pptx/epub.
     if bytes.starts_with(b"PK\x03\x04") || bytes.starts_with(b"PK\x05\x06") {
         return disambiguate_zip(bytes);
     }
-
     None
 }
 
-/// Peek into a ZIP archive to figure out which OOXML/EPUB format it is.
-/// Looks for sentinel files: word/, xl/, ppt/, mimetype (epub).
+/// Peek into a ZIP archive: which OOXML/EPUB is it?
+/// We use `file_names()` which returns an iterator of &str.
 fn disambiguate_zip(bytes: &[u8]) -> Option<Format> {
     use std::io::Cursor;
-    let cursor = Cursor::new(bytes);
-    let archive = zip::ZipArchive::new(cursor).ok()?;
-    for i in 0..archive.len() {
-        // We only need the file names, not contents.
-        let name = archive
-            .name_for_index(i)
-            .or_else(|| Some(""))
-            .unwrap_or("");
+    let archive = zip::ZipArchive::new(Cursor::new(bytes)).ok()?;
+    for name in archive.file_names() {
         if name.starts_with("word/") {
             return Some(Format::Docx);
         }
@@ -131,18 +147,16 @@ fn detect_by_ext(ext: &str) -> Option<Format> {
         "csv" | "tsv" => Some(Format::Csv),
         "ipynb" => Some(Format::Ipynb),
         "epub" => Some(Format::Epub),
-        "txt" | "log" | "rs" | "py" | "js" | "ts" | "go" | "json" | "yaml" | "yml"
-        | "toml" | "xml" | "sh" => Some(Format::PlainText),
+        "txt" | "log" | "rs" | "py" | "js" | "ts" | "go" | "json" | "yaml" | "yml" | "toml"
+        | "xml" | "sh" | "c" | "cpp" | "h" | "java" => Some(Format::PlainText),
         _ => None,
     }
 }
 
 fn looks_like_text(bytes: &[u8]) -> bool {
-    // Sample first 4 KB; if no NUL bytes and mostly ASCII/UTF-8 valid, treat as text.
     let sample = &bytes[..bytes.len().min(4096)];
     if sample.contains(&0) {
         return false;
     }
     std::str::from_utf8(sample).is_ok()
-        || encoding_rs::UTF_8.decode_without_bom_handling(sample).0.len() > 0
 }

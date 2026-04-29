@@ -1,0 +1,8 @@
+---
+source: tests/ipynb.rs
+expression: out
+---
+```R
+x <- 1:10
+plot(x)
+```

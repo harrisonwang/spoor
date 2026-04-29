@@ -1,0 +1,17 @@
+---
+source: tests/xlsx.rs
+expression: out
+---
+## Sheet: First
+
+| a | b |
+| --- | --- |
+| 1 | 2 |
+
+## Sheet: Second
+
+| x | y |
+| --- | --- |
+| 3 | 4 |
+
+## Sheet: Empty

@@ -1,0 +1,7 @@
+---
+source: tests/docx.rs
+expression: out
+---
+Leading **middle** trailing.
+
+NoSpacesConcatenated

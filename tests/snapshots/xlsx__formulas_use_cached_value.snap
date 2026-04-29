@@ -1,0 +1,10 @@
+---
+source: tests/xlsx.rs
+expression: out
+---
+## Sheet: Formulas
+
+| hello | 10 |
+| --- | --- |
+| HELLO | 20 |
+| #DIV/0! |  |

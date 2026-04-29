@@ -1,0 +1,15 @@
+---
+source: tests/docx.rs
+expression: out
+---
+# Real Lists
+
+- Bullet A
+
+- Bullet B
+
+  - Nested bullet
+
+1. Number 1
+
+2. Number 2

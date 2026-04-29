@@ -1,0 +1,10 @@
+---
+source: tests/xlsx.rs
+expression: out
+---
+## Sheet: Types
+
+| str | 12345.6789 | TRUE | 2025-01-15T14:30:00 |
+| --- | --- | --- | --- |
+| 1000000 | 0.0000001 | FALSE | 2025-01-16 |
+| with newline here | with tab here | with pipe\|here | 14:30:00 |

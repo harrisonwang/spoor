@@ -1,0 +1,13 @@
+---
+source: tests/docx.rs
+expression: out
+---
+# 中文标题 / 日本語
+
+中英 mixed text with 한글 そして emoji 🎉🚀
+
+RTL: עברית and العربية
+
+Math: α β γ ∑ ∫ ≈ ≠ ≤
+
+Smart: “hello” ‘world’ — em-dash

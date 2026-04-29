@@ -11,7 +11,7 @@ pub fn extract(source: &Source) -> Result<String> {
     let text = decode_text(source.bytes());
     let delimiter = sniff_delimiter(&text);
 
-    let mut rdr = csv::ReaderBuilder::new()
+    let mut rdr = ::csv::ReaderBuilder::new()
         .has_headers(false)
         .delimiter(delimiter)
         .flexible(true)
@@ -35,7 +35,6 @@ pub fn extract(source: &Source) -> Result<String> {
     }
 
     let cols = rows.iter().map(|r| r.len()).max().unwrap_or(0);
-    // Pad short rows.
     for r in &mut rows {
         while r.len() < cols {
             r.push(String::new());
@@ -49,10 +48,7 @@ pub fn extract(source: &Source) -> Result<String> {
         out.push_str(&format!("| {} |\n", row.join(" | ")));
     }
     if truncated {
-        out.push_str(&format!(
-            "\n_(truncated at {} rows)_\n",
-            MAX_ROWS
-        ));
+        out.push_str(&format!("\n_(truncated at {} rows)_\n", MAX_ROWS));
     }
     Ok(out)
 }

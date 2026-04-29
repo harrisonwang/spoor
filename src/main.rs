@@ -1,14 +1,10 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-use std::path::PathBuf;
+use std::fmt;
 
-mod format;
-mod output;
-mod source;
-mod extractors;
-
-use format::Format;
-use source::Source;
+use gist::extractors;
+use gist::format::{self, FormatArg};
+use gist::source::Source;
 
 /// Convert files and URLs to LLM-friendly markdown.
 #[derive(Parser, Debug)]
@@ -19,11 +15,30 @@ struct Cli {
 
     /// Override format detection.
     #[arg(long, value_enum)]
-    format: Option<Format>,
+    format: Option<FormatArg>,
 
-    /// Output as JSON ({"content": "...", "format": "...", "source": "..."}).
+    /// Output mode. `llm` is the default; `json` is a flat placeholder schema for now.
+    #[arg(long, value_enum, default_value_t = OutputMode::Llm)]
+    mode: OutputMode,
+
+    /// Deprecated alias for `--mode json`.
     #[arg(long)]
     json: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum OutputMode {
+    Llm,
+    Json,
+}
+
+impl fmt::Display for OutputMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            OutputMode::Llm => "llm",
+            OutputMode::Json => "json",
+        })
+    }
 }
 
 fn main() {
@@ -36,33 +51,36 @@ fn main() {
 fn run() -> Result<()> {
     let cli = Cli::parse();
 
-    // 1. Resolve input → Source (file bytes or URL)
     let source = Source::resolve(&cli.input)
         .with_context(|| format!("failed to resolve input: {}", cli.input))?;
 
-    // 2. Detect format (CLI override > magic bytes > extension > URL content-type)
     let format = match cli.format {
-        Some(f) => f,
+        Some(f) => f.into(),
         None => format::detect(&source)
             .with_context(|| format!("could not detect format for: {}", cli.input))?,
     };
 
-    // 3. Dispatch to extractor
     let markdown = extractors::extract(&source, format)
         .with_context(|| format!("extraction failed ({})", format))?;
 
-    // 4. Emit
-    if cli.json {
-        let obj = serde_json::json!({
-            "content": markdown,
-            "format": format.to_string(),
-            "source": cli.input,
-        });
-        println!("{}", obj);
-    } else {
-        print!("{}", markdown);
-        if !markdown.ends_with('\n') {
-            println!();
+    let mode = if cli.json { OutputMode::Json } else { cli.mode };
+    match mode {
+        OutputMode::Llm => {
+            print!("{}", markdown);
+            if !markdown.ends_with('\n') {
+                println!();
+            }
+        }
+        OutputMode::Json => {
+            let obj = serde_json::json!({
+                "mode": "json",
+                "schema_version": "gist-json-v0",
+                "status": "placeholder",
+                "content": markdown,
+                "format": format.to_string(),
+                "source": cli.input,
+            });
+            println!("{}", obj);
         }
     }
     Ok(())

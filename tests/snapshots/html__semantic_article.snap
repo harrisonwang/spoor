@@ -1,0 +1,19 @@
+---
+source: tests/html.rs
+expression: out
+---
+# The article title
+
+The opening paragraph contains the lead and is written by the author.
+
+## First section
+
+This is the body of the first section, with a [link](https://example.com) and some **bold** and *emphasized* text.
+
+- First bullet
+
+- Second bullet
+
+## Second section
+
+Another paragraph.

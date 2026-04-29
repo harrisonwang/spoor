@@ -1,0 +1,8 @@
+---
+source: tests/csv.rs
+expression: out
+---
+| name | score |
+| --- | --- |
+| Alice | 95 |
+| Bob | 80 |

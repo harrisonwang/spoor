@@ -1,0 +1,12 @@
+---
+source: tests/pptx.rs
+expression: out
+---
+## Slide 1
+
+Has a Table
+
+| Header A | Header B |
+| --- | --- |
+| 1 | 2 |
+| 3 | 4 |

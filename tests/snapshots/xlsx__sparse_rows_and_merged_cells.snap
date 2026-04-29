@@ -1,0 +1,10 @@
+---
+source: tests/xlsx.rs
+expression: out
+---
+## Sheet: Sparse
+
+| header |  |  |  | far |
+| --- | --- | --- | --- | --- |
+| row 3 |  |  |  |  |
+| merged |  |  |  |  |

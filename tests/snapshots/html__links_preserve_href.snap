@@ -1,0 +1,7 @@
+---
+source: tests/html.rs
+expression: out
+---
+Visit [our site](https://example.com) for details.
+
+Or read the [guide](https://docs.example.com/guide).

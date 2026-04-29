@@ -1,0 +1,8 @@
+---
+source: tests/csv.rs
+expression: out
+---
+| a | b | c |  |
+| --- | --- | --- | --- |
+| 1 | 2 |  |  |
+| x | y | z | w |

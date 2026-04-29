@@ -1,15 +1,22 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
+use std::io::Read;
 use std::path::PathBuf;
+use std::time::Duration;
 
-/// A resolved input: either local file bytes or a fetched URL.
+/// A resolved input: either local file bytes or a fetched URL response.
 pub struct Source {
     bytes: Vec<u8>,
     origin: Origin,
 }
 
 enum Origin {
-    File { path: PathBuf },
-    Url { url: String, content_type: Option<String> },
+    File {
+        path: PathBuf,
+    },
+    Url {
+        url: String,
+        content_type: Option<String>,
+    },
 }
 
 impl Source {
@@ -23,28 +30,34 @@ impl Source {
 
     fn read_file(path: &str) -> Result<Self> {
         let pb = PathBuf::from(path);
-        let bytes = std::fs::read(&pb)
-            .with_context(|| format!("failed to read file: {}", path))?;
-        Ok(Self { bytes, origin: Origin::File { path: pb } })
+        let bytes = std::fs::read(&pb).with_context(|| format!("failed to read file: {path}"))?;
+        Ok(Self {
+            bytes,
+            origin: Origin::File { path: pb },
+        })
     }
 
     fn fetch_url(url: &str) -> Result<Self> {
         let resp = ureq::get(url)
-            .set("User-Agent", "gist/0.1 (+https://github.com/yourname/gist)")
-            .timeout(std::time::Duration::from_secs(30))
+            .set("User-Agent", "gist/0.1")
+            .timeout(Duration::from_secs(30))
             .call()
-            .with_context(|| format!("failed to fetch URL: {}", url))?;
+            .map_err(|e| anyhow!("failed to fetch URL: {e}"))?;
 
         let content_type = resp.header("content-type").map(|s| s.to_string());
+
         let mut bytes = Vec::new();
         resp.into_reader()
-            .take(50 * 1024 * 1024) // 50 MB cap on URL fetches
+            .take(50 * 1024 * 1024) // 50 MB cap
             .read_to_end(&mut bytes)
-            .map_err(|e| anyhow!("failed to read response body: {}", e))?;
+            .map_err(|e| anyhow!("failed to read response body: {e}"))?;
 
         Ok(Self {
             bytes,
-            origin: Origin::Url { url: url.to_string(), content_type },
+            origin: Origin::Url {
+                url: url.to_string(),
+                content_type,
+            },
         })
     }
 
@@ -76,15 +89,14 @@ impl Source {
                 .extension()
                 .and_then(|e| e.to_str())
                 .map(|s| s.to_string()),
-            Origin::Url { url, .. } => url::Url::parse(url)
-                .ok()
-                .and_then(|u| {
-                    u.path_segments()
-                        .and_then(|segs| segs.last().map(|s| s.to_string()))
-                })
-                .and_then(|seg| {
-                    seg.rsplit('.').next().map(|s| s.to_string())
-                }),
+            Origin::Url { url, .. } => {
+                // Pull last path segment, take part after final '.'
+                let parsed = url::Url::parse(url).ok()?;
+                let last_seg = parsed
+                    .path_segments()
+                    .and_then(|mut s| s.next_back().map(|x| x.to_string()))?;
+                last_seg.rsplit_once('.').map(|(_, ext)| ext.to_string())
+            }
         }
     }
 }
@@ -92,5 +104,3 @@ impl Source {
 fn is_url(s: &str) -> bool {
     s.starts_with("http://") || s.starts_with("https://")
 }
-
-use std::io::Read;

@@ -1,5 +1,4 @@
-/// Tiny helpers shared by extractors when assembling markdown output.
-/// We deliberately don't introduce a typed AST — extractors push strings.
+/// Common helpers for extractors.
 
 pub struct MarkdownBuilder {
     buf: String,
@@ -11,7 +10,7 @@ impl MarkdownBuilder {
     }
 
     pub fn heading(&mut self, level: u8, text: &str) {
-        let level = level.min(6).max(1);
+        let level = level.clamp(1, 6);
         self.ensure_blank_line();
         for _ in 0..level {
             self.buf.push('#');
@@ -35,12 +34,6 @@ impl MarkdownBuilder {
         self.buf.push_str(s);
     }
 
-    pub fn newline(&mut self) {
-        if !self.buf.ends_with('\n') {
-            self.buf.push('\n');
-        }
-    }
-
     pub fn blank_line(&mut self) {
         self.ensure_blank_line();
     }
@@ -58,23 +51,23 @@ impl MarkdownBuilder {
     }
 
     pub fn build(self) -> String {
-        // Trim trailing whitespace, ensure single final newline.
         let mut s = self.buf.trim_end().to_string();
         s.push('\n');
         s
     }
 }
 
-/// Decode bytes with charset detection (handles GBK/GB18030/Big5/Shift_JIS/UTF-8/etc).
+impl Default for MarkdownBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Decode bytes with charset detection (UTF-8 / GBK / GB18030 / Big5 / etc).
 pub fn decode_text(bytes: &[u8]) -> String {
     let mut detector = chardetng::EncodingDetector::new();
     detector.feed(bytes, true);
     let encoding = detector.guess(None, true);
     let (cow, _, _) = encoding.decode(bytes);
     cow.into_owned()
-}
-
-/// Replace control characters that would break TSV/markdown output.
-pub fn sanitize_cell(s: &str) -> String {
-    s.replace('\t', " ").replace('\n', " ").replace('\r', "")
 }

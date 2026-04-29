@@ -1,0 +1,9 @@
+---
+source: tests/docx.rs
+expression: out
+---
+- Bullet A
+
+- Bullet B
+
+1. Number 1

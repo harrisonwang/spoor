@@ -1,0 +1,15 @@
+---
+source: tests/docx.rs
+expression: out
+---
+# First Heading
+
+A normal paragraph.
+
+## Second Heading
+
+plain **bold** *italic* ***bold-italic***
+
+### Third level
+
+Trailing text.

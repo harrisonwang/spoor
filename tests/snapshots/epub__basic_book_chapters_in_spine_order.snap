@@ -1,0 +1,13 @@
+---
+source: tests/epub.rs
+expression: out
+---
+Chapter One
+This is the first chapter, with a
+bold
+word.
+Item A
+Item B
+
+Chapter Two
+Second chapter content.

@@ -1,0 +1,9 @@
+---
+source: tests/ipynb.rs
+expression: out
+---
+single string source
+
+array
+of
+lines

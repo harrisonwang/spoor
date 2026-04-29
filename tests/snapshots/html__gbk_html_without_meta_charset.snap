@@ -1,0 +1,7 @@
+---
+source: tests/html.rs
+expression: out
+---
+# 中文标题
+
+这是一段中文正文,测试编码自动检测。

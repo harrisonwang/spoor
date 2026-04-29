@@ -1,0 +1,7 @@
+---
+source: tests/docx.rs
+expression: out
+---
+# Hyperlinks
+
+See [example](https://example.com) and [another](https://another.org/path?q=1).

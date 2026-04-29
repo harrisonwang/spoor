@@ -1,0 +1,7 @@
+---
+source: tests/docx.rs
+expression: out
+---
+# Custom prefix x
+
+Plain paragraph under custom prefix.

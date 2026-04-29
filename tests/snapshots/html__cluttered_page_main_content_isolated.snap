@@ -1,0 +1,9 @@
+---
+source: tests/html.rs
+expression: out
+---
+# Real news headline
+
+The actual story content begins here. This is the meat of the article that a user actually wants to read.
+
+A second paragraph of substantive content.

@@ -1,0 +1,12 @@
+---
+source: tests/xlsx.rs
+expression: out
+---
+## Sheet: Shared
+
+| repeated | unique0 |
+| --- | --- |
+| repeated | unique1 |
+| repeated | unique2 |
+| repeated | unique3 |
+| repeated | unique4 |

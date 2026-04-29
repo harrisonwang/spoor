@@ -1,0 +1,10 @@
+---
+source: tests/docx.rs
+expression: out
+---
+# Tables
+
+| Name | Score | Note |
+| --- | --- | --- |
+| Alice | 95 | first |
+| Bob | 80 | with \| pipe |

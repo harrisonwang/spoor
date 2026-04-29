@@ -1,0 +1,5 @@
+---
+source: tests/pptx.rs
+expression: out
+---
+## Slide 1

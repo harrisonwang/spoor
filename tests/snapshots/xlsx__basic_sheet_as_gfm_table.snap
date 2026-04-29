@@ -1,0 +1,11 @@
+---
+source: tests/xlsx.rs
+expression: out
+---
+## Sheet: Data
+
+| Name | Score | Note |
+| --- | --- | --- |
+| Alice | 95 | first |
+| Bob | 80 | second |
+| Carol | 70 | third |
