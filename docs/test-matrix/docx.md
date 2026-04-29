@@ -17,7 +17,7 @@ DOCX 测试重点是 WordprocessingML 的语义结构能否稳定转成 LLM-frie
 | `docx/10_heading_levels.docx` | `heading_levels_one_through_six` | Heading 1..6 映射到 Markdown heading | 标题层级是 LLM 分块核心 | passed | Heading 7+ fallback |
 | `docx/11_whitespace_runs.docx` | `xml_space_preserve_runs` | `xml:space=preserve` 的空格语义被保留 | 防止 run 拼接破坏词边界 | passed | tab、soft hyphen、line break |
 | `docx/12_tracked_changes.docx` | `tracked_changes_accept_inserts_drop_deletes` | 默认接受插入、丢弃删除 | 和多数抽取服务一致，输出低噪声 | passed | `--show-changes` 模式 |
-| `docx/13_formatted_whitespace_only_runs.docx` | `formatted_whitespace_only_runs_no_panic` | 仅空白 run 上带粗斜体/链接时不 panic；不叠 Markdown 噪声 | Word 常见；对齐 LLM 模式降噪契约 | passed | — |
+| `docx/13_formatted_whitespace_only_runs.docx` | `formatted_whitespace_only_runs_no_panic` | 仅空白 run 上带粗斜体/链接时不 panic；不叠 Markdown 噪声 | Word 常见；对齐 md 输出降噪契约 | passed | — |
 
 ## 下一批优先用例
 

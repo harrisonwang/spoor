@@ -2,10 +2,10 @@
 
 本文档记录 `gist` 的 LLM-oriented extraction contract。它不是为了复刻 `extract-text` 的逐字输出，而是为了把不同文件格式转换成更适合 LLM 和 Agent 使用的文本表示。
 
-当前只定义两种输出模式：
+当前只定义两种输出模式（均面向 LLM / Agent；名称表示 **stdout 形态**）：
 
-- `llm`：默认模式，输出 Markdown-like 文本。
-- `json`：预留模式，目前只是扁平占位 schema，完整 block JSON 稍后实现。
+- `md`：默认，stdout 为 Markdown-like 正文。
+- `json`：stdout 为 JSON 占位 envelope，完整 block JSON 稍后实现。
 
 ## 判断标准
 
@@ -21,7 +21,7 @@
 
 ## 输出模式
 
-### `llm`
+### `md`
 
 默认模式。面向模型上下文，优先保留语义结构，丢弃纯视觉信息。
 
@@ -41,7 +41,7 @@
 
 ### `json`
 
-当前只是兼容/占位：
+当前只是占位：
 
 ```json
 {
@@ -50,7 +50,7 @@
   "status": "placeholder",
   "format": "docx",
   "source": "report.docx",
-  "content": "...llm text..."
+  "content": "...markdown body..."
 }
 ```
 

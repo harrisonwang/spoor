@@ -58,7 +58,7 @@ fn code_file_passthrough() {
 }
 
 #[test]
-fn default_mode_is_llm_text() {
+fn default_mode_is_markdown_like_text() {
     let output = gist_bin()
         .arg(fixture_path("html/06_links.html"))
         .output()
@@ -68,7 +68,7 @@ fn default_mode_is_llm_text() {
     let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
     assert!(
         stdout.contains("[our site](https://example.com)"),
-        "默认 llm 模式应保留 Markdown 链接, got:\n{stdout}"
+        "默认 md 模式应保留 Markdown 链接, got:\n{stdout}"
     );
     assert!(
         !stdout.trim_start().starts_with('{'),
@@ -94,19 +94,4 @@ fn json_mode_is_flat_placeholder_schema() {
     assert_eq!(value["format"], "text");
     assert_eq!(value["source"], source);
     assert_eq!(value["content"], "Hello world\nLine two\n");
-}
-
-#[test]
-fn legacy_json_flag_maps_to_json_mode() {
-    let output = gist_bin()
-        .args(["--json", &fixture_path("plain/01_ascii.txt")])
-        .output()
-        .expect("run gist");
-
-    assert!(output.status.success());
-    let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
-    let value: Value = serde_json::from_str(&stdout).expect("json stdout");
-
-    assert_eq!(value["mode"], "json");
-    assert_eq!(value["schema_version"], "gist-json-v0");
 }

@@ -17,25 +17,22 @@ struct Cli {
     #[arg(long, value_enum)]
     format: Option<FormatArg>,
 
-    /// Output mode. `llm` is the default; `json` is a flat placeholder schema for now.
-    #[arg(long, value_enum, default_value_t = OutputMode::Llm)]
+    /// Dump markdown-like body to stdout (`md`), or a flat JSON envelope (`json`, placeholder schema).
+    /// All outputs remain LLM/Agent oriented; naming reflects stdout shape only.
+    #[arg(long, short = 'm', value_enum, default_value_t = OutputMode::Md)]
     mode: OutputMode,
-
-    /// Deprecated alias for `--mode json`.
-    #[arg(long)]
-    json: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 enum OutputMode {
-    Llm,
+    Md,
     Json,
 }
 
 impl fmt::Display for OutputMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            OutputMode::Llm => "llm",
+            OutputMode::Md => "md",
             OutputMode::Json => "json",
         })
     }
@@ -63,9 +60,8 @@ fn run() -> Result<()> {
     let markdown = extractors::extract(&source, format)
         .with_context(|| format!("extraction failed ({})", format))?;
 
-    let mode = if cli.json { OutputMode::Json } else { cli.mode };
-    match mode {
-        OutputMode::Llm => {
+    match cli.mode {
+        OutputMode::Md => {
             print!("{}", markdown);
             if !markdown.ends_with('\n') {
                 println!();

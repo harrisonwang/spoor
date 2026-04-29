@@ -1,6 +1,6 @@
 # gist
 
-把文件或 URL 转成适合 LLM 阅读的文本表示。默认输出模式是 `llm`，也就是面向模型上下文的 Markdown-like 文本。
+把文件或 URL 转成适合 LLM / Agent 使用的文本。**默认 `--mode md`**：stdout 为 Markdown-like 正文（与 `json` 相对，表示**输出形态**，工具整体仍面向模型与 Agent）。
 
 `json` 模式已经预留，但目前只是一个扁平占位 schema；真正的 block/anchor 结构化 JSON 稍后再实现。
 
@@ -15,17 +15,16 @@ gist notebook.ipynb
 gist book.epub
 gist data.csv
 
-gist report.docx --mode llm
-gist report.docx --mode json
-gist report.docx --json        # 兼容旧写法，等价于 --mode json
+gist report.docx --mode md
+gist report.docx -m json
 gist file.txt --format text
 ```
 
 ## 输出模式
 
-### `llm`，默认
+### `md`，默认
 
-目标是生成低噪声、结构清楚、token 相对经济、便于 Agent 直接塞进上下文的 Markdown-like 文本。
+目标是生成低噪声、结构清楚、token 相对经济、便于直接塞进上下文的 Markdown-like 文本。
 
 基本原则：
 
@@ -46,7 +45,7 @@ gist file.txt --format text
   "status": "placeholder",
   "format": "docx",
   "source": "report.docx",
-  "content": "...LLM mode text..."
+  "content": "...markdown body..."
 }
 ```
 

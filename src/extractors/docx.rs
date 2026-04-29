@@ -6,7 +6,7 @@ use quick_xml::reader::Reader;
 use std::collections::HashMap;
 use std::io::{Cursor, Read};
 
-/// DOCX → Markdown-like LLM text.
+/// DOCX → Markdown-like text (md output mode).
 ///
 /// We deliberately match by local name and ignore namespace prefixes. This
 /// keeps custom-prefix OOXML fixtures working without relying on version-
@@ -555,7 +555,7 @@ fn wrap_run_text(
     }
 
     // Whitespace-only runs (e.g. bold space, italic line break, linked tab) have
-    // no slice-stable "middle" for markdown wrapping; for LLM mode we keep the
+    // no slice-stable "middle" for markdown wrapping; for md output we keep the
     // raw characters and skip ** / * / []() — see docs/ENGINEERING_DECISIONS.md.
     if text.trim().is_empty() {
         return text.to_string();
