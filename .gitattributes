@@ -1,0 +1,15 @@
+.gitattributes text eol=lf
+
+tests/fixtures/plain/01_ascii.txt text eol=lf
+tests/fixtures/plain/02_utf8.txt text eol=lf
+tests/fixtures/plain/03_gbk.txt text eol=lf
+tests/fixtures/plain/04_utf16le_bom.txt binary
+tests/fixtures/plain/05_code.py text eol=lf
+
+*.pdf binary
+*.docx binary
+*.xlsx binary
+*.xlsm binary
+*.pptx binary
+*.epub binary
+*.zip binary

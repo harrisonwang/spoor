@@ -18,7 +18,13 @@ gist data.csv
 gist report.docx --mode md
 gist report.docx -m json
 gist file.txt --format text
+
+gist *.pdf
+gist "*.pdf"
+gist report.pdf notes.docx
 ```
+
+`gist` 支持多个输入，并会在程序内部展开本地 glob（如 `*.pdf`、`docs/**/*.md`），因此在 Windows `cmd.exe`、PowerShell、macOS/Linux shell 下行为更一致。URL 不会被当作 glob 展开。
 
 ## 输出模式
 
