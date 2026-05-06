@@ -16,6 +16,7 @@ enum Origin {
     Url {
         url: String,
         content_type: Option<String>,
+        is_markdown: bool,
     },
 }
 
@@ -40,11 +41,16 @@ impl Source {
     fn fetch_url(url: &str) -> Result<Self> {
         let resp = ureq::get(url)
             .set("User-Agent", "pith/0.1")
+            .set("Accept", "text/markdown, text/html;q=0.9")
             .timeout(Duration::from_secs(30))
             .call()
             .map_err(|e| anyhow!("failed to fetch URL: {e}"))?;
 
         let content_type = resp.header("content-type").map(|s| s.to_string());
+        let is_markdown = content_type
+            .as_ref()
+            .map(|ct| ct.starts_with("text/markdown"))
+            .unwrap_or(false);
 
         let mut bytes = Vec::new();
         resp.into_reader()
@@ -57,6 +63,7 @@ impl Source {
             origin: Origin::Url {
                 url: url.to_string(),
                 content_type,
+                is_markdown,
             },
         })
     }
@@ -80,6 +87,13 @@ impl Source {
         match &self.origin {
             Origin::Url { content_type, .. } => content_type.as_deref(),
             Origin::File { .. } => None,
+        }
+    }
+
+    pub fn is_markdown(&self) -> bool {
+        match &self.origin {
+            Origin::Url { is_markdown, .. } => *is_markdown,
+            Origin::File { .. } => false,
         }
     }
 
