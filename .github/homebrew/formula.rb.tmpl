@@ -1,0 +1,32 @@
+class {{CLASS_NAME}} < Formula
+  desc "Convert files and URLs to LLM-friendly markdown"
+  homepage "https://github.com/{{REPO}}"
+  version "{{VERSION}}"
+  license "MIT"
+
+  on_macos do
+    on_arm do
+      url "{{BASE_URL}}/{{TOOL}}_{{TAG}}_aarch64-apple-darwin.tar.gz"
+      sha256 "{{SHA256:{{TOOL}}_{{TAG}}_aarch64-apple-darwin.tar.gz}}"
+    end
+
+    on_intel do
+      url "{{BASE_URL}}/{{TOOL}}_{{TAG}}_x86_64-apple-darwin.tar.gz"
+      sha256 "{{SHA256:{{TOOL}}_{{TAG}}_x86_64-apple-darwin.tar.gz}}"
+    end
+  end
+
+  on_linux do
+    url "{{BASE_URL}}/{{TOOL}}_{{TAG}}_x86_64-unknown-linux-gnu.tar.gz"
+    sha256 "{{SHA256:{{TOOL}}_{{TAG}}_x86_64-unknown-linux-gnu.tar.gz}}"
+  end
+
+  def install
+    bin.install "{{TOOL}}/{{TOOL}}"
+  end
+
+  test do
+    output = shell_output("#{bin}/{{TOOL}} --version")
+    assert_match "{{TOOL}}", output
+  end
+end
