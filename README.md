@@ -143,7 +143,7 @@ JSON 是表格型的 LLM-friendly 表示——给 LLM headers + preview + row_co
 
 `sheet` / `workbook_sheets` 只出现在 XLSX，`delimiter` 只出现在 CSV，`title` / `preamble` 可能为空。JSON 不从 Markdown 反解析，也不承诺 DOCX/PDF/PPTX/IPYNB 的通用 block schema。
 
-收窄 flag（`--sheet`、`--rows`、`--columns`、`--limit`、`--offset`）当前为 P1，请见 Roadmap。
+收窄 flag（`--sheet`、`--rows`、`--columns`、`--limit`、`--offset`）已实现，适合在 Agent 看到 `truncated: true` 后二次读取。
 
 ## Agent / 工具集成
 
@@ -194,6 +194,28 @@ For PDF/DOCX/PPTX, use `pith <path>` to get Markdown.
 ```
 
 把这一段贴进 `.cursorrules`、`AGENTS.md`、`.clinerules` 或对应工具的 system instruction 即可。
+
+### Agent Skill
+
+仓库内提供一个最小 Skill：`skills/pith/SKILL.md`。它不增加新协议，只把 `pith` 的调用策略分发给 Agent：什么时候优先用 `pith`、表格为什么默认 JSON、看到 `truncated` 后如何用 `--sheet` / `--rows` / `--columns` 继续收窄。
+
+推荐安装方式：
+
+```bash
+brew install harrisonwang/tap/pith
+npx skills add harrisonwang/pith
+```
+
+Skill 安装交给 multi-agent installer 处理；以 `~/.agents/skills` 作为 universal skill 目录，再按需同步或链接到 Claude Code、Codex、Cursor、GitHub Copilot 等具体 Agent。`pith` 不要求用户手工维护 `~/.codex/skills`。
+
+然后在新的 Agent 会话里尝试：
+
+```text
+$pith 读取 tests/fixtures/xlsx/02_multi_sheets.xlsx，告诉我有哪些 sheet 和字段
+$pith 读取 tests/fixtures/csv/10_large.csv，只看 id,value 的前 10 行
+$pith 读取 tests/fixtures/docx/01_basic.docx，总结标题和列表结构
+$pith 读取 tests/fixtures/pptx/03_with_notes.pptx，提取 slide 和 speaker notes
+```
 
 ## 支持格式
 
