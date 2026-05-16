@@ -58,12 +58,26 @@ Examples:
 
 ## 安装
 
+macOS / Linux：
+
 ```bash
 brew install harrisonwang/tap/pith
+```
+
+Windows（Scoop）：
+
+```powershell
+scoop bucket add harrisonwang https://github.com/harrisonwang/scoop-bucket
+scoop install pith
+```
+
+跨平台源码安装（需要 Rust toolchain）：
+
+```bash
 cargo install --git https://github.com/harrisonwang/pith
 ```
 
-当前不发布到 crates.io，也不把 `cargo binstall pith` 作为安装承诺。推荐普通用户优先用 Homebrew，它安装的是 GitHub Release 里的预构建单二进制。
+当前不发布到 crates.io，也不把 `cargo binstall pith` 作为安装承诺。推荐普通用户优先用 Homebrew / Scoop，它们安装的是 GitHub Release 里的预构建单二进制。
 
 从源码构建：
 
