@@ -1,0 +1,26 @@
+{
+  "name": "@harrisonwang/pith",
+  "version": "0.0.0",
+  "description": "Convert files and URLs to LLM-friendly markdown",
+  "homepage": "https://github.com/harrisonwang/pith",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harrisonwang/pith.git"
+  },
+  "license": "MIT",
+  "bin": {
+    "pith": "bin/pith.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "optionalDependencies": {
+    "@harrisonwang/pith-darwin-arm64": "0.0.0",
+    "@harrisonwang/pith-darwin-x64": "0.0.0",
+    "@harrisonwang/pith-linux-x64": "0.0.0",
+    "@harrisonwang/pith-win32-x64": "0.0.0"
+  }
+}

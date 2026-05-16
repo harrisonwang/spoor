@@ -1,0 +1,20 @@
+{
+  "name": "@harrisonwang/pith-darwin-x64",
+  "version": "0.0.0",
+  "description": "Pith binary for darwin-x64",
+  "homepage": "https://github.com/harrisonwang/pith",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harrisonwang/pith.git"
+  },
+  "license": "MIT",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin"
+  ]
+}

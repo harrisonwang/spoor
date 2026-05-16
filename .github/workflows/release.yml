@@ -170,6 +170,83 @@ jobs:
             "https://api.github.com/repos/harrisonwang/homebrew-tap/dispatches" \
             -d "$payload"
 
+  publish-npm:
+    if: github.ref_type == 'tag'
+    name: publish npm
+    runs-on: ubuntu-latest
+    needs: publish
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Stage binaries and set versions
+        env:
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+
+          extract() {
+            local archive="$1" dest="$2" exe="$3"
+            mkdir -p "$dest"
+            if [[ "$archive" == *.zip ]]; then
+              unzip -p "$archive" "pith/$exe" > "$dest/$exe"
+            else
+              tar -xzf "$archive" -O "pith/$exe" > "$dest/$exe"
+            fi
+            chmod +x "$dest/$exe"
+          }
+          extract "artifacts/pith_${TAG}_aarch64-apple-darwin.tar.gz"     npm/pith-darwin-arm64/bin pith
+          extract "artifacts/pith_${TAG}_x86_64-apple-darwin.tar.gz"      npm/pith-darwin-x64/bin   pith
+          extract "artifacts/pith_${TAG}_x86_64-unknown-linux-gnu.tar.gz" npm/pith-linux-x64/bin    pith
+          extract "artifacts/pith_${TAG}_x86_64-pc-windows-msvc.zip"      npm/pith-win32-x64/bin    pith.exe
+
+          for pkg in npm/pith npm/pith-*; do
+            (cd "$pkg" && npm version "$version" --no-git-tag-version --allow-same-version)
+          done
+
+          node -e "
+            const fs = require('fs');
+            const p = 'npm/pith/package.json';
+            const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+            for (const k of Object.keys(j.optionalDependencies || {})) {
+              j.optionalDependencies[k] = '$version';
+            }
+            fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
+          "
+
+      - name: Publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${NODE_AUTH_TOKEN}" ]]; then
+            echo "NPM_TOKEN is not configured" >&2
+            exit 1
+          fi
+          for pkg in npm/pith-*; do
+            (cd "$pkg" && npm publish --access public)
+          done
+
+      - name: Publish main package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd npm/pith && npm publish --access public
+
   notify-scoop-bucket:
     if: github.ref_type == 'tag'
     name: notify scoop bucket
