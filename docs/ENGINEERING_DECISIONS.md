@@ -50,19 +50,34 @@ Usage:
   pith [OPTIONS] <input>...
 
 Arguments:
-  <input>...  文件路径、URL 或本地 glob，可传多个；URL 不参与 glob 展开。
+  <input>...  文件路径、URL、本地 glob，或 - 表示标准输入；可传多个，URL 与 - 不参与 glob 展开。
 
 Options:
-      --format <format>  覆盖自动 format 检测；可选：pdf、docx、xlsx、pptx、epub、csv、ipynb、html、markdown、text。
-  -m, --mode <mode>      覆盖默认输出模式；表格型（CSV/XLSX）默认 json，其他默认 md。
-  -h, --help             显示帮助。
-  -V, --version          显示版本。
+      --format <format>    覆盖自动 format 检测（默认按 magic-byte / 扩展名推断）。 [possible values: html, markdown, pdf, docx, xlsx, pptx, csv, ipynb, epub, text]
+  -m, --mode <mode>        覆盖默认输出模式；表格型（CSV/XLSX）默认 json，其他默认 md。
+      --sheet <name>       XLSX 限定 sheet；找不到时报错并列出可用 sheets。CSV 无此概念，自动忽略。
+      --rows <first:last>  限定数据行的 Excel 行号区间，例如 `5:104`（含两端）。与 --limit/--offset 互斥。
+      --columns <columns>  按列名筛选，逗号分隔；找不到时报错并列出可用列。
+      --limit <n>          每个 table 最多返回多少数据行；默认 100。
+      --offset <n>         跳过前 N 条数据行再应用 --limit；默认 0。
+  -h, --help               显示帮助。
+  -V, --version            显示版本。
+
+For tables (CSV/XLSX), the recommended pattern is:
+
+  pith file.xlsx                              # see structure + preview
+  pith file.xlsx --sheet L1 --rows 5:104      # read a slice
+  pith file.xlsx --columns 分类,技能          # filter columns
+
+pith is safe to run on arbitrarily large files; JSON output is bounded
+by default (first 100 data rows per table). Use --limit to opt in to more,
+or --rows for an exact Excel row range.
 
 Examples:
   pith report.pdf
   pith data.xlsx
-  pith data.xlsx -m md           # 终端 peek 小表
   pith data.csv | jq '.tables[]'
+  cat data.csv | pith --format csv -
   pith https://example.com/article
   pith "*.pdf"
   pith report.pdf | llm "Summarize risks and action items"
@@ -76,22 +91,18 @@ CLI 行为约定：
 - 多输入在 Markdown 模式下按 `# Source: ...` 分块；JSON 模式下所有表合并到顶层 `tables[]` 数组。
 - 本地 glob 由程序内部展开；URL 不参与 glob。
 - `--format` 只覆盖文件/URL 内容格式，不定义 URL 抓取策略。
-- stdin/pipe 尚未实现，是 P1。
+- stdin/pipe 已实现：输入 `-` 读取标准输入；无路径无扩展名，format 走 magic-byte 检测或 `--format` override（表格型从 stdin 需显式 `--format csv`）。`-` 不参与 glob，可与文件混用。
 - 表格收窄 flag 已实现：`--sheet`（仅 XLSX；CSV 无 sheet 概念，自动忽略）、`--rows <first:last>`（Excel 行号，含两端）、`--columns <a,b,c>`、`--limit <n>`、`--offset <n>`。`--rows` 与 `--limit`/`--offset` 互斥（clap conflicts_with）。找不到的 sheet/columns 硬错并列出可用列表。
 
 ## Library Contract
 
-当前 crate 保持单 package、单 binary。`src/lib.rs` 暴露正式 API：
+当前 crate 保持单 package、单 binary。`src/lib.rs` 暴露的正式 API（以 `src/lib.rs` 的 re-export 为准，按调用流程分组）：
 
-- `SourceInput`
-- `Format`
-- `OutputMode`
-- `ExtractOptions`
-- `ExtractedDocument`
-- `extract_document()`
-- `extract_table_document()`
-- `render_documents()`
-- `render_table_documents()`
+- 输入解析：`SourceInput`、`Source`、`is_url`、`resolve_input` → `ResolvedInput`
+- format / mode：`Format`、`FormatArg`、`OutputMode`、`default_mode_for`、`ExtractOptions`
+- 文档型抽取：`extract_md` → `ExtractedDocument`，`render_documents`
+- 表格型抽取：`extract_table_entries`（用 `TableFilter` 收窄）→ `TableEntry`，`render_json`
+- table JSON schema 类型：`JsonOutput`、`HeaderInfo`、`PreambleInfo`、`RowRange`、`TABLE_SCHEMA_VERSION`、`TABLE_USAGE`、`a1_range`、`cells_to_values`
 
 extractor 细节保持内部模块，不作为公共 API。未来如果要支持更稳定的 Rust 生态嵌入，再评估是否拆 `pith-core`；当前不拆 workspace。
 
@@ -126,7 +137,7 @@ extractor 细节保持内部模块，不作为公共 API。未来如果要支持
 ```json
 {
   "schema_version": "pith-table-json-v2",
-  "usage": "Narrow output with: --sheet <name>, --rows <first:last>, --columns <a,b,c>, --limit <n>, --offset <n>. See --help.",
+  "usage": "Narrow output with: --sheet <name>, --rows <first:last> (Excel row numbers, inclusive), --columns <a,b,c>, --limit <n>, --offset <n>. Default preview = first 100 data rows per table. --rows conflicts with --limit/--offset.",
   "tables": [
     {
       "source": "data.xlsx",
@@ -170,7 +181,7 @@ Schema 设计理由：
 
 | 字段 | 设计理由 |
 |------|----------|
-| 顶层 `usage` | 一行字符串告诉消费者怎么收窄；让 JSON 自描述，不依赖外部 `--help` 或 wrapper。flag 改名时 `usage` 字符串必须从 CLI 定义复用，不能写死字符串常量，避免幻觉源。 |
+| 顶层 `usage` | 一行字符串告诉消费者怎么收窄；让 JSON 自描述，不依赖外部 `--help` 或 wrapper。`usage` 是单一发布常量 `TABLE_USAGE`；测试 `table_usage_lists_every_narrowing_flag` 从 clap 定义派生收窄 flag 并断言每个都出现在 `TABLE_USAGE` 里，flag 改名或新增却忘了同步会直接挂 CI，避免悄悄漂移成幻觉源。 |
 | 顶层 `tables[]` 扁平化 | 单文件、多 sheet、多文件一律落进同一个数组；消费者迭代逻辑一致；多文件混用时按 `source` 字段分组。 |
 | `workbook_sheets` 重复在每个 table 上 | 自描述权重高于去重；让单个 table entry 自包含、可独立处理；redundancy 在 XLSX 多 sheet 时是 N×K bytes，可接受。 |
 | `headers` 为 object（key→column_index） | LLM 直接从 key 读字段名；`column_index` 留给程序需要按列号定位的场景。 |
@@ -403,7 +414,7 @@ P0：
 
 P1：
 
-- stdin/pipe：未实现。
+- stdin/pipe：已完成（`-` 读 stdin，format 靠 magic-byte 或 `--format`）。
 - `pith chunk`（仅文档型）：未实现。
 - EPUB/HTML renderer 统一：未实现。
 

@@ -1,3 +1,4 @@
+use crate::extractors::xml::attr;
 use crate::limits;
 use crate::output::decode_text;
 use crate::source::Source;
@@ -124,11 +125,4 @@ fn strip_html(html: &str) -> String {
         }
     }
     out
-}
-
-fn attr(e: &quick_xml::events::BytesStart, local_name: &[u8]) -> Option<String> {
-    e.attributes()
-        .filter_map(|a| a.ok())
-        .find(|a| a.key.local_name().as_ref() == local_name)
-        .and_then(|a| String::from_utf8(a.value.into_owned()).ok())
 }

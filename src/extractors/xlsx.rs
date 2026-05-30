@@ -3,6 +3,7 @@ use crate::extractors::csv::validate_columns;
 use crate::json_schema::{
     HeaderInfo, PreambleInfo, RowRange, TableEntry, a1_range, cells_to_values,
 };
+use crate::output::gfm_table;
 use crate::source::Source;
 use anyhow::{Context, Result, anyhow};
 use calamine::{Data, Reader, Xlsx, open_workbook_from_rs};
@@ -28,38 +29,23 @@ pub fn extract(source: &Source) -> Result<String> {
         }
         out.push_str(&format!("## Sheet: {name}\n\n"));
 
-        let rows: Vec<Vec<String>> = range
+        let raw: Vec<Vec<String>> = range
             .rows()
-            .map(|row| row.iter().map(format_cell).collect())
+            .map(|row| row.iter().map(format_cell_value).collect())
             .collect();
 
-        if rows.is_empty() {
+        let Some((header, data)) = raw.split_first() else {
             continue;
-        }
+        };
 
-        let cols = rows.iter().map(|r| r.len()).max().unwrap_or(0);
-        if cols == 0 {
-            continue;
-        }
-
-        // First row as header.
-        let mut header = rows[0].clone();
-        while header.len() < cols {
-            header.push(String::new());
-        }
-        out.push_str(&format!("| {} |\n", header.join(" | ")));
-        out.push_str(&format!("|{}\n", " --- |".repeat(cols)));
-
-        for row in rows.iter().skip(1) {
-            if row.iter().all(|c| c.is_empty()) {
-                continue;
-            }
-            let mut padded = row.clone();
-            while padded.len() < cols {
-                padded.push(String::new());
-            }
-            out.push_str(&format!("| {} |\n", padded.join(" | ")));
-        }
+        // Keep the header row; drop fully empty data rows.
+        let mut table_rows = vec![header.clone()];
+        table_rows.extend(
+            data.iter()
+                .filter(|row| !row.iter().all(String::is_empty))
+                .cloned(),
+        );
+        out.push_str(&gfm_table(&table_rows));
     }
 
     Ok(out)
@@ -331,12 +317,6 @@ fn empty_entry(source_label: &str, sheet_name: &str, workbook_sheets: &[String])
         truncated: false,
         warnings: Vec::new(),
     }
-}
-
-fn format_cell(cell: &Data) -> String {
-    format_cell_value(cell)
-        .replace('|', "\\|")
-        .replace(['\n', '\r', '\t'], " ")
 }
 
 fn format_cell_value(cell: &Data) -> String {

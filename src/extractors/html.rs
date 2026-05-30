@@ -122,32 +122,13 @@ fn render_list(element: ElementRef<'_>, md: &mut MarkdownBuilder, ordered: bool)
 fn render_table(element: ElementRef<'_>, md: &mut MarkdownBuilder) {
     let row_sel = Selector::parse("tr").unwrap();
     let cell_sel = Selector::parse("th, td").unwrap();
-    let mut rows: Vec<Vec<String>> = element
+    let rows: Vec<Vec<String>> = element
         .select(&row_sel)
-        .map(|row| {
-            row.select(&cell_sel)
-                .map(|cell| sanitize_cell(&inline_text(cell)))
-                .collect::<Vec<_>>()
-        })
+        .map(|row| row.select(&cell_sel).map(inline_text).collect::<Vec<_>>())
         .filter(|row| !row.is_empty())
         .collect();
 
-    if rows.is_empty() {
-        return;
-    }
-    let cols = rows.iter().map(Vec::len).max().unwrap_or(0);
-    for row in &mut rows {
-        while row.len() < cols {
-            row.push(String::new());
-        }
-    }
-
-    md.blank_line();
-    md.raw(&format!("| {} |\n", rows[0].join(" | ")));
-    md.raw(&format!("| {} |\n", vec!["---"; cols].join(" | ")));
-    for row in rows.iter().skip(1) {
-        md.raw(&format!("| {} |\n", row.join(" | ")));
-    }
+    md.table(&rows);
 }
 
 fn inline_text(element: ElementRef<'_>) -> String {
@@ -202,8 +183,4 @@ fn inline_children(element: ElementRef<'_>) -> String {
 
 fn normalize_inline(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-fn sanitize_cell(text: &str) -> String {
-    text.replace('|', "\\|").replace(['\n', '\r', '\t'], " ")
 }

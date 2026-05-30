@@ -1,3 +1,4 @@
+use crate::extractors::xml::attr;
 use crate::limits;
 use crate::output::MarkdownBuilder;
 use crate::source::Source;
@@ -417,7 +418,7 @@ fn render_document(
                         if let (Some(row), Some(cell)) =
                             (&mut table.current_row, table.current_cell.take())
                         {
-                            row.push(sanitize_table_cell(&cell));
+                            row.push(cell);
                         }
                     }
                 }
@@ -432,7 +433,7 @@ fn render_document(
                 }
                 b"tbl" => {
                     if let Some(table) = table.take() {
-                        render_table(md, table.rows);
+                        md.table(&table.rows);
                     }
                 }
                 _ => {}
@@ -625,32 +626,6 @@ fn append_cell_paragraph(table: &mut TableState, text: &str) {
     }
 }
 
-fn render_table(md: &mut MarkdownBuilder, mut rows: Vec<Vec<String>>) {
-    if rows.is_empty() {
-        return;
-    }
-    let cols = rows.iter().map(Vec::len).max().unwrap_or(0);
-    if cols == 0 {
-        return;
-    }
-    for row in &mut rows {
-        while row.len() < cols {
-            row.push(String::new());
-        }
-    }
-
-    md.blank_line();
-    md.raw(&format!("| {} |\n", rows[0].join(" | ")));
-    md.raw(&format!("| {} |\n", vec!["---"; cols].join(" | ")));
-    for row in rows.iter().skip(1) {
-        md.raw(&format!("| {} |\n", row.join(" | ")));
-    }
-}
-
-fn sanitize_table_cell(text: &str) -> String {
-    text.replace('|', "\\|").replace(['\n', '\r', '\t'], " ")
-}
-
 fn render_footnotes(
     md: &mut MarkdownBuilder,
     used_footnotes: &[String],
@@ -665,13 +640,6 @@ fn render_footnotes(
             md.raw(&format!("[^{id}]: {}\n", text.trim()));
         }
     }
-}
-
-fn attr(e: &BytesStart, local_name: &[u8]) -> Option<String> {
-    e.attributes()
-        .filter_map(|a| a.ok())
-        .find(|a| a.key.local_name().as_ref() == local_name)
-        .and_then(|a| String::from_utf8(a.value.into_owned()).ok())
 }
 
 #[cfg(test)]

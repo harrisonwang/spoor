@@ -3,7 +3,7 @@ use anyhow::{Context, Result, anyhow};
 use glob::{MatchOptions, glob_with};
 use pith::{
     ExtractOptions, JsonOutput, OutputMode, SourceInput, TableFilter, default_mode_for, extract_md,
-    extract_table_entries, render_documents, render_json, resolve_input,
+    extract_table_entries, is_url, render_documents, render_json, resolve_input,
 };
 
 pub(crate) fn run(cli: Cli) -> Result<String> {
@@ -12,10 +12,19 @@ pub(crate) fn run(cli: Cli) -> Result<String> {
         format: cli.format.map(Into::into),
     };
 
-    let resolved = inputs
-        .into_iter()
-        .map(|input| resolve_input(SourceInput::from(input), &options))
-        .collect::<Result<Vec<_>>>()?;
+    // Resolve each input independently: one unreadable file or failed fetch
+    // must not abort the whole batch. Failures are collected and surfaced as
+    // warnings (stderr, plus the JSON envelope in json mode) so the remaining
+    // inputs still produce output. We only fail hard (exit 1) when *nothing*
+    // succeeds.
+    let mut resolved = Vec::with_capacity(inputs.len());
+    let mut failures: Vec<String> = Vec::new();
+    for input in inputs {
+        match resolve_input(SourceInput::from(input.clone()), &options) {
+            Ok(r) => resolved.push(r),
+            Err(e) => failures.push(format!("{input}: {}", e.root_cause())),
+        }
+    }
 
     let formats: Vec<_> = resolved.iter().map(|r| r.format).collect();
     let mode = cli.mode.unwrap_or_else(|| default_mode_for(&formats));
@@ -25,18 +34,60 @@ pub(crate) fn run(cli: Cli) -> Result<String> {
             warn_unused_narrowing(&cli);
             let mut documents = Vec::with_capacity(resolved.len());
             for r in &resolved {
-                documents.push(extract_md(r)?);
+                match extract_md(r) {
+                    Ok(document) => documents.push(document),
+                    Err(e) => failures.push(format!("{}: {}", r.label, e.root_cause())),
+                }
             }
+            if documents.is_empty() {
+                return Err(all_failed_error(&failures));
+            }
+            report_skipped(&failures);
             render_documents(&documents, mode)
         }
         OutputMode::Json => {
             let filter = build_filter(&cli)?;
             let mut tables = Vec::new();
+            let mut successes = 0usize;
             for r in &resolved {
-                tables.extend(extract_table_entries(r, &filter)?);
+                match extract_table_entries(r, &filter) {
+                    Ok(entries) => {
+                        successes += 1;
+                        tables.extend(entries);
+                    }
+                    Err(e) => failures.push(format!("{}: {}", r.label, e.root_cause())),
+                }
             }
-            Ok(render_json(&JsonOutput::new(tables)))
+            if successes == 0 {
+                return Err(all_failed_error(&failures));
+            }
+            report_skipped(&failures);
+            let mut output = JsonOutput::new(tables);
+            output.warnings = failures;
+            Ok(render_json(&output))
         }
+    }
+}
+
+/// Emit one stderr line per skipped input. In json mode the same messages
+/// also land in the envelope's top-level `warnings[]`; stderr keeps a human
+/// running the command in a terminal informed regardless of output mode.
+fn report_skipped(failures: &[String]) {
+    for failure in failures {
+        eprintln!("warning: skipped {failure}");
+    }
+}
+
+/// Error returned when every input failed (exit 1). A lone failure is
+/// surfaced verbatim; multiple are aggregated into one message.
+fn all_failed_error(failures: &[String]) -> anyhow::Error {
+    match failures {
+        [only] => anyhow!("{only}"),
+        _ => anyhow!(
+            "all {} inputs failed:\n  - {}",
+            failures.len(),
+            failures.join("\n  - ")
+        ),
     }
 }
 
@@ -93,7 +144,7 @@ fn expand_inputs(inputs: &[String]) -> Result<Vec<String>> {
     let mut expanded = Vec::new();
 
     for input in inputs {
-        if is_url_input(input) || !has_glob_meta(input) {
+        if is_url(input) || !has_glob_meta(input) {
             expanded.push(input.clone());
             continue;
         }
@@ -132,10 +183,6 @@ fn expand_glob(pattern: &str) -> Result<Vec<String>> {
 
 fn has_glob_meta(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[')
-}
-
-fn is_url_input(s: &str) -> bool {
-    s.starts_with("http://") || s.starts_with("https://")
 }
 
 #[cfg(test)]

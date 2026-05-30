@@ -68,10 +68,12 @@ impl fmt::Display for Format {
     }
 }
 
-/// Detection priority: URL > magic bytes > extension > text fallback.
+/// Detection priority: URL Content-Type hint > magic bytes > extension > text
+/// fallback. URLs reuse the same magic-byte / extension detection as files
+/// (the response body is already in memory), then fall back to the HTML /
+/// markdown content-negotiation path instead of erroring.
 pub fn detect(source: &Source) -> Result<Format> {
     if source.is_url() {
-        // Could refine here later via Content-Type sniffing.
         if let Some(ct) = source.content_type() {
             if ct.contains("application/pdf") {
                 return Ok(Format::Pdf);
@@ -80,12 +82,9 @@ pub fn detect(source: &Source) -> Result<Format> {
                 return Ok(Format::PlainText);
             }
         }
-        return Ok(Format::Url);
     }
 
-    let bytes = source.bytes();
-
-    if let Some(f) = detect_by_magic(bytes) {
+    if let Some(f) = detect_by_magic(source.bytes()) {
         return Ok(f);
     }
 
@@ -95,7 +94,13 @@ pub fn detect(source: &Source) -> Result<Format> {
         }
     }
 
-    if looks_like_text(bytes) {
+    if source.is_url() {
+        // No binary signature or known extension: an HTML / markdown page,
+        // handled by the URL extractor via content negotiation.
+        return Ok(Format::Url);
+    }
+
+    if looks_like_text(source.bytes()) {
         return Ok(Format::PlainText);
     }
 
@@ -159,4 +164,49 @@ fn looks_like_text(bytes: &[u8]) -> bool {
         return false;
     }
     std::str::from_utf8(sample).is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::source::Source;
+
+    fn url(url: &str, bytes: &[u8], content_type: Option<&str>) -> Source {
+        Source::from_url_parts(url, bytes.to_vec(), content_type)
+    }
+
+    #[test]
+    fn url_pdf_content_type_wins() {
+        let s = url("https://x/doc", b"%PDF-1.7\n", Some("application/pdf"));
+        assert_eq!(detect(&s).unwrap(), Format::Pdf);
+    }
+
+    #[test]
+    fn url_xlsx_detected_by_magic_despite_generic_content_type() {
+        // A workbook served as application/octet-stream is recognized by the
+        // ZIP/OOXML magic bytes instead of being parsed as HTML.
+        let bytes = std::fs::read("tests/fixtures/xlsx/01_basic.xlsx").unwrap();
+        let s = url(
+            "https://x/download",
+            &bytes,
+            Some("application/octet-stream"),
+        );
+        assert_eq!(detect(&s).unwrap(), Format::Xlsx);
+    }
+
+    #[test]
+    fn url_extension_detected_when_no_magic() {
+        let s = url("https://x/data.csv", b"a,b\n1,2\n", Some("text/plain"));
+        assert_eq!(detect(&s).unwrap(), Format::Csv);
+    }
+
+    #[test]
+    fn url_html_page_falls_back_to_url_format() {
+        let s = url(
+            "https://x/article",
+            b"<html><body>hi</body></html>",
+            Some("text/html"),
+        );
+        assert_eq!(detect(&s).unwrap(), Format::Url);
+    }
 }

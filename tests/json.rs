@@ -270,11 +270,13 @@ fn mixed_table_and_prose_defaults_to_markdown() {
 fn usage_string_describes_real_flags() {
     let value = pith_json(&json_args(&["csv/01_basic.csv"]));
     let usage = value["usage"].as_str().unwrap();
-    assert!(
-        usage.contains("--sheet") && usage.contains("--rows") && usage.contains("--columns"),
-        "usage must mention real flag names: {usage}"
-    );
+    for flag in ["--sheet", "--rows", "--columns", "--limit", "--offset"] {
+        assert!(usage.contains(flag), "usage must mention {flag}: {usage}");
+    }
     assert!(!usage.to_lowercase().contains("planned"));
+    // The emitted hint is exactly the published constant, so consumers and
+    // docs have a single source of truth to track.
+    assert_eq!(usage, pith::TABLE_USAGE);
 }
 
 #[test]

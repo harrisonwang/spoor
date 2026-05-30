@@ -1,6 +1,6 @@
 use crate::extract::TableFilter;
 use crate::json_schema::{HeaderInfo, RowRange, TableEntry, a1_range, cells_to_values};
-use crate::output::decode_text;
+use crate::output::{decode_text, gfm_table};
 use crate::source::Source;
 use anyhow::{Result, anyhow};
 use std::collections::BTreeMap;
@@ -32,28 +32,12 @@ pub fn extract(source: &Source) -> Result<String> {
             break;
         }
         let rec = rec?;
-        rows.push(rec.iter().map(sanitize).collect());
+        rows.push(rec.iter().map(str::to_string).collect());
     }
 
-    if rows.is_empty() {
-        return Ok(String::new());
-    }
-
-    let cols = rows.iter().map(|r| r.len()).max().unwrap_or(0);
-    for r in &mut rows {
-        while r.len() < cols {
-            r.push(String::new());
-        }
-    }
-
-    let mut out = String::new();
-    out.push_str(&format!("| {} |\n", rows[0].join(" | ")));
-    out.push_str(&format!("| {} |\n", vec!["---"; cols].join(" | ")));
-    for row in rows.iter().skip(1) {
-        out.push_str(&format!("| {} |\n", row.join(" | ")));
-    }
+    let mut out = gfm_table(&rows);
     if truncated {
-        out.push_str(&format!("\n_(truncated at {} rows)_\n", MARKDOWN_MAX_ROWS));
+        out.push_str(&format!("\n_(truncated at {MARKDOWN_MAX_ROWS} rows)_\n"));
     }
     Ok(out)
 }
@@ -290,10 +274,6 @@ fn sniff_delimiter(text: &str) -> u8 {
         }
     }
     best.0
-}
-
-fn sanitize(s: &str) -> String {
-    s.replace('|', "\\|").replace('\n', " ").replace('\r', "")
 }
 
 fn normalize_cell(s: &str) -> String {

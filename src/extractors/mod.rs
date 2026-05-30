@@ -15,6 +15,7 @@ mod plain;
 mod pptx;
 mod url;
 mod xlsx;
+mod xml;
 
 pub fn extract(source: &Source, format: Format) -> Result<String> {
     match format {

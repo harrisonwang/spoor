@@ -111,7 +111,7 @@ LLM-friendly 表示按 **内容形态** 决定，不按消费者类型：
 
 | 功能 | 解决什么真实问题 | 验收标准 | 来源 |
 |------|------------------|----------|------|
-| stdin/pipe | shell 一等公民 | `cat file.csv \| pith --format csv -` | [MarkItDown CLI](https://github.com/microsoft/markitdown), [anytomd-rs CLI](https://github.com/developer0hye/anytomd-rs) |
+| stdin/pipe ✅ | shell 一等公民 | `cat file.csv \| pith --format csv -`（`-` 读 stdin，已完成） | [MarkItDown CLI](https://github.com/microsoft/markitdown), [anytomd-rs CLI](https://github.com/developer0hye/anytomd-rs) |
 | `pith chunk`（仅文档型） | RAG/LLM 不能只按固定长度切 | 按 heading/page/slide/chapter 分块；表格型不在此处理 | [OpenAI File Search](https://developers.openai.com/api/docs/guides/tools-file-search), [Lost in the Middle](https://arxiv.org/abs/2307.03172) |
 | EPUB/HTML renderer 统一 | EPUB 正文结构弱 | EPUB chapter 内 heading/list/link/table 正常保留 | [pith EPUB matrix](test-matrix/epub.md), [pith HTML matrix](test-matrix/html.md) |
 
@@ -177,7 +177,7 @@ LLM-friendly 表示按 **内容形态** 决定，不按消费者类型：
 3. 表格收窄 flag（`--sheet` / `--rows` / `--columns` / `--limit` / `--offset`），JSON `usage` 字符串同步描述 ✅ 已完成
 4. PDF page boundary
 5. ZIP 安全层补完
-6. stdin/pipe
+6. stdin/pipe ✅ 已完成
 7. `pith chunk`（仅文档型）
 8. EPUB/HTML renderer 统一
 9. Markdown 大表降级（niche，仅 `-m md` 路径）

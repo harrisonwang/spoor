@@ -45,15 +45,31 @@ enum Origin {
         content_type: Option<String>,
         is_markdown: bool,
     },
+    /// Bytes read from standard input (the `-` input token). No path, so
+    /// format detection falls back to magic bytes / `--format`.
+    Stdin,
 }
 
 impl Source {
     pub fn resolve(input: &str) -> Result<Self> {
-        if is_url(input) {
+        if input == "-" {
+            Self::read_stdin()
+        } else if is_url(input) {
             Self::fetch_url(input)
         } else {
             Self::read_file(input)
         }
+    }
+
+    fn read_stdin() -> Result<Self> {
+        let mut bytes = Vec::new();
+        std::io::stdin()
+            .read_to_end(&mut bytes)
+            .context("failed to read from stdin")?;
+        Ok(Self {
+            bytes,
+            origin: Origin::Stdin,
+        })
     }
 
     fn read_file(path: &str) -> Result<Self> {
@@ -67,7 +83,7 @@ impl Source {
 
     fn fetch_url(url: &str) -> Result<Self> {
         let resp = ureq::get(url)
-            .set("User-Agent", "pith/0.1")
+            .set("User-Agent", concat!("pith/", env!("CARGO_PKG_VERSION")))
             .set("Accept", "text/markdown, text/html;q=0.9")
             .timeout(Duration::from_secs(30))
             .call()
@@ -106,21 +122,21 @@ impl Source {
     pub fn url(&self) -> Option<&str> {
         match &self.origin {
             Origin::Url { url, .. } => Some(url),
-            Origin::File { .. } => None,
+            Origin::File { .. } | Origin::Stdin => None,
         }
     }
 
     pub fn content_type(&self) -> Option<&str> {
         match &self.origin {
             Origin::Url { content_type, .. } => content_type.as_deref(),
-            Origin::File { .. } => None,
+            Origin::File { .. } | Origin::Stdin => None,
         }
     }
 
     pub fn is_markdown(&self) -> bool {
         match &self.origin {
             Origin::Url { is_markdown, .. } => *is_markdown,
-            Origin::File { .. } => false,
+            Origin::File { .. } | Origin::Stdin => false,
         }
     }
 
@@ -138,10 +154,31 @@ impl Source {
                     .and_then(|mut s| s.next_back().map(|x| x.to_string()))?;
                 last_seg.rsplit_once('.').map(|(_, ext)| ext.to_string())
             }
+            Origin::Stdin => None,
         }
     }
 }
 
-fn is_url(s: &str) -> bool {
+/// Whether `input` should be fetched as a URL rather than read as a file path.
+pub fn is_url(s: &str) -> bool {
     s.starts_with("http://") || s.starts_with("https://")
+}
+
+#[cfg(test)]
+impl Source {
+    /// Build a fetched-URL source without network I/O, for detection tests.
+    pub(crate) fn from_url_parts(url: &str, bytes: Vec<u8>, content_type: Option<&str>) -> Self {
+        let content_type = content_type.map(str::to_string);
+        let is_markdown = content_type
+            .as_ref()
+            .is_some_and(|ct| ct.starts_with("text/markdown"));
+        Self {
+            bytes,
+            origin: Origin::Url {
+                url: url.to_string(),
+                content_type,
+                is_markdown,
+            },
+        }
+    }
 }

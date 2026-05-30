@@ -20,6 +20,7 @@ pith report.pdf                                    # 文档型 → Markdown
 pith report.docx slides.pptx                       # 文档型 → Markdown
 pith data.xlsx                                     # 表格型 → JSON
 pith data.csv | jq '.tables[0].headers'            # 表格型 → JSON
+cat data.csv | pith --format csv -                 # 从 stdin 读取（- 表示标准输入）
 pith https://example.com/article                   # 文档型 → Markdown
 pith "*.pdf"                                       # glob
 pith report.pdf | llm "Summarize risks and action items"
@@ -38,19 +39,34 @@ Usage:
   pith [OPTIONS] <input>...
 
 Arguments:
-  <input>...  文件路径、URL 或本地 glob，可传多个；URL 不参与 glob 展开。
+  <input>...  文件路径、URL、本地 glob，或 - 表示标准输入；可传多个，URL 与 - 不参与 glob 展开。
 
 Options:
-      --format <format>  覆盖自动 format 检测；可选：pdf、docx、xlsx、pptx、epub、csv、ipynb、html、markdown、text。
-  -m, --mode <mode>      覆盖默认输出模式；表格型（CSV/XLSX）默认 json，其他默认 md。
-  -h, --help             显示帮助。
-  -V, --version          显示版本。
+      --format <format>    覆盖自动 format 检测（默认按 magic-byte / 扩展名推断）。 [possible values: html, markdown, pdf, docx, xlsx, pptx, csv, ipynb, epub, text]
+  -m, --mode <mode>        覆盖默认输出模式；表格型（CSV/XLSX）默认 json，其他默认 md。
+      --sheet <name>       XLSX 限定 sheet；找不到时报错并列出可用 sheets。CSV 无此概念，自动忽略。
+      --rows <first:last>  限定数据行的 Excel 行号区间，例如 `5:104`（含两端）。与 --limit/--offset 互斥。
+      --columns <columns>  按列名筛选，逗号分隔；找不到时报错并列出可用列。
+      --limit <n>          每个 table 最多返回多少数据行；默认 100。
+      --offset <n>         跳过前 N 条数据行再应用 --limit；默认 0。
+  -h, --help               显示帮助。
+  -V, --version            显示版本。
+
+For tables (CSV/XLSX), the recommended pattern is:
+
+  pith file.xlsx                              # see structure + preview
+  pith file.xlsx --sheet L1 --rows 5:104      # read a slice
+  pith file.xlsx --columns 分类,技能          # filter columns
+
+pith is safe to run on arbitrarily large files; JSON output is bounded
+by default (first 100 data rows per table). Use --limit to opt in to more,
+or --rows for an exact Excel row range.
 
 Examples:
   pith report.pdf
   pith data.xlsx
-  pith data.xlsx -m md           # 终端 peek 小表
   pith data.csv | jq '.tables[]'
+  cat data.csv | pith --format csv -
   pith https://example.com/article
   pith "*.pdf"
   pith report.pdf | llm "Summarize risks and action items"
@@ -118,7 +134,7 @@ JSON 是表格型的 LLM-friendly 表示——给 LLM headers + preview + row_co
 ```json
 {
   "schema_version": "pith-table-json-v2",
-  "usage": "Narrow output with: --sheet <name>, --rows <first:last>, --columns <a,b,c>, --limit <n>, --offset <n>. See --help.",
+  "usage": "Narrow output with: --sheet <name>, --rows <first:last> (Excel row numbers, inclusive), --columns <a,b,c>, --limit <n>, --offset <n>. Default preview = first 100 data rows per table. --rows conflicts with --limit/--offset.",
   "tables": [
     {
       "source": "data.xlsx",
@@ -276,9 +292,12 @@ P0：
 
 P1：
 
-- stdin/pipe：`cat file.csv | pith --format csv -`。
 - `pith chunk`：按 heading/page/table/slide 分块（仅文档型）。
 - EPUB/HTML renderer 统一。
+
+已完成：
+
+- stdin/pipe：`cat file.csv | pith --format csv -`（`-` 表示标准输入；无扩展名时 format 靠 magic-byte 或 `--format`）。
 
 P2/P3：
 

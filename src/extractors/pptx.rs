@@ -1,8 +1,9 @@
+use crate::extractors::xml::attr;
 use crate::limits;
 use crate::output::MarkdownBuilder;
 use crate::source::Source;
 use anyhow::{Result, anyhow};
-use quick_xml::events::{BytesStart, Event};
+use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 use std::path::{Component, Path};
 
@@ -82,7 +83,7 @@ fn render_slide(xml: &str, md: &mut MarkdownBuilder) -> Result<()> {
                 }
                 b"tc" if in_table => {
                     if let Some(row) = &mut current_row {
-                        row.push(sanitize_cell(&current_cell));
+                        row.push(current_cell.trim().to_string());
                     }
                     current_cell.clear();
                     in_table_cell = false;
@@ -95,7 +96,7 @@ fn render_slide(xml: &str, md: &mut MarkdownBuilder) -> Result<()> {
                     }
                 }
                 b"tbl" => {
-                    render_table(md, &table_rows);
+                    md.table(&table_rows);
                     table_rows.clear();
                     in_table = false;
                 }
@@ -155,37 +156,6 @@ fn extract_paragraphs(xml: &str) -> Result<Vec<String>> {
     Ok(paragraphs)
 }
 
-fn render_table(md: &mut MarkdownBuilder, rows: &[Vec<String>]) {
-    if rows.is_empty() {
-        return;
-    }
-    let cols = rows.iter().map(Vec::len).max().unwrap_or(0);
-    if cols == 0 {
-        return;
-    }
-
-    md.blank_line();
-    md.raw(&format!("| {} |\n", pad_row(&rows[0], cols).join(" | ")));
-    md.raw(&format!("| {} |\n", vec!["---"; cols].join(" | ")));
-    for row in rows.iter().skip(1) {
-        md.raw(&format!("| {} |\n", pad_row(row, cols).join(" | ")));
-    }
-}
-
-fn pad_row(row: &[String], cols: usize) -> Vec<String> {
-    let mut padded = row.to_vec();
-    while padded.len() < cols {
-        padded.push(String::new());
-    }
-    padded
-}
-
-fn sanitize_cell(text: &str) -> String {
-    text.trim()
-        .replace('|', "\\|")
-        .replace(['\n', '\r', '\t'], " ")
-}
-
 fn notes_slide_for<R: std::io::Read + std::io::Seek>(
     zip: &mut zip::ZipArchive<R>,
     slide_name: &str,
@@ -241,11 +211,4 @@ fn normalize_zip_path(path: impl AsRef<Path>) -> String {
         }
     }
     parts.join("/")
-}
-
-fn attr(e: &BytesStart, local_name: &[u8]) -> Option<String> {
-    e.attributes()
-        .filter_map(|a| a.ok())
-        .find(|a| a.key.local_name().as_ref() == local_name)
-        .and_then(|a| String::from_utf8(a.value.into_owned()).ok())
 }

@@ -27,6 +27,7 @@ Examples:
   pith report.pdf
   pith data.xlsx
   pith data.csv | jq '.tables[]'
+  cat data.csv | pith --format csv -
   pith https://example.com/article
   pith \"*.pdf\"
   pith report.pdf | llm \"Summarize risks and action items\"
@@ -44,12 +45,12 @@ Examples:
     disable_version_flag = true
 )]
 pub(crate) struct Cli {
-    /// 文件路径、URL 或本地 glob，可传多个；URL 不参与 glob 展开。
+    /// 文件路径、URL、本地 glob，或 - 表示标准输入；可传多个，URL 与 - 不参与 glob 展开。
     #[arg(value_name = "input", required = true, num_args = 1..)]
     pub(crate) inputs: Vec<String>,
 
-    /// 覆盖自动 format 检测；可选：pdf、docx、xlsx、pptx、epub、csv、ipynb、html、markdown、text。
-    #[arg(long, value_enum, value_name = "format", hide_possible_values = true)]
+    /// 覆盖自动 format 检测（默认按 magic-byte / 扩展名推断）。
+    #[arg(long, value_enum, value_name = "format")]
     pub(crate) format: Option<FormatArg>,
 
     /// 覆盖默认输出模式；表格型（CSV/XLSX）默认 json，其他默认 md。
@@ -188,5 +189,31 @@ mod tests {
         assert!(!help.contains("<模式>"));
         assert!(!help.contains("用法:"));
         assert!(!help.contains("选项:"));
+    }
+
+    /// The JSON envelope's `usage` hint must stay in sync with the real CLI
+    /// flags. We derive the narrowing flags from the clap definition (every
+    /// long flag except the non-narrowing ones) and require each to appear in
+    /// `TABLE_USAGE`, so renaming or adding a narrowing flag without updating
+    /// the hint fails CI instead of silently lying to consumers.
+    #[test]
+    fn table_usage_lists_every_narrowing_flag() {
+        use clap::CommandFactory;
+
+        let not_narrowing = ["format", "mode", "help", "version"];
+
+        for arg in Cli::command().get_arguments() {
+            let Some(long) = arg.get_long() else {
+                continue;
+            };
+            if not_narrowing.contains(&long) {
+                continue;
+            }
+            assert!(
+                pith::TABLE_USAGE.contains(&format!("--{long}")),
+                "narrowing flag --{long} is missing from TABLE_USAGE; the JSON \
+                 `usage` hint would no longer match the real CLI"
+            );
+        }
     }
 }

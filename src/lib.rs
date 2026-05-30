@@ -19,4 +19,4 @@ pub use json_schema::{
     a1_range, cells_to_values,
 };
 pub use render::{OutputMode, default_mode_for, render_documents, render_json};
-pub use source::{Source, SourceInput};
+pub use source::{Source, SourceInput, is_url};
