@@ -1,6 +1,14 @@
 ---
 name: pith
 description: 当 Agent 需要读取或检查本地文件、简单 URL，并把内容变成适合 LLM 使用的上下文时使用 pith。适用于 PDF、DOCX、PPTX、EPUB、IPYNB、HTML/URL、Markdown、文本、代码、CSV/TSV、XLSX 等文件；在总结文档、提取需求、审阅资料、检查表格、基于本地附件回答问题时，优先用 pith，而不是临时写 pandas/openpyxl、手搓解析器或直接 dump 原始文件。
+tags:
+  - docx
+  - xlsx
+  - pptx
+  - pdf
+  - url
+  - epub
+  - ipynb
 ---
 
 # Pith

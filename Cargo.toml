@@ -42,6 +42,10 @@ scraper = "0.20"
 ureq = { version = "2.10", features = ["tls"] }
 url = "2"
 
+# Silence pdf-extract's stdout glyph warnings (Unix-only crate).
+[target.'cfg(unix)'.dependencies]
+gag = "1"
+
 [dev-dependencies]
 # Snapshot testing — run `cargo insta review` to accept changes.
 insta = { version = "1.40", features = ["yaml"] }
