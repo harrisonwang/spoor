@@ -1,7 +1,9 @@
 ---
 source: tests/pdf.rs
-expression: out.trim()
+expression: out
 ---
+## Page 1
+
 Document title
 
 First paragraph of the document body.

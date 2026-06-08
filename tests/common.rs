@@ -22,6 +22,7 @@ pub fn extract_fixture(rel_path: &str, format: Format) -> String {
     let path = Path::new("tests/fixtures").join(rel_path);
     let options = ExtractOptions {
         format: Some(format),
+        ..ExtractOptions::default()
     };
     let resolved = resolve_input(
         SourceInput::from(path.to_string_lossy().into_owned()),
@@ -38,6 +39,7 @@ pub fn extract_fixture_err(rel_path: &str, format: Format) -> String {
     let path = Path::new("tests/fixtures").join(rel_path);
     let options = ExtractOptions {
         format: Some(format),
+        ..ExtractOptions::default()
     };
     let resolved = match resolve_input(
         SourceInput::from(path.to_string_lossy().into_owned()),

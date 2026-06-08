@@ -5,7 +5,7 @@ use anyhow::Result;
 use scraper::node::Node;
 use scraper::{ElementRef, Html, Selector};
 
-pub fn extract(source: &Source) -> Result<String> {
+pub fn extract(source: &Source, max_parse_bytes: usize) -> Result<String> {
     let html = decode_text(source.bytes());
     let doc = Html::parse_document(&html);
 
@@ -19,11 +19,11 @@ pub fn extract(source: &Source) -> Result<String> {
         .or_else(|| doc.select(&main_sel).next())
         .or_else(|| doc.select(&body_sel).next());
 
-    let mut md = MarkdownBuilder::new();
+    let mut md = MarkdownBuilder::with_max_bytes(max_parse_bytes);
     if let Some(root) = root {
         render_children(root, &mut md);
     }
-    Ok(md.build())
+    md.build()
 }
 
 fn render_children(element: ElementRef<'_>, md: &mut MarkdownBuilder) {

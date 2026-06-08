@@ -15,6 +15,7 @@ pub struct JsonOutput {
     pub schema_version: String,
     pub usage: String,
     pub tables: Vec<TableEntry>,
+    pub truncated: bool,
     pub warnings: Vec<String>,
 }
 
@@ -24,6 +25,7 @@ impl JsonOutput {
             schema_version: TABLE_SCHEMA_VERSION.to_string(),
             usage: TABLE_USAGE.to_string(),
             tables,
+            truncated: false,
             warnings: Vec::new(),
         }
     }

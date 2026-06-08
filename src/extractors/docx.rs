@@ -12,26 +12,30 @@ use std::collections::HashMap;
 /// We deliberately match by local name and ignore namespace prefixes. This
 /// keeps custom-prefix OOXML fixtures working without relying on version-
 /// sensitive namespace-reader APIs.
-pub fn extract(source: &Source) -> Result<String> {
-    let mut zip = limits::open_zip_archive(source.bytes(), "docx")?;
+pub fn extract(source: &Source, max_parse_bytes: usize) -> Result<String> {
+    let mut zip = limits::open_zip_archive(source.bytes(), "docx", max_parse_bytes)?;
 
-    let styles_xml =
-        limits::read_zip_text_optional(&mut zip, "word/styles.xml")?.unwrap_or_default();
-    let numbering_xml =
-        limits::read_zip_text_optional(&mut zip, "word/numbering.xml")?.unwrap_or_default();
-    let footnotes_xml =
-        limits::read_zip_text_optional(&mut zip, "word/footnotes.xml")?.unwrap_or_default();
-    let rels_xml = limits::read_zip_text_optional(&mut zip, "word/_rels/document.xml.rels")?
+    let styles_xml = limits::read_zip_text_optional(&mut zip, "word/styles.xml", max_parse_bytes)?
         .unwrap_or_default();
-    let document_xml = limits::read_zip_text_optional(&mut zip, "word/document.xml")?
-        .ok_or_else(|| anyhow!("docx missing word/document.xml"))?;
+    let numbering_xml =
+        limits::read_zip_text_optional(&mut zip, "word/numbering.xml", max_parse_bytes)?
+            .unwrap_or_default();
+    let footnotes_xml =
+        limits::read_zip_text_optional(&mut zip, "word/footnotes.xml", max_parse_bytes)?
+            .unwrap_or_default();
+    let rels_xml =
+        limits::read_zip_text_optional(&mut zip, "word/_rels/document.xml.rels", max_parse_bytes)?
+            .unwrap_or_default();
+    let document_xml =
+        limits::read_zip_text_optional(&mut zip, "word/document.xml", max_parse_bytes)?
+            .ok_or_else(|| anyhow!("docx missing word/document.xml"))?;
 
     let style_map = parse_styles(&styles_xml);
     let numbering = parse_numbering(&numbering_xml);
     let footnotes = parse_footnotes(&footnotes_xml);
     let rel_map = parse_rels(&rels_xml);
 
-    let mut md = MarkdownBuilder::new();
+    let mut md = MarkdownBuilder::with_max_bytes(max_parse_bytes);
     render_document(
         &document_xml,
         &style_map,
@@ -40,7 +44,7 @@ pub fn extract(source: &Source) -> Result<String> {
         &rel_map,
         &mut md,
     )?;
-    Ok(md.build())
+    md.build()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -102,8 +102,10 @@ LLM-friendly 表示按 **内容形态** 决定，不按消费者类型：
 | 功能 | 解决什么真实问题 | 验收标准 | 来源 |
 |------|------------------|----------|------|
 | 默认输出模式按 format 分派 | 用户不该为"XLSX 该用 md 还是 json"做决策；定位就是表格型 → JSON、文档型 → Markdown | `pith data.xlsx` 默认 JSON；`pith file.pdf` 默认 Markdown；`-m` 仅作显式覆盖；非表格格式 `-m json` 报错并提示 | [pith README](../README.md) |
-| CSV/XLSX table JSON v2 | 大表和 spreadsheet 需要程序化字段，且 JSON 自身要自描述 | 顶层 `schema_version` + `usage` + `tables[]` + `warnings[]`；table 内含 `source/format/sheet/workbook_sheets/title/range/column_count/header_row/headers/preamble/rows/row_range/truncated/warnings` | [pith README](../README.md), [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs) |
+| CSV/XLSX table JSON v2 | 大表和 spreadsheet 需要程序化字段，且 JSON 自身要自描述 | 顶层 `schema_version` + `usage` + `tables[]` + `truncated` + `warnings[]`；table 内含 `source/format/sheet/workbook_sheets/title/range/column_count/header_row/headers/preamble/rows/row_range/truncated/warnings` | [pith README](../README.md), [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs) |
 | 表格收窄 flag | LLM/脚本看到 `truncated: true` 时需要能精确切片；HATEOAS-style：从 JSON 的 row_range + workbook_sheets 直接复制 flag 参数 | `--sheet <name>`、`--rows <first:last>`（Excel 行号）、`--columns <a,b,c>`、`--limit <n>`、`--offset <n>`；`--rows` 与 `--limit`/`--offset` 互斥；找不到的 sheet/columns 硬错并列出可用列表；JSON 顶层 `usage` 字符串描述真实 flag | [pith XLSX matrix](test-matrix/xlsx.md), [pith README](../README.md) |
+| 总输出上限 ✅ | 防止单个大文档或 glob 撑爆 Agent、shell、CI 和模型上下文 | 整次 stdout 默认 256 KiB；Markdown 有 marker + stderr warning；JSON 保持合法并设置顶层 `truncated` | [pith README](../README.md) |
+| 解析预算 ✅ | 防止巨大输入、容器解压内容和提取结果在 stdout 截断前消耗无界内存 | 默认共享 64 MiB；支持 `--max-parse-bytes`；超限返回可机器识别的结构化错误；明确不承诺操作系统级精确 RSS 硬限制 | [pith README](../README.md), [pith adversarial matrix](test-matrix/adversarial.md) |
 | PDF page boundary | LLM 回答无法回到页码 | 多页 PDF 输出 `## Page N` 或 JSON page anchor | [pith PDF matrix](test-matrix/pdf.md), [MarkItDown #41](https://github.com/microsoft/markitdown/issues/41) |
 | ZIP 安全层 | Office/EPUB 自动处理有 zip bomb 风险 | DOCX/XLSX/PPTX/EPUB 共用 entry cap、ratio cap、total cap | [OWASP File Upload](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html), [pith adversarial matrix](test-matrix/adversarial.md) |
 
@@ -120,7 +122,7 @@ LLM-friendly 表示按 **内容形态** 决定，不按消费者类型：
 | 功能 | 解决什么真实问题 | 验收标准 | 来源 |
 |------|------------------|----------|------|
 | Markdown 大表降级（niche） | `-m md` 处理大表的终端 peek 场景；主路径走 JSON 后此条优先级下降 | 小表 GFM；中表 fenced TSV；超大表摘要 + range + truncation | [pith XLSX matrix](test-matrix/xlsx.md), [Jina Reader token budget](https://github.com/jina-ai/reader) |
-| pith-core library | Rust 生态嵌入 | `cargo add pith-core` 可直接 document -> Markdown / table JSON | [crates.io](https://crates.io/), [anytomd-rs](https://github.com/developer0hye/anytomd-rs) |
+| pith-core + PyO3 binding | Rust/Python 编排器内直连，减少高频子进程开销并扩大 Agent 开发者覆盖面 | typed core result/error；CLI parity 不变；`parse_bytes` / `parse_path` 释放 GIL；用 benchmark 证明小文件高频调用收益 | [Core/Python architecture](CORE_PYTHON_ARCHITECTURE.md), [crates.io](https://crates.io/) |
 | 分发完善 | 降低安装摩擦 | Homebrew、cargo-binstall、winget、apt | [Homebrew](https://brew.sh/), [cargo-binstall](https://github.com/cargo-bins/cargo-binstall), [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/) |
 
 ### P3 - 长期
@@ -175,7 +177,7 @@ LLM-friendly 表示按 **内容形态** 决定，不按消费者类型：
 1. 默认输出模式按 format 分派（XLSX/CSV → json，其他 → md）✅ 已完成
 2. CSV/XLSX table JSON v2（顶层 `usage` + `tables[].workbook_sheets` 等自描述字段）✅ 已完成
 3. 表格收窄 flag（`--sheet` / `--rows` / `--columns` / `--limit` / `--offset`），JSON `usage` 字符串同步描述 ✅ 已完成
-4. PDF page boundary
+4. PDF page boundary ✅ 已完成
 5. ZIP 安全层补完
 6. stdin/pipe ✅ 已完成
 7. `pith chunk`（仅文档型）

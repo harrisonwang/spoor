@@ -1,6 +1,7 @@
 use crate::extract::TableFilter;
 use crate::json_schema::{HeaderInfo, RowRange, TableEntry, a1_range, cells_to_values};
-use crate::output::{decode_text, gfm_table};
+use crate::limits;
+use crate::output::{decode_text, gfm_table, gfm_table_size};
 use crate::source::Source;
 use anyhow::{Result, anyhow};
 use std::collections::BTreeMap;
@@ -13,7 +14,7 @@ const DEFAULT_PREVIEW_ROWS: usize = 100;
 ///   2. Sniff delimiter from a sample (',' '\t' ';' '|').
 ///   3. Parse with `csv` crate, render as GFM table.
 ///   4. If file is huge, truncate to first N rows + a "(truncated)" line.
-pub fn extract(source: &Source) -> Result<String> {
+pub fn extract(source: &Source, max_parse_bytes: usize) -> Result<String> {
     let text = decode_text(source.bytes());
     let delimiter = sniff_delimiter(&text);
 
@@ -35,6 +36,17 @@ pub fn extract(source: &Source) -> Result<String> {
         rows.push(rec.iter().map(str::to_string).collect());
     }
 
+    let marker_size = if truncated {
+        format!("\n_(truncated at {MARKDOWN_MAX_ROWS} rows)_\n").len()
+    } else {
+        0
+    };
+    limits::ensure_parse_size(
+        gfm_table_size(&rows).saturating_add(marker_size),
+        max_parse_bytes,
+        "CSV Markdown rendering",
+    )?;
+
     let mut out = gfm_table(&rows);
     if truncated {
         out.push_str(&format!("\n_(truncated at {MARKDOWN_MAX_ROWS} rows)_\n"));
@@ -46,6 +58,7 @@ pub fn extract_table_entries(
     source: &Source,
     source_label: &str,
     filter: &TableFilter,
+    max_parse_bytes: usize,
 ) -> Result<Vec<TableEntry>> {
     let text = decode_text(source.bytes());
     let delimiter = sniff_delimiter(&text);
@@ -61,12 +74,18 @@ pub fn extract_table_entries(
     let mut all_rows: Vec<(usize, Vec<String>)> = Vec::new();
     let mut row_count = 0usize;
     let mut column_count = 0usize;
+    let mut retained_cell_bytes = 0usize;
 
     for rec in rdr.records() {
         let rec = rec?;
         let row: Vec<String> = rec.iter().map(normalize_cell).collect();
         row_count += 1;
         column_count = column_count.max(row.len());
+        retained_cell_bytes = retained_cell_bytes.saturating_add(
+            row.iter()
+                .fold(0usize, |total, cell| total.saturating_add(cell.len())),
+        );
+        limits::ensure_parse_size(retained_cell_bytes, max_parse_bytes, "CSV retained cells")?;
 
         if row_count == 1 {
             headers = row;

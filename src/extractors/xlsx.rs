@@ -3,7 +3,8 @@ use crate::extractors::csv::validate_columns;
 use crate::json_schema::{
     HeaderInfo, PreambleInfo, RowRange, TableEntry, a1_range, cells_to_values,
 };
-use crate::output::gfm_table;
+use crate::limits;
+use crate::output::{gfm_table, gfm_table_size};
 use crate::source::Source;
 use anyhow::{Context, Result, anyhow};
 use calamine::{Data, Reader, Xlsx, open_workbook_from_rs};
@@ -12,8 +13,13 @@ use std::io::Cursor;
 
 const DEFAULT_PREVIEW_ROWS: usize = 100;
 
-pub fn extract(source: &Source) -> Result<String> {
-    let cursor = Cursor::new(source.bytes().to_vec());
+pub fn extract(source: &Source, max_parse_bytes: usize) -> Result<String> {
+    drop(limits::open_zip_archive(
+        source.bytes(),
+        "xlsx",
+        max_parse_bytes,
+    )?);
+    let cursor = Cursor::new(source.bytes());
     let mut wb: Xlsx<_> = open_workbook_from_rs(cursor).context("failed to open xlsx")?;
 
     let mut out = String::new();
@@ -24,27 +30,37 @@ pub fn extract(source: &Source) -> Result<String> {
             .worksheet_range(name)
             .with_context(|| format!("could not read sheet: {name}"))?;
 
-        if !out.is_empty() {
-            out.push('\n');
-        }
-        out.push_str(&format!("## Sheet: {name}\n\n"));
+        let prefix = format!(
+            "{}## Sheet: {name}\n\n",
+            if out.is_empty() { "" } else { "\n" }
+        );
 
         let raw: Vec<Vec<String>> = range
             .rows()
             .map(|row| row.iter().map(format_cell_value).collect())
             .collect();
 
-        let Some((header, data)) = raw.split_first() else {
-            continue;
+        let table_rows = match raw.split_first() {
+            Some((header, data)) => {
+                // Keep the header row; drop fully empty data rows.
+                let mut table_rows = vec![header.clone()];
+                table_rows.extend(
+                    data.iter()
+                        .filter(|row| !row.iter().all(String::is_empty))
+                        .cloned(),
+                );
+                table_rows
+            }
+            None => Vec::new(),
         };
-
-        // Keep the header row; drop fully empty data rows.
-        let mut table_rows = vec![header.clone()];
-        table_rows.extend(
-            data.iter()
-                .filter(|row| !row.iter().all(String::is_empty))
-                .cloned(),
-        );
+        limits::ensure_parse_size(
+            out.len()
+                .saturating_add(prefix.len())
+                .saturating_add(gfm_table_size(&table_rows)),
+            max_parse_bytes,
+            "XLSX Markdown rendering",
+        )?;
+        out.push_str(&prefix);
         out.push_str(&gfm_table(&table_rows));
     }
 
@@ -55,8 +71,14 @@ pub fn extract_table_entries(
     source: &Source,
     source_label: &str,
     filter: &TableFilter,
+    max_parse_bytes: usize,
 ) -> Result<Vec<TableEntry>> {
-    let cursor = Cursor::new(source.bytes().to_vec());
+    drop(limits::open_zip_archive(
+        source.bytes(),
+        "xlsx",
+        max_parse_bytes,
+    )?);
+    let cursor = Cursor::new(source.bytes());
     let mut wb: Xlsx<_> = open_workbook_from_rs(cursor).context("failed to open xlsx")?;
 
     let workbook_sheets: Vec<String> = wb.sheet_names();

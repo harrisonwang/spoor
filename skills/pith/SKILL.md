@@ -49,9 +49,20 @@ tags:
    - 用 `--limit <n>` 和 `--offset <n>` 做窗口采样。
 4. 引用表格依据时，带上 source、sheet、列名和 `row_range.first` / `row_range.last`。
 
+## 输出截断时怎么处理
+
+- `pith` 默认对整次命令 stdout 使用 256 KiB 总量上限，多文件和 glob 共享预算。
+- Markdown 末尾出现 `> [!WARNING]` 和 `Content is incomplete` 时，不要假设后续内容不存在；应缩小输入范围，或在确有必要时使用 `--max-output-bytes <n>` 提高上限。
+- 表格 JSON 顶层 `truncated: true` 表示整次输出因总量上限不完整；table 内 `truncated: true` 表示该 table preview 不完整。优先用 `--sheet` / `--rows` / `--columns` 收窄后重试。
+- 总量截断后的 table `row_range` 描述截断前的选择范围，不代表所有范围内 rows 都已返回。
+- 批处理 stderr 只详细列出前 20 条失败；看到 additional failures omitted 时，不要假设其余输入成功。
+
 ## 出错时怎么处理
 
-- PDF 输出很少或为空时，说明它可能是扫描件或图片型 PDF，需要 OCR；`pith` 默认不做 OCR。
+- PDF 没有 text layer 时，`pith` 会返回非零退出码，并在 stderr 输出
+  `{"is_error":true,"reason":"image-only PDF",...}`。看到这个错误后停止猜测
+  PDF 内容，明确告诉用户需要外部 OCR；`pith` 默认不做 OCR。
+- `reason` 为 `parse memory limit exceeded` 时，说明输入、容器解压内容或提取结果超过共享解析预算。不要猜测未读取内容；优先缩小输入，确有必要时再用 `--max-parse-bytes <n>` 提高预算。
 - Office/EPUB 报 ZIP、archive 或 safety limit 错误时，先当作文件损坏、不支持或超过安全限制处理。除非用户要求做取证排查，不要绕过 `pith` 手动解压。
 - 文档格式用 `-m json` 报错时，去掉 `-m json` 重新跑。
 - 如果任务是操作飞书、企微、钉钉等在线办公平台，用对应平台的 CLI/API skill；只有内容已经落成本地文件或简单 URL 时，才交给 `pith` 读取。

@@ -1,5 +1,6 @@
+use crate::limits::{DEFAULT_MAX_PARSE_BYTES, ensure_parse_size};
 use anyhow::{Context, Result, anyhow};
-use std::io::Read;
+use std::io::{Read, Take};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -52,19 +53,21 @@ enum Origin {
 
 impl Source {
     pub fn resolve(input: &str) -> Result<Self> {
+        Self::resolve_with_limit(input, DEFAULT_MAX_PARSE_BYTES)
+    }
+
+    pub fn resolve_with_limit(input: &str, max_bytes: usize) -> Result<Self> {
         if input == "-" {
-            Self::read_stdin()
+            Self::read_stdin(max_bytes)
         } else if is_url(input) {
-            Self::fetch_url(input)
+            Self::fetch_url(input, max_bytes)
         } else {
-            Self::read_file(input)
+            Self::read_file(input, max_bytes)
         }
     }
 
-    fn read_stdin() -> Result<Self> {
-        let mut bytes = Vec::new();
-        std::io::stdin()
-            .read_to_end(&mut bytes)
+    fn read_stdin(max_bytes: usize) -> Result<Self> {
+        let bytes = read_limited(std::io::stdin(), max_bytes, "stdin read")
             .context("failed to read from stdin")?;
         Ok(Self {
             bytes,
@@ -72,16 +75,28 @@ impl Source {
         })
     }
 
-    fn read_file(path: &str) -> Result<Self> {
+    fn read_file(path: &str, max_bytes: usize) -> Result<Self> {
         let pb = PathBuf::from(path);
-        let bytes = std::fs::read(&pb).with_context(|| format!("failed to read file: {path}"))?;
+        let metadata =
+            std::fs::metadata(&pb).with_context(|| format!("failed to inspect file: {path}"))?;
+        if metadata.len() > max_bytes as u64 {
+            return Err(crate::error::StructuredError::parse_memory_limit(
+                max_bytes,
+                "local file read",
+            )
+            .into());
+        }
+        let file =
+            std::fs::File::open(&pb).with_context(|| format!("failed to open file: {path}"))?;
+        let bytes = read_limited(file, max_bytes, "local file read")
+            .with_context(|| format!("failed to read file: {path}"))?;
         Ok(Self {
             bytes,
             origin: Origin::File { path: pb },
         })
     }
 
-    fn fetch_url(url: &str) -> Result<Self> {
+    fn fetch_url(url: &str, max_bytes: usize) -> Result<Self> {
         let resp = ureq::get(url)
             .set("User-Agent", concat!("pith/", env!("CARGO_PKG_VERSION")))
             .set("Accept", "text/markdown, text/html;q=0.9")
@@ -95,11 +110,15 @@ impl Source {
             .map(|ct| ct.starts_with("text/markdown"))
             .unwrap_or(false);
 
-        let mut bytes = Vec::new();
-        resp.into_reader()
-            .take(50 * 1024 * 1024) // 50 MB cap
-            .read_to_end(&mut bytes)
-            .map_err(|e| anyhow!("failed to read response body: {e}"))?;
+        if let Some(length) = resp
+            .header("content-length")
+            .and_then(|value| value.parse::<usize>().ok())
+        {
+            ensure_parse_size(length, max_bytes, "URL response read")?;
+        }
+
+        let bytes = read_limited(resp.into_reader(), max_bytes, "URL response read")
+            .context("failed to read response body")?;
 
         Ok(Self {
             bytes,
@@ -113,6 +132,14 @@ impl Source {
 
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
+    }
+
+    pub fn len(&self) -> usize {
+        self.bytes.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
     }
 
     pub fn is_url(&self) -> bool {
@@ -157,6 +184,18 @@ impl Source {
             Origin::Stdin => None,
         }
     }
+}
+
+fn read_limited(reader: impl Read, max_bytes: usize, stage: &str) -> Result<Vec<u8>> {
+    let mut bytes = Vec::with_capacity(max_bytes.min(1024 * 1024));
+    let mut limited: Take<_> = reader.take(
+        u64::try_from(max_bytes)
+            .unwrap_or(u64::MAX)
+            .saturating_add(1),
+    );
+    limited.read_to_end(&mut bytes)?;
+    ensure_parse_size(bytes.len(), max_bytes, stage)?;
+    Ok(bytes)
 }
 
 /// Whether `input` should be fetched as a URL rather than read as a file path.

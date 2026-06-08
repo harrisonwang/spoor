@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Misc fixture builders: pdf, epub, plain, adversarial."""
+import base64
+from io import BytesIO
 from pathlib import Path
 import zipfile
 
@@ -43,6 +45,30 @@ def build_pdfs():
     c = canvas.Canvas(str(out / "03_ascii_only.pdf"), pagesize=letter)
     c.setFont("Helvetica", 12)
     c.drawString(72, 720, "ASCII only PDF for baseline test.")
+    c.showPage()
+    c.save()
+
+    build_image_only_pdf()
+
+
+def build_image_only_pdf():
+    """Build a PDF containing an image object but no text layer."""
+    out = ROOT / "pdf"
+    out.mkdir(parents=True, exist_ok=True)
+    try:
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.utils import ImageReader
+    except ImportError:
+        print("reportlab not installed - skipping image-only PDF")
+        return
+
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+        "+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    )
+    c = canvas.Canvas(str(out / "04_image_only.pdf"), pagesize=letter)
+    c.drawImage(ImageReader(BytesIO(png)), 72, 620, width=300, height=180)
     c.showPage()
     c.save()
 

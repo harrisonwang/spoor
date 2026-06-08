@@ -19,9 +19,10 @@ For tables (CSV/XLSX), the recommended pattern is:
   pith file.xlsx --sheet L1 --rows 5:104      # read a slice
   pith file.xlsx --columns 分类,技能          # filter columns
 
-pith is safe to run on arbitrarily large files; JSON output is bounded
-by default (first 100 data rows per table). Use --limit to opt in to more,
-or --rows for an exact Excel row range.
+pith bounds JSON previews by default (first 100 data rows per table) and
+caps total CLI output at 256 KiB. Use --limit/--rows to narrow tables or
+--max-output-bytes to raise the total output cap. Parsing uses a shared
+64 MiB data-volume budget by default; raise it with --max-parse-bytes.
 
 Examples:
   pith report.pdf
@@ -84,6 +85,22 @@ pub(crate) struct Cli {
     #[arg(long, value_name = "n")]
     pub(crate) offset: Option<usize>,
 
+    /// 整次命令 stdout 的最大字节数；默认 262144（256 KiB）。
+    #[arg(
+        long,
+        value_name = "n",
+        default_value_t = pith::DEFAULT_MAX_OUTPUT_BYTES
+    )]
+    pub(crate) max_output_bytes: usize,
+
+    /// 解析输入、中间文本和容器解压内容的共享字节预算；默认 67108864（64 MiB）。
+    #[arg(
+        long,
+        value_name = "n",
+        default_value_t = pith::DEFAULT_MAX_PARSE_BYTES
+    )]
+    pub(crate) max_parse_bytes: usize,
+
     /// 显示帮助。
     #[arg(short = 'h', long = "help", action = ArgAction::Help)]
     help: Option<bool>,
@@ -109,6 +126,8 @@ mod tests {
         assert!(cli.columns.is_empty());
         assert!(cli.limit.is_none());
         assert!(cli.offset.is_none());
+        assert_eq!(cli.max_output_bytes, pith::DEFAULT_MAX_OUTPUT_BYTES);
+        assert_eq!(cli.max_parse_bytes, pith::DEFAULT_MAX_PARSE_BYTES);
     }
 
     #[test]
@@ -178,11 +197,13 @@ mod tests {
         assert!(help.contains("--columns <columns>"));
         assert!(help.contains("--limit <n>"));
         assert!(help.contains("--offset <n>"));
+        assert!(help.contains("--max-output-bytes <n>"));
+        assert!(help.contains("--max-parse-bytes <n>"));
         assert!(help.contains("pith \"*.pdf\""));
         assert!(help.contains("Examples:"));
         assert!(help.contains("pith report.pdf | llm \"Summarize risks and action items\""));
         assert!(help.contains("--sheet L1 --rows 5:104"));
-        assert!(help.contains("safe to run on arbitrarily large files"));
+        assert!(help.contains("caps total CLI output at 256 KiB"));
         assert!(help.contains("显示帮助。"));
         assert!(!help.contains("<输入>"));
         assert!(!help.contains("<格式>"));
@@ -200,7 +221,14 @@ mod tests {
     fn table_usage_lists_every_narrowing_flag() {
         use clap::CommandFactory;
 
-        let not_narrowing = ["format", "mode", "help", "version"];
+        let not_narrowing = [
+            "format",
+            "mode",
+            "max-output-bytes",
+            "max-parse-bytes",
+            "help",
+            "version",
+        ];
 
         for arg in Cli::command().get_arguments() {
             let Some(long) = arg.get_long() else {

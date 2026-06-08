@@ -9,14 +9,14 @@ use scraper::{Html, Selector};
 use std::collections::HashMap;
 use std::path::Path;
 
-pub fn extract(source: &Source) -> Result<String> {
-    let mut zip = limits::open_zip_archive(source.bytes(), "epub")?;
+pub fn extract(source: &Source, max_parse_bytes: usize) -> Result<String> {
+    let mut zip = limits::open_zip_archive(source.bytes(), "epub", max_parse_bytes)?;
 
-    let container_xml = read_zip_text(&mut zip, "META-INF/container.xml")?
+    let container_xml = read_zip_text(&mut zip, "META-INF/container.xml", max_parse_bytes)?
         .ok_or_else(|| anyhow!("epub: missing META-INF/container.xml"))?;
     let opf_path = parse_rootfile_path(&container_xml)
         .ok_or_else(|| anyhow!("epub: missing OPF rootfile in container.xml"))?;
-    let opf_xml = read_zip_text(&mut zip, &opf_path)?
+    let opf_xml = read_zip_text(&mut zip, &opf_path, max_parse_bytes)?
         .ok_or_else(|| anyhow!("epub: missing OPF package: {opf_path}"))?;
 
     let spine = parse_spine_paths(&opf_xml, &opf_path);
@@ -26,9 +26,15 @@ pub fn extract(source: &Source) -> Result<String> {
 
     let mut out = String::new();
     for name in spine {
-        let bytes = limits::read_zip_bytes(&mut zip, &name)?;
+        let bytes = limits::read_zip_bytes(&mut zip, &name, max_parse_bytes)?;
         let html = decode_text(&bytes);
-        out.push_str(&strip_html(&html));
+        let chapter = strip_html(&html);
+        limits::ensure_parse_size(
+            out.len().saturating_add(chapter.len()).saturating_add(1),
+            max_parse_bytes,
+            "EPUB extracted text",
+        )?;
+        out.push_str(&chapter);
         out.push('\n');
     }
     Ok(out)
@@ -37,8 +43,10 @@ pub fn extract(source: &Source) -> Result<String> {
 fn read_zip_text<R: std::io::Read + std::io::Seek>(
     zip: &mut zip::ZipArchive<R>,
     name: &str,
+    max_parse_bytes: usize,
 ) -> Result<Option<String>> {
-    Ok(limits::read_zip_bytes_optional(zip, name)?.map(|bytes| decode_text(&bytes)))
+    Ok(limits::read_zip_bytes_optional(zip, name, max_parse_bytes)?
+        .map(|bytes| decode_text(&bytes)))
 }
 
 fn parse_rootfile_path(xml: &str) -> Option<String> {

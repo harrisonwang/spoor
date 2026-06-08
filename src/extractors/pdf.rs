@@ -1,16 +1,42 @@
+use crate::error::StructuredError;
+use crate::limits;
 use crate::source::Source;
 use anyhow::{Result, anyhow};
 
-pub fn extract(source: &Source) -> Result<String> {
-    let text = extract_text_quietly(source.bytes())?;
+pub fn extract(source: &Source, max_parse_bytes: usize) -> Result<String> {
+    let pages = extract_pages_quietly(source.bytes())?;
 
-    if text.trim().is_empty() {
-        return Err(anyhow!(
-            "no extractable text — PDF appears to be image-only (scanned). \
-             OCR is out of scope."
-        ));
+    if pages.iter().all(|page| page.trim().is_empty()) {
+        return Err(StructuredError::image_only_pdf().into());
     }
-    Ok(text)
+
+    let rendered_bytes = pages
+        .iter()
+        .enumerate()
+        .fold(0usize, |total, (index, page)| {
+            total
+                .saturating_add(if index > 0 { "\n\n".len() } else { 0 })
+                .saturating_add(format!("## Page {}\n\n", index + 1).len())
+                .saturating_add(page.trim().len())
+        });
+    limits::ensure_parse_size(rendered_bytes, max_parse_bytes, "PDF Markdown rendering")?;
+
+    Ok(render_pages(&pages))
+}
+
+fn render_pages(pages: &[String]) -> String {
+    let mut markdown = String::new();
+
+    for (index, page) in pages.iter().enumerate() {
+        if index > 0 {
+            markdown.push_str("\n\n");
+        }
+
+        markdown.push_str(&format!("## Page {}\n\n", index + 1));
+        markdown.push_str(page.trim());
+    }
+
+    markdown
 }
 
 /// pdf-extract prints `unknown glyph name '...'` straight to stdout via
@@ -22,15 +48,32 @@ pub fn extract(source: &Source) -> Result<String> {
 /// of the call. On non-Unix platforms `gag` is unavailable, so we accept the
 /// noise there.
 #[cfg(unix)]
-fn extract_text_quietly(bytes: &[u8]) -> Result<String> {
+fn extract_pages_quietly(bytes: &[u8]) -> Result<Vec<String>> {
     // `Gag` redirects fd 1 to /dev/null and restores it on drop. If gagging
     // fails for any reason, fall back to extracting with the noise rather than
     // failing the whole command.
     let _gag = gag::Gag::stdout().ok();
-    pdf_extract::extract_text_from_mem(bytes).map_err(|e| anyhow!("pdf-extract failed: {e}"))
+    pdf_extract::extract_text_from_mem_by_pages(bytes)
+        .map_err(|e| anyhow!("pdf-extract failed: {e}"))
 }
 
 #[cfg(not(unix))]
-fn extract_text_quietly(bytes: &[u8]) -> Result<String> {
-    pdf_extract::extract_text_from_mem(bytes).map_err(|e| anyhow!("pdf-extract failed: {e}"))
+fn extract_pages_quietly(bytes: &[u8]) -> Result<Vec<String>> {
+    pdf_extract::extract_text_from_mem_by_pages(bytes)
+        .map_err(|e| anyhow!("pdf-extract failed: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render_pages;
+
+    #[test]
+    fn page_boundaries_preserve_blank_pages() {
+        let pages = vec!["first".into(), " \n".into(), "third".into()];
+
+        assert_eq!(
+            render_pages(&pages),
+            "## Page 1\n\nfirst\n\n## Page 2\n\n\n\n## Page 3\n\nthird"
+        );
+    }
 }

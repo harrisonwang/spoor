@@ -5,7 +5,11 @@ use clap::Parser;
 
 fn main() {
     if let Err(e) = run() {
-        eprintln!("error: {:#}", e);
+        if let Some(error) = e.downcast_ref::<pith::StructuredError>() {
+            eprintln!("{}", error.to_json());
+        } else {
+            eprintln!("error: {:#}", e);
+        }
         std::process::exit(1);
     }
 }

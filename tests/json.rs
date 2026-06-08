@@ -40,6 +40,7 @@ fn assert_envelope(value: &Value) {
         "usage must be a string telling consumers how to narrow"
     );
     assert!(value["tables"].is_array());
+    assert!(value["truncated"].is_boolean());
     assert!(value["warnings"].is_array());
 }
 
@@ -466,6 +467,38 @@ fn limit_caps_data_rows() {
 }
 
 #[test]
+fn total_output_limit_keeps_json_valid_and_marks_truncation() {
+    let output = pith_bin()
+        .args([
+            "-m",
+            "json",
+            "--limit",
+            "2000",
+            "--max-output-bytes",
+            "2048",
+            &fixture_path("csv/10_large.csv"),
+        ])
+        .output()
+        .expect("run pith");
+
+    assert!(output.status.success());
+    assert!(output.stdout.len() <= 2048);
+
+    let value: Value = serde_json::from_slice(&output.stdout).expect("valid truncated JSON");
+    assert_eq!(value["truncated"], true);
+    assert!(
+        value["warnings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|warning| warning.as_str().unwrap().contains("--max-output-bytes"))
+    );
+
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    assert!(stderr.contains("warning: pith output truncated"));
+}
+
+#[test]
 fn offset_skips_data_rows() {
     let value = pith_json(&[
         "-m".to_string(),
@@ -493,11 +526,16 @@ fn json_args_from_paths(paths: &[String]) -> Vec<String> {
 }
 
 fn titled_table_fixture() -> std::path::PathBuf {
-    let unique = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let path = std::env::temp_dir().join(format!("pith-titled-table-{unique}.xlsx"));
+    // Process-unique, monotonic name so concurrently running tests never share
+    // a path (a wall-clock timestamp can collide under coarse clock resolution,
+    // letting one test delete the file another is still reading).
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!(
+        "pith-titled-table-{}-{unique}.xlsx",
+        std::process::id()
+    ));
     write_titled_table_xlsx(&path);
     path
 }

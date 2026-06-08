@@ -7,8 +7,8 @@ use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 use std::path::{Component, Path};
 
-pub fn extract(source: &Source) -> Result<String> {
-    let mut zip = limits::open_zip_archive(source.bytes(), "pptx")?;
+pub fn extract(source: &Source, max_parse_bytes: usize) -> Result<String> {
+    let mut zip = limits::open_zip_archive(source.bytes(), "pptx", max_parse_bytes)?;
 
     // Collect ppt/slides/slideN.xml entries, sort by N.
     let mut slides: Vec<(u32, String)> = Vec::new();
@@ -19,17 +19,17 @@ pub fn extract(source: &Source) -> Result<String> {
     }
     slides.sort_by_key(|(n, _)| *n);
 
-    let mut md = MarkdownBuilder::new();
+    let mut md = MarkdownBuilder::with_max_bytes(max_parse_bytes);
     for (n, name) in &slides {
         md.heading(2, &format!("Slide {n}"));
-        let xml = limits::read_zip_text(&mut zip, name)?;
+        let xml = limits::read_zip_text(&mut zip, name, max_parse_bytes)?;
         render_slide(&xml, &mut md)?;
-        if let Some(notes_name) = notes_slide_for(&mut zip, name)? {
-            let notes_xml = limits::read_zip_text(&mut zip, &notes_name)?;
+        if let Some(notes_name) = notes_slide_for(&mut zip, name, max_parse_bytes)? {
+            let notes_xml = limits::read_zip_text(&mut zip, &notes_name, max_parse_bytes)?;
             render_notes(&notes_xml, &mut md)?;
         }
     }
-    Ok(md.build())
+    md.build()
 }
 
 fn slide_number(name: &str) -> Option<u32> {
@@ -159,12 +159,13 @@ fn extract_paragraphs(xml: &str) -> Result<Vec<String>> {
 fn notes_slide_for<R: std::io::Read + std::io::Seek>(
     zip: &mut zip::ZipArchive<R>,
     slide_name: &str,
+    max_parse_bytes: usize,
 ) -> Result<Option<String>> {
     let Some(file_name) = Path::new(slide_name).file_name().and_then(|s| s.to_str()) else {
         return Ok(None);
     };
     let rels_name = format!("ppt/slides/_rels/{file_name}.rels");
-    let rels_xml = match limits::read_zip_text_optional(zip, &rels_name)? {
+    let rels_xml = match limits::read_zip_text_optional(zip, &rels_name, max_parse_bytes)? {
         Some(xml) => xml,
         None => return Ok(None),
     };

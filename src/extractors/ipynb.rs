@@ -1,9 +1,10 @@
+use crate::limits;
 use crate::output::decode_text;
 use crate::source::Source;
 use anyhow::{Result, anyhow};
 use serde_json::Value;
 
-pub fn extract(source: &Source) -> Result<String> {
+pub fn extract(source: &Source, max_parse_bytes: usize) -> Result<String> {
     let text = decode_text(source.bytes());
     let v: Value = serde_json::from_str(&text).map_err(|e| anyhow!("invalid ipynb JSON: {e}"))?;
 
@@ -71,6 +72,7 @@ pub fn extract(source: &Source) -> Result<String> {
             }
             _ => {}
         }
+        limits::ensure_parse_size(out.len(), max_parse_bytes, "IPYNB Markdown rendering")?;
     }
     Ok(out)
 }

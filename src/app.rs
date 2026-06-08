@@ -2,15 +2,18 @@ use crate::cli::Cli;
 use anyhow::{Context, Result, anyhow};
 use glob::{MatchOptions, glob_with};
 use pith::{
-    ExtractOptions, JsonOutput, OutputMode, SourceInput, TableFilter, default_mode_for, extract_md,
-    extract_table_entries, is_url, render_documents, render_json, resolve_input,
+    ExtractOptions, JsonOutput, OutputMode, SourceInput, StructuredError, TableFilter,
+    default_mode_for, extract_md, extract_table_entries, is_url, limit_markdown_output,
+    render_documents, render_json_limited, resolve_input,
 };
 
+const MAX_FAILURE_DIAGNOSTICS: usize = 20;
+
 pub(crate) fn run(cli: Cli) -> Result<String> {
+    validate_max_output_bytes(cli.max_output_bytes)?;
+    validate_max_parse_bytes(cli.max_parse_bytes)?;
     let inputs = expand_inputs(&cli.inputs)?;
-    let options = ExtractOptions {
-        format: cli.format.map(Into::into),
-    };
+    let format = cli.format.map(Into::into);
 
     // Resolve each input independently: one unreadable file or failed fetch
     // must not abort the whole batch. Failures are collected and surfaced as
@@ -18,11 +21,20 @@ pub(crate) fn run(cli: Cli) -> Result<String> {
     // inputs still produce output. We only fail hard (exit 1) when *nothing*
     // succeeds.
     let mut resolved = Vec::with_capacity(inputs.len());
-    let mut failures: Vec<String> = Vec::new();
+    let mut failures = Vec::new();
+    let mut source_bytes = 0usize;
     for input in inputs {
+        let remaining = cli.max_parse_bytes.saturating_sub(source_bytes);
+        let options = ExtractOptions {
+            format,
+            max_parse_bytes: remaining,
+        };
         match resolve_input(SourceInput::from(input.clone()), &options) {
-            Ok(r) => resolved.push(r),
-            Err(e) => failures.push(format!("{input}: {}", e.root_cause())),
+            Ok(r) => {
+                source_bytes += r.source.len();
+                resolved.push(r);
+            }
+            Err(e) => failures.push(InputFailure::from_error(input, &e)),
         }
     }
 
@@ -33,29 +45,54 @@ pub(crate) fn run(cli: Cli) -> Result<String> {
         OutputMode::Md => {
             warn_unused_narrowing(&cli);
             let mut documents = Vec::with_capacity(resolved.len());
+            let mut extracted_bytes = 0usize;
             for r in &resolved {
                 match extract_md(r) {
-                    Ok(document) => documents.push(document),
-                    Err(e) => failures.push(format!("{}: {}", r.label, e.root_cause())),
+                    Ok(document) => {
+                        if let Err(error) = retain_within_parse_budget(
+                            &mut extracted_bytes,
+                            document.markdown.len(),
+                            cli.max_parse_bytes,
+                            "retained extracted documents",
+                        ) {
+                            failures.push(InputFailure::from_error(r.label.clone(), &error));
+                        } else {
+                            documents.push(document);
+                        }
+                    }
+                    Err(e) => failures.push(InputFailure::from_error(r.label.clone(), &e)),
                 }
             }
             if documents.is_empty() {
                 return Err(all_failed_error(&failures));
             }
             report_skipped(&failures);
-            render_documents(&documents, mode)
+            let markdown = render_documents(&documents, mode)?;
+            let limited = limit_markdown_output(markdown, cli.max_output_bytes);
+            report_output_truncation(limited.warning.as_deref());
+            Ok(limited.content)
         }
         OutputMode::Json => {
             let filter = build_filter(&cli)?;
             let mut tables = Vec::new();
             let mut successes = 0usize;
+            let mut extracted_bytes = 0usize;
             for r in &resolved {
                 match extract_table_entries(r, &filter) {
-                    Ok(entries) => {
-                        successes += 1;
-                        tables.extend(entries);
+                    Ok(extracted) => {
+                        if let Err(error) = retain_within_parse_budget(
+                            &mut extracted_bytes,
+                            extracted.serialized_bytes,
+                            cli.max_parse_bytes,
+                            "retained extracted tables",
+                        ) {
+                            failures.push(InputFailure::from_error(r.label.clone(), &error));
+                        } else {
+                            successes += 1;
+                            tables.extend(extracted.entries);
+                        }
                     }
-                    Err(e) => failures.push(format!("{}: {}", r.label, e.root_cause())),
+                    Err(e) => failures.push(InputFailure::from_error(r.label.clone(), &e)),
                 }
             }
             if successes == 0 {
@@ -63,30 +100,124 @@ pub(crate) fn run(cli: Cli) -> Result<String> {
             }
             report_skipped(&failures);
             let mut output = JsonOutput::new(tables);
-            output.warnings = failures;
-            Ok(render_json(&output))
+            output.warnings = failures.iter().map(InputFailure::display).collect();
+            let limited = render_json_limited(&output, cli.max_output_bytes);
+            report_output_truncation(limited.warning.as_deref());
+            Ok(limited.content)
         }
+    }
+}
+
+fn validate_max_output_bytes(max_output_bytes: usize) -> Result<()> {
+    if max_output_bytes < pith::MIN_MAX_OUTPUT_BYTES {
+        return Err(anyhow!(
+            "--max-output-bytes must be at least {}",
+            pith::MIN_MAX_OUTPUT_BYTES
+        ));
+    }
+    Ok(())
+}
+
+fn validate_max_parse_bytes(max_parse_bytes: usize) -> Result<()> {
+    if max_parse_bytes < pith::MIN_MAX_PARSE_BYTES {
+        return Err(anyhow!(
+            "--max-parse-bytes must be at least {}",
+            pith::MIN_MAX_PARSE_BYTES
+        ));
+    }
+    Ok(())
+}
+
+fn retain_within_parse_budget(
+    retained: &mut usize,
+    additional: usize,
+    max_parse_bytes: usize,
+    stage: &str,
+) -> Result<()> {
+    let total = retained.checked_add(additional).unwrap_or(usize::MAX);
+    if total > max_parse_bytes {
+        return Err(StructuredError::parse_memory_limit(max_parse_bytes, stage).into());
+    }
+    *retained = total;
+    Ok(())
+}
+
+fn report_output_truncation(warning: Option<&str>) {
+    if let Some(warning) = warning {
+        eprintln!("warning: {warning}");
+    }
+}
+
+#[derive(Debug)]
+struct InputFailure {
+    source: String,
+    message: String,
+    structured: Option<StructuredError>,
+}
+
+impl InputFailure {
+    fn from_error(source: String, error: &anyhow::Error) -> Self {
+        let structured = error.downcast_ref::<StructuredError>().cloned();
+        let message = structured
+            .as_ref()
+            .map(StructuredError::to_json)
+            .unwrap_or_else(|| error.root_cause().to_string());
+
+        Self {
+            source,
+            message,
+            structured,
+        }
+    }
+
+    fn display(&self) -> String {
+        format!("{}: {}", self.source, self.message)
     }
 }
 
 /// Emit one stderr line per skipped input. In json mode the same messages
 /// also land in the envelope's top-level `warnings[]`; stderr keeps a human
 /// running the command in a terminal informed regardless of output mode.
-fn report_skipped(failures: &[String]) {
-    for failure in failures {
-        eprintln!("warning: skipped {failure}");
+fn report_skipped(failures: &[InputFailure]) {
+    for failure in failures.iter().take(MAX_FAILURE_DIAGNOSTICS) {
+        eprintln!("warning: skipped {}", failure.display());
+    }
+    if failures.len() > MAX_FAILURE_DIAGNOSTICS {
+        eprintln!(
+            "warning: {} additional skipped input warnings omitted",
+            failures.len() - MAX_FAILURE_DIAGNOSTICS
+        );
     }
 }
 
 /// Error returned when every input failed (exit 1). A lone failure is
 /// surfaced verbatim; multiple are aggregated into one message.
-fn all_failed_error(failures: &[String]) -> anyhow::Error {
+fn all_failed_error(failures: &[InputFailure]) -> anyhow::Error {
     match failures {
-        [only] => anyhow!("{only}"),
+        [
+            InputFailure {
+                structured: Some(error),
+                ..
+            },
+        ] => anyhow::Error::new(error.clone()),
+        [only] => anyhow!(only.display()),
         _ => anyhow!(
-            "all {} inputs failed:\n  - {}",
+            "all {} inputs failed:\n  - {}{}",
             failures.len(),
-            failures.join("\n  - ")
+            failures
+                .iter()
+                .take(MAX_FAILURE_DIAGNOSTICS)
+                .map(InputFailure::display)
+                .collect::<Vec<_>>()
+                .join("\n  - "),
+            if failures.len() > MAX_FAILURE_DIAGNOSTICS {
+                format!(
+                    "\n  - ... {} additional failures omitted",
+                    failures.len() - MAX_FAILURE_DIAGNOSTICS
+                )
+            } else {
+                String::new()
+            }
         ),
     }
 }
@@ -265,5 +396,31 @@ mod tests {
         assert!(parse_row_range("a:b").is_err());
         assert!(parse_row_range("104:5").is_err());
         assert!(parse_row_range("0:10").is_err());
+    }
+
+    #[test]
+    fn all_failed_error_caps_diagnostics() {
+        let failures = (0..25)
+            .map(|index| InputFailure {
+                source: format!("input-{index}"),
+                message: "failed".to_string(),
+                structured: None,
+            })
+            .collect::<Vec<_>>();
+
+        let message = all_failed_error(&failures).to_string();
+        assert!(message.contains("all 25 inputs failed"));
+        assert!(message.contains("input-19"));
+        assert!(!message.contains("input-20"));
+        assert!(message.contains("5 additional failures omitted"));
+    }
+
+    #[test]
+    fn retained_results_share_parse_budget() {
+        let mut retained = 600;
+        let error = retain_within_parse_budget(&mut retained, 500, 1024, "test").unwrap_err();
+
+        assert_eq!(retained, 600);
+        assert!(error.downcast_ref::<StructuredError>().is_some());
     }
 }

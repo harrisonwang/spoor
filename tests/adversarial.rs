@@ -42,14 +42,14 @@ fn broken_json_ipynb() {
 #[test]
 fn compression_bomb_rejected_when_capped() {
     // Without limits, this would decompress to ~5 MB of 'A's.
-    // We don't have a `--max-entry-bytes` knob in the test harness, but
-    // we can verify the extractor at least *completes* without exploding.
-    // A proper implementation would expose a configurable cap.
+    // This fixture verifies the extractor never panics; dedicated limits and
+    // CLI tests cover ZIP total size and configurable parse-budget failures.
     let path = "tests/fixtures/adversarial/05_compression_bomb.docx";
     let result = pith::resolve_input(
         path,
         &pith::ExtractOptions {
             format: Some(Format::Docx),
+            ..pith::ExtractOptions::default()
         },
     )
     .and_then(|resolved| pith::extract_md(&resolved));
