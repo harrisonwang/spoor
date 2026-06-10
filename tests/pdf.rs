@@ -38,8 +38,9 @@ fn image_only_pdf_returns_structured_error() {
         value,
         json!({
             "is_error": true,
-            "reason": "image-only PDF",
-            "hint": "This PDF has no text layer. OCR is required, but pith does not perform OCR.",
+            "code": "image_only_pdf",
+            "reason": "纯图片 PDF（无文本层）",
+            "hint": "该 PDF 没有文本层，需要 OCR，但 pith 不执行 OCR。",
             "recoverable": true
         })
     );

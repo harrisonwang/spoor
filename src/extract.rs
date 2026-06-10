@@ -76,8 +76,15 @@ pub fn resolve_input(
 
     let format = match options.format {
         Some(format) => format,
-        None => format::detect(&source)
-            .with_context(|| format!("could not detect format for: {label}"))?,
+        // Preserve a structured `unsupported_format` error so the agent can
+        // branch on `code`; only wrap unstructured detection failures.
+        None => match format::detect(&source) {
+            Ok(format) => format,
+            Err(error) if error.downcast_ref::<StructuredError>().is_some() => return Err(error),
+            Err(error) => {
+                return Err(error.context(format!("could not detect format for: {label}")));
+            }
+        },
     };
 
     Ok(ResolvedInput {

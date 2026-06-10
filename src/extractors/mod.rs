@@ -44,7 +44,7 @@ pub fn extract_table_entries(
         Format::Csv => csv::extract_table_entries(source, source_label, filter, max_parse_bytes),
         Format::Xlsx => xlsx::extract_table_entries(source, source_label, filter, max_parse_bytes),
         _ => Err(anyhow!(
-            "--mode json currently supports csv and xlsx only; got {format}; use --mode md for Markdown output"
+            "--mode json 目前仅支持 csv 和 xlsx；当前格式为 {format}；请用 --mode md 获取 Markdown 输出"
         )),
     }
 }

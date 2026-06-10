@@ -118,11 +118,36 @@ fn image_only_pdf_emits_machine_readable_error() {
     let value: serde_json::Value =
         serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
     assert_eq!(value["is_error"], true);
-    assert_eq!(value["reason"], "image-only PDF");
+    assert_eq!(value["code"], "image_only_pdf");
+    assert_eq!(value["reason"], "纯图片 PDF（无文本层）");
     assert_eq!(
         value["hint"],
-        "This PDF has no text layer. OCR is required, but pith does not perform OCR."
+        "该 PDF 没有文本层，需要 OCR，但 pith 不执行 OCR。"
     );
+    assert_eq!(value["recoverable"], true);
+}
+
+#[test]
+fn unsupported_format_emits_machine_readable_error() {
+    let dir = TestDir::new("unsupported_format_emits_machine_readable_error");
+    let source = dir.path().join("mystery.bin");
+    // Unknown extension, no magic bytes, and a NUL byte so it isn't sniffed as
+    // text: detection must fail with a structured `unsupported_format` whose
+    // `code` an agent can branch on without parsing the prose message.
+    std::fs::write(&source, [0x00u8, 0x01, 0x02, 0xff, 0xfe, 0x00, 0x10]).unwrap();
+
+    let output = pith_bin()
+        .arg(source.to_string_lossy().as_ref())
+        .output()
+        .expect("run pith");
+
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+
+    let value: serde_json::Value =
+        serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
+    assert_eq!(value["is_error"], true);
+    assert_eq!(value["code"], "unsupported_format");
     assert_eq!(value["recoverable"], true);
 }
 
@@ -150,7 +175,7 @@ fn partial_failure_still_outputs_successes_in_md() {
     let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
     assert!(stdout.contains("Hello world"));
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("warning: skipped"));
+    assert!(stderr.contains("warning: 已跳过"));
     assert!(stderr.contains("does_not_exist.txt"));
 }
 
@@ -195,7 +220,7 @@ fn all_inputs_failing_exits_nonzero() {
     );
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
     assert!(stderr.contains("error:"));
-    assert!(stderr.contains("all 2 inputs failed"));
+    assert!(stderr.contains("全部 2 个输入均失败"));
     assert!(stderr.contains("missing_a.txt"));
     assert!(stderr.contains("missing_b.txt"));
 }
@@ -222,10 +247,10 @@ fn markdown_total_output_limit_is_global_and_visible() {
     assert!(output.stdout.len() <= 1024);
     let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
     assert!(stdout.contains("> [!WARNING]"));
-    assert!(stdout.contains("Content is incomplete"));
+    assert!(stdout.contains("内容不完整"));
 
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("warning: pith output truncated"));
+    assert!(stderr.contains("warning: pith 输出"));
     assert!(stderr.contains("--max-output-bytes"));
 }
 
@@ -240,7 +265,7 @@ fn markdown_uses_default_total_output_limit() {
     assert!(output.status.success());
     assert!(output.stdout.len() <= pith::DEFAULT_MAX_OUTPUT_BYTES);
     let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
-    assert!(stdout.contains("Content is incomplete"));
+    assert!(stdout.contains("内容不完整"));
 }
 
 #[test]
@@ -253,7 +278,7 @@ fn max_output_bytes_rejects_too_small_budget() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("--max-output-bytes must be at least 1024"));
+    assert!(stderr.contains("--max-output-bytes 不能小于 1024"));
 }
 
 #[test]
@@ -270,7 +295,7 @@ fn local_file_over_parse_budget_emits_structured_error() {
     assert!(!output.status.success());
     let value: serde_json::Value =
         serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
-    assert_eq!(value["reason"], "parse memory limit exceeded");
+    assert_eq!(value["reason"], "超出解析预算");
     assert!(
         value["hint"]
             .as_str()
@@ -303,7 +328,7 @@ fn multiple_inputs_share_parse_budget() {
     assert!(stdout.contains(&"a".repeat(100)));
     assert!(!stdout.contains(&"b".repeat(100)));
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("parse memory limit exceeded"));
+    assert!(stderr.contains("超出解析预算"));
 }
 
 #[test]
@@ -328,7 +353,7 @@ fn extracted_text_expansion_respects_parse_budget() {
     assert!(!output.status.success());
     let value: serde_json::Value =
         serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
-    assert_eq!(value["reason"], "parse memory limit exceeded");
+    assert_eq!(value["reason"], "超出解析预算");
     assert!(
         value["hint"]
             .as_str()
@@ -347,7 +372,7 @@ fn max_parse_bytes_rejects_too_small_budget() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("--max-parse-bytes must be at least 1024"));
+    assert!(stderr.contains("--max-parse-bytes 不能小于 1024"));
 }
 
 fn run_with_stdin(args: &[&str], input: &[u8]) -> std::process::Output {
@@ -389,7 +414,7 @@ fn stdin_over_parse_budget_emits_structured_error() {
     assert!(!output.status.success());
     let value: serde_json::Value =
         serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
-    assert_eq!(value["reason"], "parse memory limit exceeded");
+    assert_eq!(value["reason"], "超出解析预算");
 }
 
 #[test]

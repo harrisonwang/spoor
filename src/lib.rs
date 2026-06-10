@@ -10,9 +10,7 @@ mod output;
 mod render;
 mod source;
 
-pub use error::{
-    IMAGE_ONLY_PDF_HINT, IMAGE_ONLY_PDF_REASON, PARSE_MEMORY_LIMIT_REASON, StructuredError,
-};
+pub use error::{ErrorCode, StructuredError};
 pub use extract::{
     ExtractOptions, ExtractedDocument, ExtractedTables, ResolvedInput, TableFilter, extract_md,
     extract_table_entries, resolve_input,

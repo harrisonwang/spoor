@@ -6,7 +6,7 @@ pub const TABLE_SCHEMA_VERSION: &str = "pith-table-json-v2";
 /// Self-describing usage hint for consumers. Mentions every narrowing flag
 /// so an LLM seeing the JSON knows how to compose the next call without
 /// reading `--help`.
-pub const TABLE_USAGE: &str = "Narrow output with: --sheet <name>, --rows <first:last> (Excel row numbers, inclusive), --columns <a,b,c>, --limit <n>, --offset <n>. Default preview = first 100 data rows per table. --rows conflicts with --limit/--offset.";
+pub const TABLE_USAGE: &str = "收窄输出：--sheet <name>、--rows <first:last>（Excel 行号，含两端）、--columns <a,b,c>、--limit <n>、--offset <n>。默认预览 = 每个 table 前 100 条数据行。--rows 与 --limit/--offset 互斥。";
 
 /// Top-level JSON output. Wraps all tables across all input files in one
 /// envelope, with self-describing `usage` and `schema_version`.

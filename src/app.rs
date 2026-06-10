@@ -111,7 +111,7 @@ pub(crate) fn run(cli: Cli) -> Result<String> {
 fn validate_max_output_bytes(max_output_bytes: usize) -> Result<()> {
     if max_output_bytes < pith::MIN_MAX_OUTPUT_BYTES {
         return Err(anyhow!(
-            "--max-output-bytes must be at least {}",
+            "--max-output-bytes 不能小于 {}",
             pith::MIN_MAX_OUTPUT_BYTES
         ));
     }
@@ -121,7 +121,7 @@ fn validate_max_output_bytes(max_output_bytes: usize) -> Result<()> {
 fn validate_max_parse_bytes(max_parse_bytes: usize) -> Result<()> {
     if max_parse_bytes < pith::MIN_MAX_PARSE_BYTES {
         return Err(anyhow!(
-            "--max-parse-bytes must be at least {}",
+            "--max-parse-bytes 不能小于 {}",
             pith::MIN_MAX_PARSE_BYTES
         ));
     }
@@ -180,11 +180,11 @@ impl InputFailure {
 /// running the command in a terminal informed regardless of output mode.
 fn report_skipped(failures: &[InputFailure]) {
     for failure in failures.iter().take(MAX_FAILURE_DIAGNOSTICS) {
-        eprintln!("warning: skipped {}", failure.display());
+        eprintln!("warning: 已跳过 {}", failure.display());
     }
     if failures.len() > MAX_FAILURE_DIAGNOSTICS {
         eprintln!(
-            "warning: {} additional skipped input warnings omitted",
+            "warning: 另有 {} 条被跳过输入的警告未显示",
             failures.len() - MAX_FAILURE_DIAGNOSTICS
         );
     }
@@ -202,7 +202,7 @@ fn all_failed_error(failures: &[InputFailure]) -> anyhow::Error {
         ] => anyhow::Error::new(error.clone()),
         [only] => anyhow!(only.display()),
         _ => anyhow!(
-            "all {} inputs failed:\n  - {}{}",
+            "全部 {} 个输入均失败：\n  - {}{}",
             failures.len(),
             failures
                 .iter()
@@ -212,7 +212,7 @@ fn all_failed_error(failures: &[InputFailure]) -> anyhow::Error {
                 .join("\n  - "),
             if failures.len() > MAX_FAILURE_DIAGNOSTICS {
                 format!(
-                    "\n  - ... {} additional failures omitted",
+                    "\n  - …… 另有 {} 个失败未显示",
                     failures.len() - MAX_FAILURE_DIAGNOSTICS
                 )
             } else {
@@ -265,9 +265,7 @@ fn warn_unused_narrowing(cli: &Cli) {
         || cli.limit.is_some()
         || cli.offset.is_some();
     if used {
-        eprintln!(
-            "warning: --sheet/--rows/--columns/--limit/--offset are ignored in markdown mode"
-        );
+        eprintln!("warning: Markdown 模式下会忽略 --sheet/--rows/--columns/--limit/--offset");
     }
 }
 
@@ -409,10 +407,10 @@ mod tests {
             .collect::<Vec<_>>();
 
         let message = all_failed_error(&failures).to_string();
-        assert!(message.contains("all 25 inputs failed"));
+        assert!(message.contains("全部 25 个输入均失败"));
         assert!(message.contains("input-19"));
         assert!(!message.contains("input-20"));
-        assert!(message.contains("5 additional failures omitted"));
+        assert!(message.contains("另有 5 个失败未显示"));
     }
 
     #[test]

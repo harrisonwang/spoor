@@ -39,9 +39,7 @@ pub fn default_mode_for(formats: &[Format]) -> OutputMode {
 pub fn render_documents(documents: &[ExtractedDocument], mode: OutputMode) -> Result<String> {
     match mode {
         OutputMode::Md => Ok(markdown::render(documents)),
-        OutputMode::Json => Err(anyhow!(
-            "--mode json uses table-native extraction and currently supports csv/xlsx only"
-        )),
+        OutputMode::Json => Err(anyhow!("--mode json 使用表格原生抽取，目前仅支持 csv/xlsx")),
     }
 }
 
@@ -106,7 +104,7 @@ pub fn render_json_limited(output: &JsonOutput, max_output_bytes: usize) -> Limi
         let Some(table) = limited.tables.last_mut() else {
             // The minimum CLI limit is large enough for this fallback envelope.
             limited.usage =
-                "Output truncated. Narrow the input or raise --max-output-bytes.".to_string();
+                "输出已截断。请缩小输入范围，或用 --max-output-bytes 调高上限。".to_string();
             limited.warnings = vec![warning.clone()];
             break render_json(&limited);
         };
@@ -120,7 +118,7 @@ pub fn render_json_limited(output: &JsonOutput, max_output_bytes: usize) -> Limi
         table.rows.truncate(keep);
         table.truncated = true;
         let table_warning = format!(
-            "rows omitted to satisfy total output limit of {max_output_bytes} bytes; row_range describes the selection before total-output truncation"
+            "为满足 {max_output_bytes} 字节的总输出上限，部分行已省略；row_range 描述的是总输出截断前的选择范围"
         );
         if !table.warnings.contains(&table_warning) {
             table.warnings.push(table_warning);
@@ -136,7 +134,7 @@ pub fn render_json_limited(output: &JsonOutput, max_output_bytes: usize) -> Limi
 
 fn output_limit_warning(max_output_bytes: usize) -> String {
     format!(
-        "pith output truncated at the total limit of {max_output_bytes} bytes. Content is incomplete; narrow the input or rerun with --max-output-bytes <n>."
+        "pith 输出在 {max_output_bytes} 字节的总上限处被截断。内容不完整；请缩小输入范围，或用 --max-output-bytes <n> 调高上限。"
     )
 }
 
@@ -199,7 +197,7 @@ mod tests {
         assert!(limited.truncated);
         assert!(limited.content.len() <= 1024);
         assert!(limited.content.contains("> [!WARNING]"));
-        assert!(limited.content.contains("Content is incomplete"));
+        assert!(limited.content.contains("内容不完整"));
     }
 
     #[test]

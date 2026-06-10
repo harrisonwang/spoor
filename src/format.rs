@@ -1,5 +1,6 @@
+use crate::error::StructuredError;
 use crate::source::Source;
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use std::fmt;
 
 /// Internal format enum (includes Url).
@@ -104,9 +105,7 @@ pub fn detect(source: &Source) -> Result<Format> {
         return Ok(Format::PlainText);
     }
 
-    Err(anyhow!(
-        "unsupported or unknown format (use --format to override)"
-    ))
+    Err(StructuredError::unsupported_format().into())
 }
 
 fn detect_by_magic(bytes: &[u8]) -> Option<Format> {

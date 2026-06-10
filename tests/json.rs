@@ -231,7 +231,7 @@ fn prose_format_with_explicit_json_errors() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("csv and xlsx"),
+        stderr.contains("csv 和 xlsx"),
         "stderr should mention csv/xlsx-only json support; got: {stderr}"
     );
 }
@@ -495,7 +495,7 @@ fn total_output_limit_keeps_json_valid_and_marks_truncation() {
     );
 
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("warning: pith output truncated"));
+    assert!(stderr.contains("warning: pith 输出"));
 }
 
 #[test]
