@@ -53,19 +53,31 @@ fn extract_pages_quietly(bytes: &[u8]) -> Result<Vec<String>> {
     // fails for any reason, fall back to extracting with the noise rather than
     // failing the whole command.
     let _gag = gag::Gag::stdout().ok();
-    pdf_extract::extract_text_from_mem_by_pages(bytes)
-        .map_err(|e| anyhow!("pdf-extract failed: {e}"))
+    pdf_extract::extract_text_from_mem_by_pages(bytes).map_err(map_pdf_error)
 }
 
 #[cfg(not(unix))]
 fn extract_pages_quietly(bytes: &[u8]) -> Result<Vec<String>> {
-    pdf_extract::extract_text_from_mem_by_pages(bytes)
-        .map_err(|e| anyhow!("pdf-extract failed: {e}"))
+    pdf_extract::extract_text_from_mem_by_pages(bytes).map_err(map_pdf_error)
+}
+
+/// A password-protected PDF is a hard boundary like an image-only one: no
+/// retry or flag can succeed, so it gets a structured, branchable error
+/// instead of the library's misleading "password is incorrect" text (lopdf
+/// probes with an empty password the user never supplied).
+fn map_pdf_error(error: pdf_extract::OutputError) -> anyhow::Error {
+    match error {
+        pdf_extract::OutputError::PdfError(pdf_extract::Error::Decryption(_)) => {
+            StructuredError::encrypted_pdf().into()
+        }
+        error => anyhow!("pdf-extract failed: {error}"),
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::render_pages;
+    use super::{map_pdf_error, render_pages};
+    use crate::error::{ErrorCode, StructuredError};
 
     #[test]
     fn page_boundaries_preserve_blank_pages() {
@@ -75,5 +87,28 @@ mod tests {
             render_pages(&pages),
             "## Page 1\n\nfirst\n\n## Page 2\n\n\n\n## Page 3\n\nthird"
         );
+    }
+
+    #[test]
+    fn decryption_failure_maps_to_encrypted_pdf() {
+        let error = map_pdf_error(pdf_extract::OutputError::PdfError(
+            pdf_extract::Error::Decryption(
+                pdf_extract::encryption::DecryptionError::IncorrectPassword,
+            ),
+        ));
+
+        let structured = error
+            .downcast_ref::<StructuredError>()
+            .expect("structured error");
+        assert_eq!(structured.code, ErrorCode::EncryptedPdf);
+        assert!(!structured.recoverable);
+    }
+
+    #[test]
+    fn other_pdf_errors_stay_unstructured() {
+        let error = map_pdf_error(pdf_extract::OutputError::FormatError(std::fmt::Error));
+
+        assert!(error.downcast_ref::<StructuredError>().is_none());
+        assert!(error.to_string().contains("pdf-extract failed"));
     }
 }

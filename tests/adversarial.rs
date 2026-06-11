@@ -9,9 +9,9 @@ use pith::Format;
 #[test]
 fn empty_file_treated_as_docx() {
     let err = extract_fixture_err("adversarial/01_empty.docx", Format::Docx);
-    // Should mention zip / archive / EOCD or similar
+    // An unreadable archive is a structured, branchable failure.
     assert!(
-        err.contains("zip") || err.contains("archive") || err.contains("empty"),
+        err.contains("invalid_container"),
         "unhelpful error: {}",
         err
     );
@@ -21,7 +21,7 @@ fn empty_file_treated_as_docx() {
 fn non_zip_data_treated_as_docx() {
     let err = extract_fixture_err("adversarial/02_not_zip.docx", Format::Docx);
     assert!(
-        err.contains("zip") || err.contains("archive"),
+        err.contains("invalid_container"),
         "unhelpful error: {}",
         err
     );

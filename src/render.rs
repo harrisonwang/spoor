@@ -155,7 +155,7 @@ pub mod markdown {
         let mut out = String::new();
 
         if let [document] = documents {
-            push_markdown_body(&mut out, &document.markdown);
+            push_markdown_body(&mut out, document);
             return out;
         }
 
@@ -167,15 +167,27 @@ pub mod markdown {
             out.push_str("# Source: ");
             out.push_str(&markdown_heading_text(&document.source));
             out.push_str("\n\n");
-            push_markdown_body(&mut out, &document.markdown);
+            push_markdown_body(&mut out, document);
         }
 
         out
     }
 
-    fn push_markdown_body(out: &mut String, markdown: &str) {
-        out.push_str(markdown);
-        if !markdown.ends_with('\n') {
+    fn push_markdown_body(out: &mut String, document: &ExtractedDocument) {
+        // An empty body must stay distinguishable from a successful read:
+        // otherwise "the file has no text" and "extraction found nothing"
+        // collapse into the same silent empty stdout + exit 0.
+        if document.markdown.trim().is_empty() {
+            out.push_str(&format!(
+                "> [!NOTE]\n> pith：未从 {} 抽取到文本内容（format={}，正文为空）。\n",
+                markdown_heading_text(&document.source),
+                document.format
+            ));
+            return;
+        }
+
+        out.push_str(&document.markdown);
+        if !document.markdown.ends_with('\n') {
             out.push('\n');
         }
     }

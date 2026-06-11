@@ -89,6 +89,14 @@ pub fn detect(source: &Source) -> Result<Format> {
         return Ok(f);
     }
 
+    // OLE/CFB containers (legacy .doc/.xls/.ppt, or password-protected OOXML,
+    // which is re-wrapped in CFB) must be intercepted before the extension
+    // fallback: an encrypted `report.docx` would otherwise be routed to the
+    // ZIP-based extractor and fail with an opaque archive error.
+    if source.bytes().starts_with(CFB_MAGIC) {
+        return Err(StructuredError::legacy_or_encrypted_office().into());
+    }
+
     if let Some(ext) = source.extension() {
         if let Some(f) = detect_by_ext(&ext) {
             return Ok(f);
@@ -107,6 +115,10 @@ pub fn detect(source: &Source) -> Result<Format> {
 
     Err(StructuredError::unsupported_format().into())
 }
+
+/// OLE Compound File Binary magic, shared by legacy Office formats and
+/// password-protected (encrypted) OOXML documents.
+const CFB_MAGIC: &[u8] = &[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
 
 fn detect_by_magic(bytes: &[u8]) -> Option<Format> {
     if bytes.starts_with(b"%PDF-") {

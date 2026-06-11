@@ -68,9 +68,20 @@ pub(crate) fn run(cli: Cli) -> Result<String> {
             }
             report_skipped(&failures);
             let markdown = render_documents(&documents, mode)?;
-            let limited = limit_markdown_output(markdown, cli.max_output_bytes);
+            // Reserve room for the in-band skipped block so the total stays
+            // within --max-output-bytes; appending it after truncation keeps
+            // it from being the first thing the truncation cut eats.
+            let skipped_block = markdown_skipped_block(&failures);
+            let budget = cli
+                .max_output_bytes
+                .saturating_sub(skipped_block.as_deref().map_or(0, str::len));
+            let limited = limit_markdown_output(markdown, budget);
             report_output_truncation(limited.warning.as_deref());
-            Ok(limited.content)
+            let mut content = limited.content;
+            if let Some(block) = skipped_block {
+                content.push_str(&block);
+            }
+            Ok(content)
         }
         OutputMode::Json => {
             let filter = build_filter(&cli)?;
@@ -188,6 +199,34 @@ fn report_skipped(failures: &[InputFailure]) {
             failures.len() - MAX_FAILURE_DIAGNOSTICS
         );
     }
+}
+
+/// In-band counterpart of `report_skipped` for markdown mode. Agents often
+/// read only stdout (e.g. redirected to a file), so a partial-batch failure
+/// must be visible there too — mirroring the JSON envelope's `warnings[]`.
+fn markdown_skipped_block(failures: &[InputFailure]) -> Option<String> {
+    if failures.is_empty() {
+        return None;
+    }
+
+    let mut block = format!(
+        "\n> [!WARNING]\n> pith 已跳过 {} 个无法读取的输入：\n",
+        failures.len()
+    );
+    for failure in failures.iter().take(MAX_FAILURE_DIAGNOSTICS) {
+        block.push_str(&format!(
+            "> - {}\n",
+            failure.display().replace(['\r', '\n'], " ")
+        ));
+    }
+    if failures.len() > MAX_FAILURE_DIAGNOSTICS {
+        block.push_str(&format!(
+            "> - …… 另有 {} 个失败未列出\n",
+            failures.len() - MAX_FAILURE_DIAGNOSTICS
+        ));
+    }
+
+    Some(block)
 }
 
 /// Error returned when every input failed (exit 1). A lone failure is

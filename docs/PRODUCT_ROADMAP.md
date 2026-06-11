@@ -62,7 +62,7 @@ LLM-friendly 表示按 **内容形态** 决定，不按消费者类型：
 |------|----------|----------|---------------|------|
 | PDF 转 Markdown 经常只剩 raw text | 标题、表格、页边界、阅读顺序丢失 | MarkItDown #41 要求保 PDF tables/titles；#206 反馈 extraction is not in markdown | P0 做 `## Page N`、页眉页脚去重、断词修复、基础 page anchor | [MarkItDown #41](https://github.com/microsoft/markitdown/issues/41), [MarkItDown #206](https://github.com/microsoft/markitdown/issues/206) |
 | Python/PyTorch 依赖重 | CI、内网、macOS、无 GPU 环境部署麻烦 | anytomd-rs README 把 Python runtime/dependency hell 当核心卖点；Docling 有 lightweight/CPU-only issue | 保持 Rust 单二进制，不默认引入模型/OCR | [anytomd-rs](https://github.com/developer0hye/anytomd-rs), [Docling #2393](https://github.com/docling-project/docling/issues/2393), [Docling #2481](https://github.com/docling-project/docling/issues/2481) |
-| LLM context 被污染 | 一份长 PDF/Excel 直接塞上下文，token 浪费且模型找不到中间证据 | Lost in the Middle 论文说明长上下文中间信息利用不稳；OpenAI File Search 支持结果返回和 metadata filtering | 做 `pith chunk`、token budget、warnings、source anchors | [Lost in the Middle](https://arxiv.org/abs/2307.03172), [OpenAI File Search](https://developers.openai.com/api/docs/guides/tools-file-search) |
+| LLM context 被污染 | 一份长 PDF/Excel 直接塞上下文，token 浪费且模型找不到中间证据 | Lost in the Middle 论文说明长上下文中间信息利用不稳；OpenAI File Search 支持结果返回和 metadata filtering | 总输出上限 + 截断信号 + 表格收窄 flag + source anchors（`pith chunk` 已否决，见"做与不做"） | [Lost in the Middle](https://arxiv.org/abs/2307.03172), [OpenAI File Search](https://developers.openai.com/api/docs/guides/tools-file-search) |
 | 大表打爆 token | XLSX/CSV 转 GFM table，几千行直接不可用 | pith README 已列“大表策略待补”；Jina Reader 已提供 token budget/chunking 类控制 | 小表 GFM，中表 fenced TSV，超大表摘要 + row/col range | [pith README](../README.md), [Jina Reader](https://github.com/jina-ai/reader) |
 | SaaS 不能处理敏感文件 | 合规、投研、法务、银行内网不能上传 | LlamaParse 是商业平台；Docling 强调 local/air-gapped | pith 明确主打本地、离线、可审计 | [LlamaParse pricing](https://www.llamaindex.ai/pricing), [Docling](https://github.com/docling-project/docling) |
 | ZIP/Office 安全风险 | DOCX/XLSX/PPTX/EPUB 都是 ZIP 容器，可能有 zip bomb | OWASP 文件上传指南明确提 ZIP/XML bombs、parser exploit、解压后大小限制 | 统一 ZIP 防御层：entry cap、ratio cap、total cap | [OWASP File Upload](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html) |
@@ -87,7 +87,7 @@ LLM-friendly 表示按 **内容形态** 决定，不按消费者类型：
 | 人群 | 场景故事 | 他们的痛 | pith 的承诺 | 来源 |
 |------|----------|----------|------------|------|
 | Claude Code / Codex / Cursor 用户 | 工程师收到 38 页 RFP.docx，要让 coding assistant 读取需求并辅助改接口 | 不想装 Docling，不想上传 SaaS，不想手动转格式 | `pith RFP.docx` 输出干净 Markdown；`pith data.xlsx -m json` 输出表格结构 | [Claude Code docs](https://docs.anthropic.com/en/docs/claude-code/overview), [Codex docs](https://developers.openai.com/codex/), [Cursor](https://cursor.com/) |
-| RAG/知识库工程师 | 要把 2,000 份 PDF/DOCX/PPTX 进向量库 | chunk 粗糙、引用不准、噪声多 | 先做好 heading/page-aware Markdown 和 `pith chunk`，不先承诺全格式 JSON | [OpenAI File Search](https://developers.openai.com/api/docs/guides/tools-file-search), [LlamaIndex](https://www.llamaindex.ai/) |
+| RAG/知识库工程师 | 要把 2,000 份 PDF/DOCX/PPTX 进向量库 | chunk 粗糙、引用不准、噪声多 | 先做好 heading/page-aware Markdown（`## Page N` / heading 边界留给下游切块用），不先承诺全格式 JSON | [OpenAI File Search](https://developers.openai.com/api/docs/guides/tools-file-search), [LlamaIndex](https://www.llamaindex.ai/) |
 | 投研/财务分析 | 处理 10-K、财报 PDF、Excel sheet | 大表爆 token，合规禁止上传 | 本地解析，表格降级，page/sheet/row anchors | [SEC EDGAR](https://www.sec.gov/edgar), [LlamaParse pricing](https://www.llamaindex.ai/pricing) |
 | 法务/合规 | 审合同、批注、脚注、修订记录 | 需要证据链，不需要漂亮排版 | DOCX comments/endnotes/tracked changes mode | [Open XML SDK](https://learn.microsoft.com/en-us/office/open-xml/open-xml-sdk), [pith DOCX matrix](test-matrix/docx.md) |
 | SRE/文档 CI | release notes、docs pipeline 自动转换 | Python 依赖慢、CI cache 麻烦 | 静态 CLI，可 pin 版本，输出稳定 | [GitHub Actions](https://docs.github.com/en/actions), [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) |
@@ -114,7 +114,6 @@ LLM-friendly 表示按 **内容形态** 决定，不按消费者类型：
 | 功能 | 解决什么真实问题 | 验收标准 | 来源 |
 |------|------------------|----------|------|
 | stdin/pipe ✅ | shell 一等公民 | `cat file.csv \| pith --format csv -`（`-` 读 stdin，已完成） | [MarkItDown CLI](https://github.com/microsoft/markitdown), [anytomd-rs CLI](https://github.com/developer0hye/anytomd-rs) |
-| `pith chunk`（仅文档型） | RAG/LLM 不能只按固定长度切 | 按 heading/page/slide/chapter 分块；表格型不在此处理 | [OpenAI File Search](https://developers.openai.com/api/docs/guides/tools-file-search), [Lost in the Middle](https://arxiv.org/abs/2307.03172) |
 | EPUB/HTML renderer 统一 | EPUB 正文结构弱 | EPUB chapter 内 heading/list/link/table 正常保留 | [pith EPUB matrix](test-matrix/epub.md), [pith HTML matrix](test-matrix/html.md) |
 
 ### P2 - 优化
@@ -150,6 +149,7 @@ LLM-friendly 表示按 **内容形态** 决定，不按消费者类型：
 | GUI | 不优先 | 目标人群在 CLI、CI、LLM 工具链里 | [MarkItDown CLI](https://github.com/microsoft/markitdown), [anytomd-rs CLI](https://github.com/developer0hye/anytomd-rs) |
 | 格式互转 | 不做 | Pandoc/LibreOffice 地盘，和 pith 核心目标偏离 | [Pandoc](https://pandoc.org/), [LibreOffice](https://www.libreoffice.org/) |
 | MCP server | 不做 | shell + tool wrapper 已经够用；MCP 会增加协议兼容维护面；社区可以做 `pith-mcp` thin wrapper | [Claude Code docs](https://docs.anthropic.com/en/docs/claude-code/overview), [Codex docs](https://developers.openai.com/codex/) |
+| `pith chunk` / 文档分块 | 不做 | 文档是顺序读介质，截断是尾部小概率问题：缩小输入或 `--max-output-bytes` 重跑即可；为它造"清单 + 切片 + 收敛"整套机制是把表格随机访问心智错套到顺序读文档上（2026-06 否决）。页/标题边界已内嵌在 Markdown 输出里，下游要切块自己切 | [pith README](../README.md) |
 | `pith inspect` 子命令 | 不做 | JSON 默认输出（metadata + preview + usage + workbook_sheets）已经覆盖 inspect 的全部价值，加子命令是冗余 | [pith README](../README.md) |
 | 通用 block-oriented JSON | 不做 | 文档型用 Markdown 已经是 LLM-friendly 表示；JSON 化 prose 既贵又破坏顺序读取语义 | [pith README](../README.md) |
 
@@ -180,9 +180,10 @@ LLM-friendly 表示按 **内容形态** 决定，不按消费者类型：
 4. PDF page boundary ✅ 已完成
 5. ZIP 安全层补完
 6. stdin/pipe ✅ 已完成
-7. `pith chunk`（仅文档型）
-8. EPUB/HTML renderer 统一
-9. Markdown 大表降级（niche，仅 `-m md` 路径）
+7. EPUB/HTML renderer 统一
+8. Markdown 大表降级（niche，仅 `-m md` 路径）
+
+（`pith chunk` 原列第 7 位，2026-06 否决，理由见"做与不做"表。）
 
 这套顺序更符合现在的产品定位：
 

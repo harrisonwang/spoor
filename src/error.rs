@@ -6,6 +6,11 @@ const IMAGE_ONLY_PDF_HINT: &str = "该 PDF 没有文本层，需要 OCR，但 pi
 const PARSE_MEMORY_LIMIT_REASON: &str = "超出解析预算";
 const UNSUPPORTED_FORMAT_REASON: &str = "无法识别的格式";
 const UNSUPPORTED_FORMAT_HINT: &str = "无法识别或不支持该输入的格式。请用 --format 显式指定格式。";
+const ENCRYPTED_PDF_REASON: &str = "受密码保护的 PDF";
+const ENCRYPTED_PDF_HINT: &str =
+    "该 PDF 受密码保护，pith 不支持解密。请先解除密码保护，再重新运行。";
+const LEGACY_OR_ENCRYPTED_OFFICE_REASON: &str = "旧版或加密的 Office 文档";
+const LEGACY_OR_ENCRYPTED_OFFICE_HINT: &str = "该文件是 OLE/CFB 容器：可能是受密码保护的 Office 文档，也可能是旧版二进制格式（.doc/.xls/.ppt）。pith 都不支持：加密文件请先解除密码，旧版格式请先另存为 docx/xlsx/pptx。";
 
 /// Stable, machine-readable error code. Serialized as snake_case (e.g.
 /// `image_only_pdf`). Consumers should branch on `code`, **not** on the
@@ -16,6 +21,35 @@ pub enum ErrorCode {
     ImageOnlyPdf,
     ParseBudgetExceeded,
     UnsupportedFormat,
+    EncryptedPdf,
+    LegacyOrEncryptedOffice,
+    InvalidContainer,
+}
+
+impl ErrorCode {
+    /// Every stable code, for doc-sync tests that assert each one is
+    /// documented. Keep in lockstep with the enum (the `as_str` match
+    /// forces a compile error when a variant is added).
+    pub const ALL: [ErrorCode; 6] = [
+        ErrorCode::ImageOnlyPdf,
+        ErrorCode::ParseBudgetExceeded,
+        ErrorCode::UnsupportedFormat,
+        ErrorCode::EncryptedPdf,
+        ErrorCode::LegacyOrEncryptedOffice,
+        ErrorCode::InvalidContainer,
+    ];
+
+    /// The snake_case wire string, identical to the serde serialization.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ErrorCode::ImageOnlyPdf => "image_only_pdf",
+            ErrorCode::ParseBudgetExceeded => "parse_budget_exceeded",
+            ErrorCode::UnsupportedFormat => "unsupported_format",
+            ErrorCode::EncryptedPdf => "encrypted_pdf",
+            ErrorCode::LegacyOrEncryptedOffice => "legacy_or_encrypted_office",
+            ErrorCode::InvalidContainer => "invalid_container",
+        }
+    }
 }
 
 /// A machine-readable extraction failure for agents and other CLI consumers.
@@ -64,6 +98,38 @@ impl StructuredError {
         }
     }
 
+    pub fn encrypted_pdf() -> Self {
+        Self {
+            is_error: true,
+            code: ErrorCode::EncryptedPdf,
+            reason: ENCRYPTED_PDF_REASON.to_string(),
+            hint: ENCRYPTED_PDF_HINT.to_string(),
+            recoverable: false,
+        }
+    }
+
+    pub fn legacy_or_encrypted_office() -> Self {
+        Self {
+            is_error: true,
+            code: ErrorCode::LegacyOrEncryptedOffice,
+            reason: LEGACY_OR_ENCRYPTED_OFFICE_REASON.to_string(),
+            hint: LEGACY_OR_ENCRYPTED_OFFICE_HINT.to_string(),
+            recoverable: false,
+        }
+    }
+
+    pub fn invalid_container(label: &str) -> Self {
+        Self {
+            is_error: true,
+            code: ErrorCode::InvalidContainer,
+            reason: format!("无效的 {label} 容器"),
+            hint: format!(
+                "文件不是有效的 {label} 容器（可能为空、损坏或扩展名与内容不符）。请确认文件完整；若扩展名不可靠，用 --format 指定真实格式。"
+            ),
+            recoverable: true,
+        }
+    }
+
     pub fn to_json(&self) -> String {
         serde_json::to_string(self).expect("serialize structured error")
     }
@@ -76,3 +142,18 @@ impl fmt::Display for StructuredError {
 }
 
 impl std::error::Error for StructuredError {}
+
+#[cfg(test)]
+mod tests {
+    use super::ErrorCode;
+
+    /// `as_str` is what doc-sync tests grep for; it must always equal the
+    /// serde wire format so docs and real output can never disagree.
+    #[test]
+    fn as_str_matches_serde_serialization() {
+        for code in ErrorCode::ALL {
+            let wire = serde_json::to_string(&code).expect("serialize code");
+            assert_eq!(wire, format!("\"{}\"", code.as_str()));
+        }
+    }
+}

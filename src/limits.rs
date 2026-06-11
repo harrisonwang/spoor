@@ -36,8 +36,12 @@ pub(crate) fn open_zip_archive<'a>(
     label: &str,
     max_parse_bytes: usize,
 ) -> Result<ZipReader<'a>> {
+    // An unreadable archive (empty file, truncated download, fake extension)
+    // gets a structured, branchable error. Safety-check failures below keep
+    // their own errors — notably the structured parse-budget one — and must
+    // not be collapsed into `invalid_container`.
     let mut zip = ZipArchive::new(Cursor::new(bytes))
-        .with_context(|| format!("failed to open {label} archive"))?;
+        .map_err(|_| StructuredError::invalid_container(label))?;
     validate_zip_archive(&mut zip, Limits::for_parse_budget(max_parse_bytes))
         .with_context(|| format!("{label} archive failed safety checks"))?;
     Ok(zip)
