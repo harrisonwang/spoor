@@ -33,7 +33,7 @@
 ## 为什么这些场景成立（对应代码现状）
 
 - **防御层已实现**：限制单次解析的数据量、ZIP 三重上限、256 KiB 输出封顶、带稳定错误码的结构化错误，均有测试覆盖。
-- **core 的边界已设计好**：[CORE_PYTHON_ARCHITECTURE.md](CORE_PYTHON_ARCHITECTURE.md) 规定 core 只收 bytes，无网络、无文件、无进程退出。这种纯粹性恰好是 PyO3、napi、WASM 三个绑定的共同基础——一次拆分，三处受益。
+- **core 的边界已设计好**：[架构设计](../design/architecture.md) 规定 core 只收 bytes，无网络、无文件、无进程退出。这种纯粹性恰好是 PyO3、napi、WASM 三个绑定的共同基础——一次拆分，三处受益。
 - **WASM 可行性已验证**：所有解析依赖均可编译到 wasm32 目标（pdf-extract、calamine、zip+miniz、quick-xml、scraper、csv、encoding_rs 均为纯 Rust 实现）。唯一不能进 wasm32 的是网络请求和文件读取，它们本来就只属于 CLI 层。
 
 ## 工程约束
@@ -117,10 +117,10 @@ spoor/
 
 ## 推进顺序
 
-1. **稳定类型化接口**（已起步）：`ErrorCode` / `StructuredError` 已落地；剩余按 [CORE_PYTHON_ARCHITECTURE.md](CORE_PYTHON_ARCHITECTURE.md) 收敛 `ParseRequest` / `ParseResult`。
+1. **稳定类型化接口**（已起步）：`ErrorCode` / `StructuredError` 已落地；剩余按 [架构设计](../design/architecture.md) 收敛 `ParseRequest` / `ParseResult`。
 2. **保持行为不变的代码拆分 + 更名**：解析模块移入 `spoor-core`，CLI 仅调用 core；现有 snapshot 和测试全量通过后再执行更名，更名作为一次独立提交。
 3. **PyO3 MVP**：提供 `parse_bytes` / `parse_path`，复用同一套测试用例，错误字段与 CLI 保持一致。
 4. **napi-rs 与 WASM 入口**：wasm32 编译验证 → 体积实测 → 按需裁剪功能。
 5. **场景 demo 验收**：浏览器拖拽解析、CF Worker 清洗、Tauri 最小示例——每个交付形态以可运行的 demo 收尾。
 
-每一步的验收标准（与 CLI 输出一致、跨入口结果等价、先跑基准测试）沿用 [CORE_PYTHON_ARCHITECTURE.md](CORE_PYTHON_ARCHITECTURE.md)，此处不赘述。
+每一步的验收标准（与 CLI 输出一致、跨入口结果等价、先跑基准测试）沿用 [架构设计](../design/architecture.md)，此处不赘述。
