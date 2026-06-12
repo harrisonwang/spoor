@@ -189,20 +189,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo publish --locked -p spoor-core --token "$CRATES_IO_TOKEN"
+      - name: Publish spoor-core
+        run: cargo publish --locked -p spoor-core --token "$CRATES_IO_TOKEN"
         env:
           CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-      - name: Wait for crates.io index propagation
-        shell: bash
-        run: |
-          for attempt in {1..20}; do
-            if cargo search spoor-core --limit 1 | grep -q '^spoor-core ='; then
-              exit 0
-            fi
-            sleep 15
-          done
-          echo "spoor-core did not appear in crates.io index" >&2
-          exit 1
-      - run: cargo publish --locked -p spoor-cli --token "$CRATES_IO_TOKEN"
+      - name: Wait for sparse index propagation
+        run: sleep 120
+      - name: Publish spoor-cli
+        run: cargo publish --locked -p spoor-cli --token "$CRATES_IO_TOKEN"
         env:
           CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}

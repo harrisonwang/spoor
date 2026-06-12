@@ -12,10 +12,16 @@
 - **内建防御**：限制单次解析的数据量、ZIP 炸弹三重防御（entry/ratio/total cap）、256 KiB 输出封顶
 - **支持格式**：PDF、DOCX、XLSX、PPTX、CSV、EPUB、IPYNB、HTML/URL、Markdown、纯文本
 
-2026-06-11 分发实测：`spoor-core` crate 小于 140 KiB；macOS arm64
-CLI 为 4,905,744 bytes；`pyspoor` abi3 wheel 为 1,379,367 bytes；Node
-addon 为 2,917,408 bytes；`core-formats` WASM 为 1,426,062 bytes raw /
-588,506 bytes gzip，含 PDF 的 `full` 为 2,232,597 / 858,149 bytes。
+包体大小（2026-06-11 实测）：
+
+| 形态 | 大小 |
+|------|------|
+| `spoor-core` crate | < 140 KiB |
+| CLI（macOS arm64 单二进制） | ~4.7 MiB |
+| `pyspoor` abi3 wheel | ~1.3 MiB |
+| Node addon | ~2.8 MiB |
+| `core-formats` WASM | ~1.4 MiB raw / ~575 KiB gzip |
+| `full` WASM（含 PDF） | ~2.1 MiB raw / ~838 KiB gzip |
 
 ## 安装
 
