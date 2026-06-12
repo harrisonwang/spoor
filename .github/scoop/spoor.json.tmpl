@@ -1,0 +1,27 @@
+{
+  "version": "{{VERSION}}",
+  "description": "Convert files and URLs to LLM-friendly markdown",
+  "homepage": "https://github.com/{{REPO}}",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "{{BASE_URL}}/{{TOOL}}_{{TAG}}_x86_64-pc-windows-msvc.zip",
+      "hash": "{{SHA256:{{TOOL}}_{{TAG}}_x86_64-pc-windows-msvc.zip}}",
+      "extract_dir": "spoor"
+    }
+  },
+  "bin": "spoor.exe",
+  "checkver": {
+    "github": "https://github.com/{{REPO}}"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/{{REPO}}/releases/download/v$version/{{TOOL}}_v$version_x86_64-pc-windows-msvc.zip"
+      }
+    },
+    "hash": {
+      "url": "https://github.com/{{REPO}}/releases/download/v$version/SHA256SUMS.txt"
+    }
+  }
+}

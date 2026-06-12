@@ -19,3 +19,6 @@ Adversarial 测试的目标是坏输入必须清楚失败或安全完成：不 p
 
 - `limits::tests::zip_total_uncompressed_size_respects_parse_budget`：ZIP 总声明解压量受解析预算约束。
 - CLI parse-budget tests：本地文件、stdin、多输入累计、提取文本膨胀超限时返回结构化错误。
+- Python、Node 与 WASM smoke：同一份压缩炸弹 fixture 在 1 MiB 预算下返回
+  `parse_budget_exceeded`；坏 DOCX 返回 `invalid_container`；CFB/OLE magic
+  返回 `legacy_or_encrypted_office`。

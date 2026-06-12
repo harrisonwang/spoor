@@ -1,0 +1,26 @@
+{
+  "name": "@harrisonwang/spoor-cli",
+  "version": "0.0.0",
+  "description": "Convert files and URLs to LLM-friendly markdown",
+  "homepage": "https://github.com/harrisonwang/spoor",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harrisonwang/spoor.git"
+  },
+  "license": "MIT",
+  "bin": {
+    "spoor": "bin/spoor.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "optionalDependencies": {
+    "@harrisonwang/spoor-cli-darwin-arm64": "0.0.0",
+    "@harrisonwang/spoor-cli-darwin-x64": "0.0.0",
+    "@harrisonwang/spoor-cli-linux-x64": "0.0.0",
+    "@harrisonwang/spoor-cli-win32-x64": "0.0.0"
+  }
+}

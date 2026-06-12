@@ -1,0 +1,9 @@
+[package]
+name = "spoor-tauri-core-example"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+spoor-core = { path = "../../crates/spoor-core" }
+serde_json = "1"

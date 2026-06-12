@@ -1,58 +1,32 @@
-[package]
-name = "pith"
-version = "0.7.1"
+[workspace]
+resolver = "2"
+members = [
+    "crates/spoor-core",
+    "crates/spoor-cli",
+    "crates/spoor-wasm",
+    "bindings/python",
+    "bindings/node",
+    "examples/tauri-core",
+]
+default-members = [
+    "crates/spoor-core",
+    "crates/spoor-cli",
+]
+
+[workspace.package]
+version = "0.8.0"
 edition = "2024"
 rust-version = "1.85"
-description = "Convert files and URLs to LLM-friendly markdown"
 license = "MIT"
-repository = "https://github.com/harrisonwang/pith"
-homepage = "https://github.com/harrisonwang/pith"
-readme = "README.md"
-keywords = ["markdown", "documents", "llm", "cli", "extract"]
-categories = ["command-line-utilities", "text-processing"]
-default-run = "pith"
+repository = "https://github.com/harrisonwang/spoor"
+homepage = "https://github.com/harrisonwang/spoor"
+authors = ["harrisonwang <harrisonwang.dev@gmail.com>"]
 
-[[bin]]
-name = "pith"
-path = "src/main.rs"
-
-[dependencies]
-# CLI + errors
-clap = { version = "4.5", features = ["derive"] }
+[workspace.dependencies]
 anyhow = "1"
-glob = "0.3"
-
-# Encoding detection
-encoding_rs = "0.8"
-chardetng = "0.1"
-
-# Container + XML
-zip = { version = "2.2", default-features = false, features = ["deflate"] }
-quick-xml = "0.36"
-
-# Format-specific
-calamine = "0.26"
-pdf-extract = "0.7"
-csv = "1.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-scraper = "0.20"
-
-# HTTP
-ureq = { version = "2.10", features = ["tls"] }
-url = "2"
-
-# Silence pdf-extract's stdout glyph warnings (Unix-only crate).
-[target.'cfg(unix)'.dependencies]
-gag = "1"
-
-[dev-dependencies]
-# Snapshot testing — run `cargo insta review` to accept changes.
-insta = { version = "1.40", features = ["yaml"] }
-
-[lib]
-name = "pith"
-path = "src/lib.rs"
+spoor-core = { path = "crates/spoor-core", version = "0.8.0" }
 
 [profile.release]
 opt-level = 3

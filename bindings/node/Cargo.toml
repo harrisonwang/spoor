@@ -1,0 +1,22 @@
+[package]
+name = "spoor-node"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Node.js native bindings for spoor-core"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+spoor-core.workspace = true
+serde_json.workspace = true
+napi = { version = "3", features = ["serde-json"] }
+napi-derive = "3"
+
+[build-dependencies]
+napi-build = "2"

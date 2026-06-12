@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>spoor / local document lab</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <span class="index">SP—08 / WASM</span>
+        <h1>文档留下。<br /><em>文本出来。</em></h1>
+        <p>浏览器内解析，不上传，不等待服务器。</p>
+      </header>
+
+      <section id="dropzone" class="dropzone" tabindex="0">
+        <div class="target">＋</div>
+        <div>
+          <strong>拖入本地文档</strong>
+          <span>DOCX · XLSX · CSV · HTML · MARKDOWN</span>
+        </div>
+        <input id="picker" type="file" />
+      </section>
+
+      <section class="status-line">
+        <span id="status">WASM ENGINE / STANDBY</span>
+        <span id="stats">0 bytes</span>
+      </section>
+
+      <pre id="output">结果会显示在这里。</pre>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

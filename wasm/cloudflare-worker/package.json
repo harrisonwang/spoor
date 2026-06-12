@@ -1,0 +1,15 @@
+{
+  "name": "spoor-cloudflare-worker-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@harrisonwang/spoor-wasm": "file:../../crates/spoor-wasm/pkg"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

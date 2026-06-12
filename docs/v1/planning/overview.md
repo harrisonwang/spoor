@@ -1,6 +1,6 @@
 # spoor：定位与工程规划
 
-> 本计划是 pith 的下一阶段：从单一 CLI 演进为**一个 Rust 文档引擎，多种交付形态**，并更名为 `spoor`。
+> 本计划是原 CLI 项目的下一阶段：从单一 CLI 演进为**一个 Rust 文档引擎，多种交付形态**，并更名为 `spoor`。
 > 现有定位（离线、确定性、LLM-friendly，不做 OCR/云服务/MCP）全部保留，只是把引擎的运行方式从"必须是独立进程"扩展为"可嵌入任意宿主"。
 
 ## 一句话定位
@@ -13,7 +13,7 @@
 | --- | --- | --- |
 | **面向 LLM** | 输出形态：文档型 → Markdown，表格型 → schema + preview 的 JSON，token 经济 | ✅ 已有 |
 | **面向 Agent** | 调用方式：状态自描述（usage / truncated / warnings），失败时按稳定错误码分支 | ✅ 已有 |
-| **面向嵌入** | 运行位置：输入 bytes、输出结构化结果；无隐式 I/O、无全局状态、资源有上限，恶意输入不会危及宿主 | ⬜ 性质已具备，形态待交付 |
+| **面向嵌入** | 运行位置：输入 bytes、输出结构化结果；无隐式 I/O、无全局状态、资源有上限，可预期失败不穿透公开边界 | ✅ 已交付 |
 
 面向嵌入是本阶段的核心目标。它不引入新功能，而是将已有的工程特性——限制单次解析的数据量、ZIP 炸弹防御、每次调用无状态、结构化错误——从 CLI 进程的壳里释放出来，让浏览器、Edge Runtime、桌面应用、多租户沙箱都能直接内嵌这套引擎。
 
@@ -38,7 +38,7 @@
 
 ## 工程约束
 
-- **WASM 体积**：PDF / Office 解析链可能把包体推到数 MB，而部分 Edge 平台有体积上限。按格式做编译特性开关（如浏览器版全功能、Worker 版裁剪），发布前实测体积。
+- **WASM 体积**：已按格式提供 `core-formats` / `full` 编译特性。2026-06-11 实测发布包 gzip 后分别为 588,506 bytes 与 858,149 bytes，均低于目标。
 - **WASM 包只发 npm**：`spoor-wasm` 是 wasm-bindgen 入口，没有 Rust 消费者，不占 crates.io。
 - **命名占位已核查（2026-06-11）**：crates.io 的 `spoor` / `spoor-core` / `spoor-cli` 可用；PyPI 的 `spoor` 已被占用，改用 `pyspoor`；npm 的 `spoor` 已被占用，改用 `@harrisonwang/spoor`。发布前需再次确认。
 - **不为假设场景预先优化**：每个交付形态以可运行的 demo 作为交付标准，不做"理论上能跑"。
@@ -100,7 +100,8 @@ spoor/
 │
 └── examples/
     ├── serverless-lambda/        # AWS Lambda（spoor-cli 二进制或 WASM）
-    └── chat-with-local-file/     # 纯前端离线"本地文件对话"
+    ├── chat-with-local-file/     # 纯前端离线"本地文件对话"
+    └── tauri-core/               # Tauri command 形态的 Rust core 集成
 ```
 
 ## 平台命名汇总
@@ -117,10 +118,10 @@ spoor/
 
 ## 推进顺序
 
-1. **稳定类型化接口**（已起步）：`ErrorCode` / `StructuredError` 已落地；剩余按 [架构设计](../design/architecture.md) 收敛 `ParseRequest` / `ParseResult`。
-2. **保持行为不变的代码拆分 + 更名**：解析模块移入 `spoor-core`，CLI 仅调用 core；现有 snapshot 和测试全量通过后再执行更名，更名作为一次独立提交。
-3. **PyO3 MVP**：提供 `parse_bytes` / `parse_path`，复用同一套测试用例，错误字段与 CLI 保持一致。
-4. **napi-rs 与 WASM 入口**：wasm32 编译验证 → 体积实测 → 按需裁剪功能。
-5. **场景 demo 验收**：浏览器拖拽解析、CF Worker 清洗、Tauri 最小示例——每个交付形态以可运行的 demo 收尾。
+1. ✅ **稳定类型化接口**：`ParseRequest` / `ParseResult` / `SpoorError` / `ParseLimits` 已落地。
+2. ✅ **行为等价拆分 + 更名**：解析模块位于 `spoor-core`，CLI 只负责 adapter；原测试与快照全量通过。
+3. ✅ **PyO3 MVP**：`pyspoor` 提供 `parse_bytes` / `parse_path` / `detect_format` 与 dataclass/exception 封装。
+4. ✅ **napi-rs 与 WASM 入口**：两套 WASM 特性均通过 wasm32 编译并完成体积实测；Node 使用平台子包发布模式。
+5. ✅ **场景 demo 验收**：浏览器拖拽、CF Worker、Tauri、Lambda 与本地文件检索示例均已落地。
 
 每一步的验收标准（与 CLI 输出一致、跨入口结果等价、先跑基准测试）沿用 [架构设计](../design/architecture.md)，此处不赘述。

@@ -1,3 +1,15 @@
 target/
 .DS_Store
 tmp/
+**/node_modules/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+bindings/python/target/
+bindings/python/spoor/*.so
+bindings/python/spoor/*.pyd
+bindings/python/spoor/*.dylib
+bindings/node/*.node
+bindings/node/npm/
+crates/spoor-wasm/pkg*/
+dist/

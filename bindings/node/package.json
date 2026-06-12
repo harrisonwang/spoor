@@ -1,0 +1,31 @@
+{
+  "name": "@harrisonwang/spoor",
+  "version": "0.8.0",
+  "description": "Native Node.js bindings for the spoor document engine",
+  "license": "MIT",
+  "main": "wrapper.js",
+  "types": "types.d.ts",
+  "files": ["wrapper.js", "index.js", "index.d.ts", "types.d.ts", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "napi build --platform --release",
+    "artifacts": "napi artifacts",
+    "create-npm-dirs": "napi create-npm-dirs",
+    "prepublishOnly": "napi prepublish -t npm",
+    "test": "node --test __test__/binding.test.js"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "napi": {
+    "binaryName": "spoor",
+    "targets": [
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-pc-windows-msvc"
+    ]
+  }
+}

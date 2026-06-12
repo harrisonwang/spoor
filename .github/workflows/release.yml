@@ -76,36 +76,36 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pkg="pith_${VERSION}_${{ matrix.target }}"
+          pkg="spoor_${VERSION}_${{ matrix.target }}"
           rm -rf package out verify
-          mkdir -p package/pith out verify
-          cp "target/${{ matrix.target }}/release/pith${{ matrix.exe_ext }}" "package/pith/pith${{ matrix.exe_ext }}"
-          cp README.md "package/pith/"
-          tar -C package -czf "out/${pkg}.tar.gz" pith
+          mkdir -p package/spoor out verify
+          cp "target/${{ matrix.target }}/release/spoor${{ matrix.exe_ext }}" "package/spoor/spoor${{ matrix.exe_ext }}"
+          cp README.md "package/spoor/"
+          tar -C package -czf "out/${pkg}.tar.gz" spoor
           tar -xzf "out/${pkg}.tar.gz" -C verify
-          test -x "verify/pith/pith${{ matrix.exe_ext }}"
-          "verify/pith/pith${{ matrix.exe_ext }}" --version
+          test -x "verify/spoor/spoor${{ matrix.exe_ext }}"
+          "verify/spoor/spoor${{ matrix.exe_ext }}" --version
 
       - name: Package and verify (zip)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $pkg = "pith_${env:VERSION}_${{ matrix.target }}"
+          $pkg = "spoor_${env:VERSION}_${{ matrix.target }}"
           Remove-Item -Recurse -Force package -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force out -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force verify -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force -Path package\pith | Out-Null
+          New-Item -ItemType Directory -Force -Path package\spoor | Out-Null
           New-Item -ItemType Directory -Force -Path out | Out-Null
-          Copy-Item "target\${{ matrix.target }}\release\pith${{ matrix.exe_ext }}" "package\pith\pith${{ matrix.exe_ext }}"
-          Copy-Item "README.md" "package\pith\README.md"
-          Compress-Archive -Path "package\pith" -DestinationPath "out\$pkg.zip" -Force
+          Copy-Item "target\${{ matrix.target }}\release\spoor${{ matrix.exe_ext }}" "package\spoor\spoor${{ matrix.exe_ext }}"
+          Copy-Item "README.md" "package\spoor\README.md"
+          Compress-Archive -Path "package\spoor" -DestinationPath "out\$pkg.zip" -Force
           Expand-Archive -Path "out\$pkg.zip" -DestinationPath verify -Force
-          & "verify\pith\pith${{ matrix.exe_ext }}" --version
+          & "verify\spoor\spoor${{ matrix.exe_ext }}" --version
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pith_${{ matrix.target }}
+          name: spoor_${{ matrix.target }}
           path: |
             out/*.tar.gz
             out/*.zip
@@ -158,7 +158,7 @@ jobs:
           fi
 
           payload="$(jq -n \
-            --arg tool "pith" \
+            --arg tool "spoor" \
             --arg tag "$TAG" \
             --arg repo "$REPO" \
             '{event_type:"tool-released", client_payload:{tool:$tool, tag:$tag, repo:$repo}}')"
@@ -206,24 +206,24 @@ jobs:
             local archive="$1" dest="$2" exe="$3"
             mkdir -p "$dest"
             if [[ "$archive" == *.zip ]]; then
-              unzip -p "$archive" "pith/$exe" > "$dest/$exe"
+              unzip -p "$archive" "spoor/$exe" > "$dest/$exe"
             else
-              tar -xzf "$archive" -O "pith/$exe" > "$dest/$exe"
+              tar -xzf "$archive" -O "spoor/$exe" > "$dest/$exe"
             fi
             chmod +x "$dest/$exe"
           }
-          extract "artifacts/pith_${TAG}_aarch64-apple-darwin.tar.gz"     npm/pith-darwin-arm64/bin pith
-          extract "artifacts/pith_${TAG}_x86_64-apple-darwin.tar.gz"      npm/pith-darwin-x64/bin   pith
-          extract "artifacts/pith_${TAG}_x86_64-unknown-linux-gnu.tar.gz" npm/pith-linux-x64/bin    pith
-          extract "artifacts/pith_${TAG}_x86_64-pc-windows-msvc.zip"      npm/pith-win32-x64/bin    pith.exe
+          extract "artifacts/spoor_${TAG}_aarch64-apple-darwin.tar.gz"     npm/spoor-cli-darwin-arm64/bin spoor
+          extract "artifacts/spoor_${TAG}_x86_64-apple-darwin.tar.gz"      npm/spoor-cli-darwin-x64/bin   spoor
+          extract "artifacts/spoor_${TAG}_x86_64-unknown-linux-gnu.tar.gz" npm/spoor-cli-linux-x64/bin    spoor
+          extract "artifacts/spoor_${TAG}_x86_64-pc-windows-msvc.zip"      npm/spoor-cli-win32-x64/bin    spoor.exe
 
-          for pkg in npm/pith npm/pith-*; do
+          for pkg in npm/spoor-cli npm/spoor-cli-*; do
             (cd "$pkg" && npm version "$version" --no-git-tag-version --allow-same-version)
           done
 
           node -e "
             const fs = require('fs');
-            const p = 'npm/pith/package.json';
+            const p = 'npm/spoor-cli/package.json';
             const j = JSON.parse(fs.readFileSync(p, 'utf8'));
             for (const k of Object.keys(j.optionalDependencies || {})) {
               j.optionalDependencies[k] = '$version';
@@ -235,7 +235,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for pkg in npm/pith-*; do
+          for pkg in npm/spoor-cli-*; do
             (cd "$pkg" && npm publish --access public --provenance)
           done
 
@@ -243,7 +243,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cd npm/pith && npm publish --access public --provenance
+          cd npm/spoor-cli && npm publish --access public --provenance
 
   notify-scoop-bucket:
     if: github.ref_type == 'tag'
@@ -265,7 +265,7 @@ jobs:
           fi
 
           payload="$(jq -n \
-            --arg tool "pith" \
+            --arg tool "spoor" \
             --arg tag "$TAG" \
             --arg repo "$REPO" \
             '{event_type:"tool-released", client_payload:{tool:$tool, tag:$tag, repo:$repo}}')"

@@ -1,0 +1,30 @@
+[package]
+name = "spoor-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "CLI adapter for the spoor document parsing engine"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "../../README.md"
+keywords = ["markdown", "documents", "llm", "cli", "extract"]
+categories = ["command-line-utilities", "text-processing"]
+default-run = "spoor"
+
+[[bin]]
+name = "spoor"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde_json.workspace = true
+spoor-core.workspace = true
+clap = { version = "4.5", features = ["derive"] }
+glob = "0.3"
+ureq = { version = "2.10", features = ["tls"] }
+
+[dev-dependencies]
+insta = { version = "1.40", features = ["yaml"] }
+calamine = "0.26"
+zip = { version = "2.2", default-features = false, features = ["deflate"] }

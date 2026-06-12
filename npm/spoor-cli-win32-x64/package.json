@@ -1,0 +1,20 @@
+{
+  "name": "@harrisonwang/spoor-cli-win32-x64",
+  "version": "0.0.0",
+  "description": "Spoor binary for win32-x64",
+  "homepage": "https://github.com/harrisonwang/spoor",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harrisonwang/spoor.git"
+  },
+  "license": "MIT",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin"
+  ]
+}

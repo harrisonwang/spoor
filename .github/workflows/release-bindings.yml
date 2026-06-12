@@ -1,0 +1,161 @@
+name: release bindings
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  python-wheels:
+    name: python wheel (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --out dist --manifest-path bindings/python/Cargo.toml
+          manylinux: auto
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pyspoor-${{ matrix.os }}
+          path: dist/*
+
+  publish-python:
+    name: publish pyspoor
+    needs: python-wheels
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pyspoor-*
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  node-build:
+    name: node binding (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Build
+        working-directory: bindings/node
+        run: |
+          npm install
+          npm run build -- --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-${{ matrix.target }}
+          path: bindings/node/*.node
+
+  publish-node:
+    name: publish @harrisonwang/spoor
+    needs: node-build
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+      - name: Install
+        working-directory: bindings/node
+        run: npm install
+      - name: Create platform packages
+        working-directory: bindings/node
+        run: npm run create-npm-dirs
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: node-*
+          path: bindings/node/artifacts
+          merge-multiple: true
+      - name: Stage artifacts
+        working-directory: bindings/node
+        run: npm run artifacts
+      - name: Publish
+        working-directory: bindings/node
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-wasm:
+    name: publish @harrisonwang/spoor-wasm
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - name: Build
+        working-directory: crates/spoor-wasm
+        run: npm run build
+      - name: Verify package payload
+        working-directory: crates/spoor-wasm/pkg
+        run: |
+          test -s spoor_wasm_bg.wasm
+          npm pack --dry-run
+      - name: Publish
+        working-directory: crates/spoor-wasm/pkg
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-crates:
+    name: publish Rust crates
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo publish -p spoor-core --token "$CRATES_IO_TOKEN"
+        env:
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+      - name: Wait for crates.io index propagation
+        shell: bash
+        run: |
+          for attempt in {1..20}; do
+            if cargo search spoor-core --limit 1 | grep -q '^spoor-core ='; then
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "spoor-core did not appear in crates.io index" >&2
+          exit 1
+      - run: cargo publish -p spoor-cli --token "$CRATES_IO_TOKEN"
+        env:
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}

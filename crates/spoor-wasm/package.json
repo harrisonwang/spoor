@@ -1,0 +1,12 @@
+{
+  "name": "@harrisonwang/spoor-wasm",
+  "version": "0.8.0",
+  "private": true,
+  "description": "Browser and edge WASM bindings for spoor-core",
+  "license": "MIT",
+  "scripts": {
+    "build": "wasm-pack build --target bundler --scope harrisonwang --release --no-default-features --features core-formats",
+    "build:web": "wasm-pack build --target web --scope harrisonwang --out-dir pkg-web --release --no-default-features --features core-formats",
+    "build:full": "wasm-pack build --target bundler --scope harrisonwang --release --no-default-features --features full"
+  }
+}

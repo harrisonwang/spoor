@@ -1,0 +1,27 @@
+[package]
+name = "spoor-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "WASM bindings for spoor-core"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["core-formats"]
+core-formats = ["spoor-core/core-formats"]
+full = ["spoor-core/all-formats"]
+
+[dependencies]
+spoor-core = { path = "../spoor-core", version = "0.8.0", default-features = false }
+serde-wasm-bindgen = "0.6"
+wasm-bindgen = "0.2"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false

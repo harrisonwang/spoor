@@ -1,0 +1,9 @@
+{
+  "name": "spoor-lambda-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "package": "zip function.zip index.mjs",
+    "test": "node test.mjs"
+  }
+}
