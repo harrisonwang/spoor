@@ -1,7 +1,7 @@
 {
   "name": "@harrisonwang/spoor-cli",
   "version": "0.0.0",
-  "description": "Convert files and URLs to LLM-friendly markdown",
+  "description": "Convert documents to LLM-friendly text — Markdown for prose, JSON for tables",
   "homepage": "https://github.com/harrisonwang/spoor",
   "repository": {
     "type": "git",

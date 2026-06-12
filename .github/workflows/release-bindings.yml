@@ -8,15 +8,51 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
+  ci:
+    name: full ci
+    uses: ./.github/workflows/ci.yml
+
+  release-config:
+    name: validate release configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate release version
+        if: github.ref_type == 'tag'
+        run: python3 scripts/check-release-version.py "${{ github.ref_name }}"
+
+      - name: Validate required secrets
+        if: github.ref_type == 'tag'
+        env:
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CRATES_IO_TOKEN; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "$name is not configured" >&2
+              exit 1
+            fi
+          done
+
   python-wheels:
-    name: python wheel (${{ matrix.os }})
+    name: python wheel (${{ matrix.target }})
+    needs: [ci, release-config]
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v4
       - uses: PyO3/maturin-action@v1
@@ -24,9 +60,10 @@ jobs:
           command: build
           args: --release --out dist --manifest-path bindings/python/Cargo.toml
           manylinux: auto
+          target: ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:
-          name: pyspoor-${{ matrix.os }}
+          name: pyspoor-${{ matrix.target }}
           path: dist/*
 
   publish-python:
@@ -34,6 +71,9 @@ jobs:
     needs: python-wheels
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -44,6 +84,7 @@ jobs:
 
   node-build:
     name: node binding (${{ matrix.target }})
+    needs: [ci, release-config]
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -67,7 +108,7 @@ jobs:
       - name: Build
         working-directory: bindings/node
         run: |
-          npm install
+          npm ci
           npm run build -- --target ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:
@@ -79,15 +120,19 @@ jobs:
     needs: node-build
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version: "24"
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
       - name: Install
         working-directory: bindings/node
-        run: npm install
+        run: npm ci
       - name: Create platform packages
         working-directory: bindings/node
         run: npm run create-npm-dirs
@@ -102,19 +147,22 @@ jobs:
       - name: Publish
         working-directory: bindings/node
         run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   publish-wasm:
     name: publish @harrisonwang/spoor-wasm
+    needs: [ci, release-config]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version: "24"
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -132,17 +180,16 @@ jobs:
       - name: Publish
         working-directory: crates/spoor-wasm/pkg
         run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   publish-crates:
     name: publish Rust crates
+    needs: [ci, release-config]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo publish -p spoor-core --token "$CRATES_IO_TOKEN"
+      - run: cargo publish --locked -p spoor-core --token "$CRATES_IO_TOKEN"
         env:
           CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
       - name: Wait for crates.io index propagation
@@ -156,6 +203,6 @@ jobs:
           done
           echo "spoor-core did not appear in crates.io index" >&2
           exit 1
-      - run: cargo publish -p spoor-cli --token "$CRATES_IO_TOKEN"
+      - run: cargo publish --locked -p spoor-cli --token "$CRATES_IO_TOKEN"
         env:
           CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}

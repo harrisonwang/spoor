@@ -3,6 +3,11 @@
   "version": "0.8.0",
   "description": "Native Node.js bindings for the spoor document engine",
   "license": "MIT",
+  "homepage": "https://github.com/harrisonwang/spoor",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harrisonwang/spoor.git"
+  },
   "main": "wrapper.js",
   "types": "types.d.ts",
   "files": ["wrapper.js", "index.js", "index.d.ts", "types.d.ts", "README.md", "LICENSE"],

@@ -1,8 +1,12 @@
 name: ci
 
 on:
+  workflow_call:
   push:
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -61,7 +65,7 @@ jobs:
       - name: Cloudflare Worker dry run
         working-directory: wasm/cloudflare-worker
         run: |
-          npm install
+          npm ci
           npm exec wrangler deploy -- --dry-run
 
   bindings:
@@ -86,7 +90,7 @@ jobs:
       - name: Node binding
         run: |
           cd bindings/node
-          npm install
+          npm ci
           npm run build
           npm test
 
