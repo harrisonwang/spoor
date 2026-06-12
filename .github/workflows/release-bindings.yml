@@ -2,6 +2,12 @@ name: release bindings
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_crates:
+        description: Publish Rust crates from the selected ref
+        required: false
+        type: boolean
+        default: false
   push:
     tags:
       - "v*"
@@ -208,7 +214,7 @@ jobs:
     name: publish Rust crates
     needs: [ci, release-config]
     runs-on: ubuntu-latest
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' || inputs.publish_crates == true
     permissions:
       contents: read
       id-token: write
@@ -224,7 +230,7 @@ jobs:
         run: |
           set -euo pipefail
           version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "spoor-core") | .version')"
-          if cargo info "spoor-core@$version" >/dev/null 2>&1; then
+          if cargo info --registry crates-io "spoor-core@$version" >/dev/null 2>&1; then
             echo "spoor-core@$version already exists; skipping"
           else
             cargo publish --locked -p spoor-core
@@ -235,7 +241,7 @@ jobs:
           set -euo pipefail
           version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "spoor-core") | .version')"
           for attempt in {1..20}; do
-            if cargo info "spoor-core@$version" >/dev/null 2>&1; then
+            if cargo info --registry crates-io "spoor-core@$version" >/dev/null 2>&1; then
               exit 0
             fi
             sleep 15
@@ -250,11 +256,11 @@ jobs:
         run: |
           set -euo pipefail
           version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "spoor-cli") | .version')"
-          if cargo info "spoor-cli@$version" >/dev/null 2>&1; then
+          if cargo info --registry crates-io "spoor-cli@$version" >/dev/null 2>&1; then
             echo "spoor-cli@$version already exists; skipping"
           else
             token="$OIDC_TOKEN"
-            if ! cargo info spoor-cli >/dev/null 2>&1; then
+            if ! cargo info --registry crates-io spoor-cli >/dev/null 2>&1; then
               if [[ -z "$BOOTSTRAP_TOKEN" ]]; then
                 echo "spoor-cli requires CRATES_IO_TOKEN for its initial publish" >&2
                 exit 1
@@ -263,3 +269,21 @@ jobs:
             fi
             CARGO_REGISTRY_TOKEN="$token" cargo publish --locked -p spoor-cli
           fi
+      - name: Verify published crates
+        shell: bash
+        run: |
+          set -euo pipefail
+          for crate in spoor-core spoor-cli; do
+            version="$(cargo metadata --no-deps --format-version 1 | jq -r --arg crate "$crate" '.packages[] | select(.name == $crate) | .version')"
+            for attempt in {1..20}; do
+              if cargo info --registry crates-io "$crate@$version" >/dev/null 2>&1; then
+                echo "verified $crate@$version on crates.io"
+                break
+              fi
+              if [[ "$attempt" == 20 ]]; then
+                echo "$crate@$version did not appear in crates.io index" >&2
+                exit 1
+              fi
+              sleep 15
+            done
+          done
