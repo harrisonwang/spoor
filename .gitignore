@@ -13,3 +13,5 @@ bindings/node/*.node
 bindings/node/npm/
 crates/spoor-wasm/pkg*/
 dist/
+.wrangler/
+examples/tauri-desktop/src-tauri/gen/schemas/

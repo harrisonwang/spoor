@@ -1,0 +1,42 @@
+{
+  "name": "spoor-electron-desktop-example",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first spoor document desk built with Electron",
+  "author": "harrisonwang",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "node smoke.cjs",
+    "check": "node --check main.cjs && node --check preload.cjs && node --check renderer.js && npm run smoke",
+    "package": "electron-builder --dir"
+  },
+  "dependencies": {
+    "@harrisonwang/spoor": "^0.8.2"
+  },
+  "devDependencies": {
+    "electron": "^42.4.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "xyz.510006.spoor.electron",
+    "productName": "Spoor Document Desk",
+    "icon": "assets/icon.png",
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "renderer.js",
+      "index.html",
+      "styles.css"
+    ],
+    "mac": {
+      "target": "dir"
+    },
+    "linux": {
+      "target": "dir"
+    },
+    "win": {
+      "target": "dir"
+    }
+  }
+}

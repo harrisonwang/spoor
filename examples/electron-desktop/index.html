@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'" />
+    <title>Spoor 本地文档桌面</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <span class="kicker">原生文档解析台 / ELECTRON—01</span>
+          <h1>spoor<br /><em>本地文档桌面</em></h1>
+        </div>
+        <div class="runtime"><i></i> 原生 NODE BINDING</div>
+      </header>
+
+      <section class="desk">
+        <aside>
+          <span class="label">本地处理流程</span>
+          <ol id="trace">
+            <li class="active">等待文档</li>
+            <li>原生绑定解析</li>
+            <li>本地段落检索</li>
+          </ol>
+          <div class="privacy">
+            <strong>进程内私密处理</strong>
+            <span>文件只进入当前 Electron 主进程。</span>
+          </div>
+        </aside>
+
+        <div class="work">
+          <label id="dropzone" for="picker">
+            <span class="cross">＋</span>
+            <strong>拖入或选择文档</strong>
+            <small>PDF · EPUB · IPYNB · DOCX · PPTX · XLSX · CSV · HTML · TEXT</small>
+            <input id="picker" type="file" />
+          </label>
+
+          <div class="status">
+            <span id="status">等待文档</span>
+            <span id="stats">原生 / 本地</span>
+          </div>
+
+          <form id="query">
+            <input id="question" placeholder="检索关键词，例如：风险、收入、行动项" disabled />
+            <button disabled>检索</button>
+          </form>
+
+          <div class="result-head">
+            <span>结构化输出</span>
+            <button id="copy" disabled>复制</button>
+          </div>
+          <pre id="output">选择文档后，原生解析结果会显示在这里。</pre>
+        </div>
+      </section>
+    </main>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

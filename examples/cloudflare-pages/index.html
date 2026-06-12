@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="spoor Cloudflare Pages 示例：在浏览器本地或 Pages Functions 边缘解析文档。"
+    />
+    <title>spoor / 文档解析实验台</title>
+    <script type="module" src="/src/main.js"></script>
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+    <main class="shell">
+      <nav class="topline">
+        <a class="wordmark" href="/">spoor<span>_</span></a>
+        <div class="runtime-status">
+          <span class="pulse"></span>
+          <span id="runtime-status">正在初始化 WASM</span>
+        </div>
+        <a href="https://github.com/harrisonwang/spoor" target="_blank" rel="noreferrer">
+          源码 ↗
+        </a>
+      </nav>
+
+      <header class="hero">
+        <div class="hero-copy">
+          <span class="eyebrow">文档解析实验台 / CF—01</span>
+          <h1>文档留下，<br /><em>结构出来。</em></h1>
+        </div>
+        <div class="hero-note">
+          <span class="measure">全格式 WASM / GZIP &lt; 1 MiB</span>
+          <p>
+            同一份纯 Rust WASM，在浏览器本地解析，或交给 Cloudflare Pages
+            Functions 边缘执行。
+          </p>
+        </div>
+      </header>
+
+      <section class="control-deck" aria-label="解析控制台">
+        <div class="mode-switch" role="radiogroup" aria-label="运行模式">
+          <button class="mode active" data-mode="local" role="radio" aria-checked="true">
+            <span>01</span>
+            <strong>本地 WASM</strong>
+            <small>文件不离开浏览器</small>
+          </button>
+          <button class="mode" data-mode="edge" role="radio" aria-checked="false">
+            <span>02</span>
+            <strong>Pages Function</strong>
+            <small>发送至 Cloudflare Edge</small>
+          </button>
+        </div>
+
+        <label id="dropzone" class="dropzone">
+          <input id="picker" type="file" />
+          <span class="drop-index">文档入口</span>
+          <span class="drop-target">＋</span>
+          <span class="drop-copy">
+            <strong>拖入或选择文档</strong>
+            <small>DOCX · XLSX · PDF · PPTX · HTML · EPUB · IPYNB</small>
+          </span>
+          <span class="privacy" id="privacy">本地 / 不上传</span>
+        </label>
+      </section>
+
+      <section class="readout">
+        <div class="readout-bar">
+          <span id="status">等待文档</span>
+          <span id="stats">0 字节 / 等待识别</span>
+        </div>
+
+        <div class="query-panel">
+          <label for="query">在解析结果中检索</label>
+          <div>
+            <input id="query" placeholder="输入关键词，例如：风险、收入、行动项" disabled />
+            <button id="search" disabled>检索段落</button>
+          </div>
+        </div>
+
+        <div class="result-grid">
+          <aside>
+            <span class="section-label">运行轨迹</span>
+            <ol id="trace">
+              <li class="active">WASM 模块装载中</li>
+            </ol>
+          </aside>
+          <section class="output-panel">
+            <div class="output-head">
+              <span class="section-label">结构化输出</span>
+              <button id="copy" disabled>复制结果</button>
+            </div>
+            <pre id="output">选择文档后，结构化结果会显示在这里。</pre>
+          </section>
+        </div>
+      </section>
+
+      <footer>
+        <span>SP—CF / 2026</span>
+        <span>纯 Rust · WASM · 不含 OCR · 全格式</span>
+      </footer>
+    </main>
+  </body>
+</html>

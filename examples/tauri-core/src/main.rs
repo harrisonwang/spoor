@@ -21,6 +21,6 @@ fn parse_for_desktop(bytes: &[u8], source_name: &str) -> Result<String, String> 
 fn main() {
     println!(
         "{}",
-        parse_for_desktop(b"hello from a desktop host\n", "note.txt").expect("parse")
+        parse_for_desktop("来自桌面宿主的中文文档\n".as_bytes(), "说明.txt").expect("parse")
     );
 }

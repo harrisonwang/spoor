@@ -52,6 +52,8 @@ fn render_block(element: ElementRef<'_>, md: &mut MarkdownBuilder) {
         "ul" => render_list(element, md, false),
         "ol" => render_list(element, md, true),
         "table" => render_table(element, md),
+        "blockquote" => render_blockquote(element, md),
+        "pre" => render_preformatted(element, md),
         "article" | "main" | "section" | "div" | "body" => render_children(element, md),
         _ => {
             if has_block_children(element) {
@@ -85,6 +87,8 @@ fn has_block_children(element: ElementRef<'_>) -> bool {
                         | "ul"
                         | "ol"
                         | "table"
+                        | "blockquote"
+                        | "pre"
                         | "article"
                         | "main"
                         | "section"
@@ -93,6 +97,32 @@ fn has_block_children(element: ElementRef<'_>) -> bool {
             })
             .unwrap_or(false)
     })
+}
+
+fn render_blockquote(element: ElementRef<'_>, md: &mut MarkdownBuilder) {
+    let text = inline_text(element);
+    if text.is_empty() {
+        return;
+    }
+    md.blank_line();
+    for line in text.lines() {
+        md.raw(&format!("> {}\n", line.trim()));
+    }
+}
+
+fn render_preformatted(element: ElementRef<'_>, md: &mut MarkdownBuilder) {
+    let text = element.text().collect::<String>();
+    let text = text.trim_matches('\n');
+    if text.trim().is_empty() {
+        return;
+    }
+    md.blank_line();
+    md.raw("```\n");
+    md.raw(text);
+    if !text.ends_with('\n') {
+        md.raw("\n");
+    }
+    md.raw("```\n");
 }
 
 fn render_list(element: ElementRef<'_>, md: &mut MarkdownBuilder, ordered: bool) {
@@ -168,6 +198,17 @@ fn inline_children(element: ElementRef<'_>) -> String {
                         let text = inline_text(child_el);
                         if !text.is_empty() {
                             out.push_str(&format!("*{text}*"));
+                        }
+                    }
+                    "code" => {
+                        let text = inline_text(child_el);
+                        if !text.is_empty() {
+                            out.push_str(&format!("`{text}`"));
+                        }
+                    }
+                    "img" => {
+                        if let Some(alt) = el.attr("alt").filter(|alt| !alt.trim().is_empty()) {
+                            out.push_str(&format!("[图片：{}]", alt.trim()));
                         }
                     }
                     "br" => out.push('\n'),

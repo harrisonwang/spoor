@@ -3,6 +3,8 @@ name: ci
 on:
   workflow_call:
   push:
+    branches:
+      - main
   pull_request:
 
 permissions:
@@ -54,19 +56,39 @@ jobs:
         working-directory: crates/spoor-wasm
         run: |
           npm run build
+          npm run build:core
           npm run build:web
-      - name: Verify publishable WASM package
-        working-directory: crates/spoor-wasm/pkg
+      - name: Verify publishable WASM packages and size budgets
+        working-directory: crates/spoor-wasm
         run: |
-          test -s spoor_wasm_bg.wasm
-          npm pack --dry-run
+          set -euo pipefail
+          for package in pkg pkg-core; do
+            test -s "$package/spoor_wasm_bg.wasm"
+            (cd "$package" && npm pack --dry-run)
+            gzip_bytes="$(gzip -c "$package/spoor_wasm_bg.wasm" | wc -c | tr -d ' ')"
+            echo "$package gzip size: $gzip_bytes bytes"
+            test "$gzip_bytes" -le 3145728
+          done
       - name: Browser package smoke test
         run: node wasm/demo/smoke.mjs
       - name: Cloudflare Worker dry run
         working-directory: wasm/cloudflare-worker
         run: |
           npm ci
+          npm install --no-save --package-lock=false "$GITHUB_WORKSPACE/crates/spoor-wasm/pkg"
           npm exec wrangler deploy -- --dry-run
+      - name: Cloudflare Pages and Functions build
+        working-directory: examples/cloudflare-pages
+        run: |
+          npm ci
+          npm install --no-save --package-lock=false "$GITHUB_WORKSPACE/crates/spoor-wasm/pkg"
+          npm run check
+      - name: Local corpus explorer Pages build
+        working-directory: examples/local-corpus-explorer
+        run: |
+          npm ci
+          npm install --no-save --package-lock=false "$GITHUB_WORKSPACE/crates/spoor-wasm/pkg"
+          npm run check
 
   bindings:
     name: native bindings
@@ -87,6 +109,13 @@ jobs:
           cd bindings/python
           VIRTUAL_ENV="$GITHUB_WORKSPACE/.venv" "$GITHUB_WORKSPACE/.venv/bin/maturin" develop
           "$GITHUB_WORKSPACE/.venv/bin/pytest"
+          "$GITHUB_WORKSPACE/.venv/bin/python" "$GITHUB_WORKSPACE/examples/rag-ingestion/test_ingest.py"
+          "$GITHUB_WORKSPACE/.venv/bin/python" "$GITHUB_WORKSPACE/examples/rag-ingestion/ingest.py" \
+            "$GITHUB_WORKSPACE/crates/spoor-cli/tests/fixtures/plain/01_ascii.txt" \
+            "$GITHUB_WORKSPACE/crates/spoor-cli/tests/fixtures/csv/01_basic.csv" \
+            --output-dir "$RUNNER_TEMP/spoor-index"
+          test -s "$RUNNER_TEMP/spoor-index/chunks.jsonl"
+          test -s "$RUNNER_TEMP/spoor-index/manifest.json"
       - name: Node binding
         run: |
           cd bindings/node
@@ -110,3 +139,23 @@ jobs:
           cargo build --locked -p spoor-cli
           cd examples/serverless-lambda
           SPOOR_BIN="$GITHUB_WORKSPACE/target/debug/spoor" npm test
+
+  desktop-examples:
+    name: desktop examples
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Electron native binding integration
+        working-directory: examples/electron-desktop
+        run: |
+          npm ci
+          npm run check
+      - name: Tauri desktop integration
+        working-directory: examples/tauri-desktop
+        run: |
+          npm ci
+          npm run check

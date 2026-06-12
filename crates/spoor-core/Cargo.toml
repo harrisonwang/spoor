@@ -24,7 +24,7 @@ pdf = [
     "dep:unicode-normalization",
 ]
 office = ["dep:quick-xml"]
-epub = ["dep:quick-xml"]
+epub = ["dep:quick-xml", "html"]
 html = ["dep:scraper"]
 tables = ["dep:calamine", "dep:csv"]
 notebook = []

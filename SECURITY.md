@@ -2,6 +2,9 @@
 
 `spoor` 使用一个小型、确定性的 Rust core 来解析不可信文档。core 的设计目标是失败时返回结构化错误，但它**不能替代**操作系统或 WASM runtime 的内存限制。
 
+格式保留内容、运行形态与示例的完整边界见
+[能力与限制](docs/v1/design/limitations.md)。
+
 ## 信任边界
 
 - `spoor-core` 只接收 bytes 和显式 metadata，不执行任何文件、网络、stdin/stdout、环境变量或进程 I/O。

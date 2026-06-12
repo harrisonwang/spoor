@@ -10,9 +10,27 @@ const wasm = await readFile(
 );
 await init({ module_or_path: wasm });
 
-const text = new TextEncoder().encode('hello wasm\n');
-assert.equal(detect_format(text, 'note.txt'), 'text');
-assert.equal(parse_bytes(text, 'note.txt').content.value.markdown, 'hello wasm\n');
+const text = new TextEncoder().encode('来自 WASM 的中文文档\n');
+assert.equal(detect_format(text, '说明.txt'), 'text');
+assert.equal(parse_bytes(text, '说明.txt').content.value.markdown, '来自 WASM 的中文文档\n');
+
+for (const [format, fixture] of [
+  ['docx', 'docx/01_basic.docx'],
+  ['xlsx', 'xlsx/01_basic.xlsx'],
+  ['pdf', 'pdf/01_basic.pdf'],
+  ['pptx', 'pptx/01_basic.pptx'],
+  ['html', 'html/01_article.html'],
+  ['epub', 'epub/01_basic.epub'],
+  ['ipynb', 'ipynb/01_basic.ipynb'],
+]) {
+  const bytes = await readFile(new URL(
+    `../../crates/spoor-cli/tests/fixtures/${fixture}`,
+    import.meta.url,
+  ));
+  const result = parse_bytes(bytes, fixture);
+  assert.equal(result.stats.format, format);
+  assert.ok(result.stats.output_bytes > 0, `${format} should produce output`);
+}
 
 assert.throws(
   () => parse_bytes(new Uint8Array(2048), 'large.bin', undefined, 'text', 1024),

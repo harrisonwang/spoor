@@ -1,8 +1,0 @@
-{
-  "name": "spoor-chat-with-local-file",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "npx serve ../.."
-  }
-}

@@ -1,0 +1,21 @@
+{
+  "name": "spoor-cloudflare-pages-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:pages": "npm run build && wrangler pages dev",
+    "build": "vite build",
+    "build:functions": "wrangler pages functions build functions --outdir .wrangler/functions",
+    "check": "npm run build && npm run build:functions",
+    "deploy": "npm run build && wrangler pages deploy"
+  },
+  "dependencies": {
+    "@harrisonwang/spoor-wasm": "^0.8.2"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0",
+    "vite-plugin-wasm": "^3.5.0",
+    "wrangler": "^4.0.0"
+  }
+}

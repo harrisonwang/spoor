@@ -10,9 +10,10 @@
 - **离线、单二进制**：无云依赖，不需要 Python 环境，敏感文件本地处理
 - **Agent 友好**：结构化错误（稳定 error code）、输出自描述（usage/truncated/warnings）、JSON 扁平 `tables[]`
 - **内建防御**：限制单次解析的数据量、ZIP 炸弹三重防御（entry/ratio/total cap）、256 KiB 输出封顶
-- **支持格式**：PDF、DOCX、XLSX、PPTX、CSV、EPUB、IPYNB、HTML/URL、Markdown、纯文本
+- **重点格式**：DOCX、XLSX、PDF、PPTX、HTML/URL、EPUB、IPYNB
+- **基础格式**：CSV/TSV、Markdown、纯文本与常见代码文件
 
-包体大小（2026-06-11 实测）：
+包体大小（2026-06-12 实测）：
 
 | 形态 | 大小 |
 |------|------|
@@ -20,8 +21,8 @@
 | CLI（macOS arm64 单二进制） | ~4.7 MiB |
 | `pyspoor` abi3 wheel | ~1.3 MiB |
 | Node addon | ~2.8 MiB |
-| `core-formats` WASM | ~1.4 MiB raw / ~575 KiB gzip |
-| `full` WASM（含 PDF） | ~2.1 MiB raw / ~838 KiB gzip |
+| `core-formats` WASM（可选裁剪构建） | ~1.4 MiB raw / ~578 KiB gzip |
+| 默认发布 WASM（全格式） | ~2.1 MiB raw / ~841 KiB gzip |
 
 ## 安装
 
@@ -77,7 +78,37 @@ let result = spoor_core::parse(&request)?;
 
 Python 使用 `pyspoor` 的 `parse_bytes` / `parse_path`；Node.js 使用
 `@harrisonwang/spoor`；浏览器与 Edge Runtime 使用
-`@harrisonwang/spoor-wasm`。可运行示例位于 `wasm/` 与 `examples/`。
+`@harrisonwang/spoor-wasm`。从 `v0.8.3` 起，发布的 WASM 包默认包含全部重点格式；
+需要更小体积时可自行构建 `core-formats`。
+
+主示例：
+
+| 示例 | 展示能力 | 在线地址 |
+| --- | --- | --- |
+| [`examples/cloudflare-pages`](examples/cloudflare-pages/) | Cloudflare Pages 本地 WASM 演示 + Pages Functions 边缘 API | [`spoor-pages-demo.pages.dev`](https://spoor-pages-demo.pages.dev) |
+| [`examples/local-corpus-explorer`](examples/local-corpus-explorer/) | 浏览器内混合文档批处理、跨文件检索与 JSONL 导出 | [`spoor-corpus-demo.pages.dev`](https://spoor-corpus-demo.pages.dev) |
+| [`examples/rag-ingestion`](examples/rag-ingestion/) | Python 原生绑定驱动的确定性 RAG / 搜索索引摄取流水线 | - |
+
+集成形态：
+
+| 示例 | 展示能力 |
+| --- | --- |
+| [`wasm/cloudflare-worker`](wasm/cloudflare-worker/) | 独立 Cloudflare Worker 文档解析 API |
+| [`examples/tauri-desktop`](examples/tauri-desktop/) | 完整 Tauri 2 本地桌面应用 |
+| [`examples/electron-desktop`](examples/electron-desktop/) | 使用原生 Node binding 的 Electron 桌面应用 |
+| [`examples/tauri-core`](examples/tauri-core/) | Tauri command 形态的 Rust core 集成 |
+| [`examples/serverless-lambda`](examples/serverless-lambda/) | AWS Lambda Layer 中调用 CLI 二进制 |
+| [`wasm/demo`](wasm/demo/) | 底层 WASM 全格式与恶意输入回归测试 |
+
+## 限制与边界
+
+- core 默认单次共享解析预算为 64 MiB；CLI 默认总输出上限为 256 KiB。
+- CSV/XLSX 默认仅返回每个表前 100 条数据行，完整读取需要使用筛选与分页参数。
+- 不执行 OCR、宏、公式、notebook code、脚本或内嵌二进制；加密文件与旧版 Office 格式不支持。
+- 浏览器和边缘示例额外采用 16 MiB 请求/单文件上限，并受宿主内存、CPU 与请求限制约束。
+
+各格式保留内容、已知缺口、格式检测规则和每个示例的限制见
+[能力与限制](docs/v1/design/limitations.md)。
 
 ## 错误契约
 
@@ -118,5 +149,6 @@ cargo insta review
 | [路线图与竞品分析](docs/v1/planning/roadmap.md) | 竞品调研、平台约束、差异化自查 |
 | [架构设计](docs/v1/design/architecture.md) | Core 边界、错误契约、PyO3 接口、迁移顺序 |
 | [工程决策](docs/v1/design/decisions.md) | 产品边界、输出模式、格式取舍、安全策略 |
+| [能力与限制](docs/v1/design/limitations.md) | 文件大小、格式保留内容、运行形态和宿主限制 |
 | [测试矩阵](docs/v1/test-matrix/) | 按格式维护的测试覆盖 |
 | [安全模型](SECURITY.md) | 威胁、默认防御、边界与结构化错误 |

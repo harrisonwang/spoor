@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="由 spoor WASM 驱动、文件不离开浏览器的混合文档本地语料库。"
+    />
+    <title>Spoor 本地语料库</title>
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+    <header class="masthead">
+      <a class="wordmark" href="https://github.com/harrisonwang/spoor">
+        <span class="wordmark-mark">S</span>
+        <span>
+          <strong>Spoor 本地语料库</strong>
+          <small>浏览器内研究档案 / WASM 版</small>
+        </span>
+      </a>
+      <div class="privacy-stamp">
+        <span></span>
+        文件始终留在当前设备
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="kicker">档案 026 / 本地优先解析</p>
+          <h1>把一组混合文档变成本地可检索的资料库。</h1>
+          <p class="lede">
+            同一套小型 WASM 引擎识别每份文件、保留有效结构、隔离单文件失败，
+            并为本地检索与导出生成确定性记录。
+          </p>
+          <div class="hero-actions">
+            <label class="primary-action">
+              <input id="file-picker" type="file" multiple />
+              添加文档
+            </label>
+            <label class="secondary-action">
+              <input id="folder-picker" type="file" webkitdirectory multiple />
+              添加目录
+            </label>
+            <button id="load-sample" class="text-action" type="button">加载中文样例</button>
+          </div>
+        </div>
+        <aside class="intake" id="dropzone">
+          <div class="intake-corner">文档入口</div>
+          <p class="intake-number" id="intake-count">00</p>
+          <p>将混合格式文档拖到这里</p>
+          <small>DOCX / XLSX / PDF / PPTX / HTML / EPUB / IPYNB</small>
+        </aside>
+      </section>
+
+      <section class="metrics" aria-label="语料库摘要">
+        <article>
+          <span>解析成功</span>
+          <strong id="metric-ready">0</strong>
+          <small id="metric-errors">0 个解析错误</small>
+        </article>
+        <article>
+          <span>已识别格式</span>
+          <strong id="metric-formats">0</strong>
+          <small id="format-list">等待添加文档</small>
+        </article>
+        <article>
+          <span>可检索记录</span>
+          <strong id="metric-chunks">0</strong>
+          <small id="metric-output">已抽取 0 字节</small>
+        </article>
+        <article class="metric-export">
+          <span>可移植输出</span>
+          <div>
+            <button id="export-jsonl" type="button" disabled>导出 JSONL</button>
+            <button id="export-manifest" type="button" disabled>导出清单</button>
+          </div>
+          <small>确定性输出 / 不生成向量</small>
+        </article>
+      </section>
+
+      <section class="workbench">
+        <aside class="registry">
+          <div class="section-heading">
+            <div>
+              <p>01 / 文件登记</p>
+              <h2>语料库文件</h2>
+            </div>
+            <button id="clear" type="button" disabled>清空</button>
+          </div>
+          <div class="filters" role="group" aria-label="筛选文件">
+            <button class="filter active" data-filter="all" type="button">全部</button>
+            <button class="filter" data-filter="ready" type="button">成功</button>
+            <button class="filter" data-filter="error" type="button">失败</button>
+          </div>
+          <ol id="file-list" class="file-list">
+            <li class="empty-state">尚未添加文档。</li>
+          </ol>
+        </aside>
+
+        <section class="search-room">
+          <div class="section-heading">
+            <div>
+              <p>02 / 跨文档检索</p>
+              <h2>资料定位</h2>
+            </div>
+            <span class="engine-state" id="engine-state">WASM 已就绪</span>
+          </div>
+          <form id="search-form" class="search-form">
+            <input
+              id="query"
+              type="search"
+              placeholder="检索所有已解析段落和表格行"
+              autocomplete="off"
+              disabled
+            />
+            <button type="submit" disabled>检索</button>
+          </form>
+          <div id="search-summary" class="search-summary">
+            添加文档或加载中文样例后开始检索。
+          </div>
+          <ol id="search-results" class="search-results"></ol>
+        </section>
+
+        <aside class="viewer">
+          <div class="section-heading">
+            <div>
+              <p>03 / 抽取结果</p>
+              <h2 id="viewer-title">尚未选择</h2>
+            </div>
+            <button id="copy" type="button" disabled>复制</button>
+          </div>
+          <div id="viewer-meta" class="viewer-meta"></div>
+          <pre id="viewer-output">选择已解析文件后查看规范化输出。</pre>
+        </aside>
+      </section>
+    </main>
+
+    <footer>
+      <span>Spoor 完全运行在当前浏览器标签页内。</span>
+      <span>刷新页面即可清除当前工作集。</span>
+    </footer>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root {
+  color: #1a1a17;
+  background: #e7e3d7;
+  font-family: 'IBM Plex Mono', monospace;
+  --ink: #1a1a17;
+  --paper: #f4f0e5;
+  --rust: #ef5123;
+  --blue: #9fc8ff;
+  --line: 2px solid var(--ink);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: #d8d2c2; }
+button, input { font: inherit; }
+main { min-height: 100vh; background: var(--paper); }
+nav, .status, .result-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+nav { padding: 14px 22px; border-bottom: var(--line); font-size: 10px; font-weight: 600; letter-spacing: .13em; }
+.brand { font-family: 'Archivo Black'; font-size: 18px; letter-spacing: -.05em; }
+.runtime { display: flex; align-items: center; gap: 8px; }
+.runtime i { width: 8px; height: 8px; border-radius: 50%; background: #32b43a; box-shadow: 0 0 0 4px #32b43a2b; }
+.hero { position: relative; padding: clamp(32px, 6vw, 72px) clamp(24px, 7vw, 84px) 38px; border-bottom: var(--line); overflow: hidden; }
+.hero::after { content: 'RUST'; position: absolute; right: -20px; bottom: -64px; color: transparent; font-family: 'Archivo Black'; font-size: clamp(110px, 22vw, 260px); -webkit-text-stroke: 2px #1a1a1717; transform: rotate(-7deg); }
+.eyebrow, aside > span, .result-head, .status { font-size: 10px; font-weight: 600; letter-spacing: .13em; }
+h1 { position: relative; z-index: 1; margin: 14px 0 17px; font-family: 'Archivo Black'; font-size: clamp(44px, 8vw, 94px); line-height: .91; letter-spacing: -.075em; }
+h1 em { color: var(--rust); font-style: normal; }
+.hero p { position: relative; z-index: 1; max-width: 660px; line-height: 1.7; }
+.desk { display: grid; grid-template-columns: 1fr 260px; border-bottom: var(--line); }
+.work { border-right: var(--line); }
+#dropzone { min-height: 250px; display: grid; place-content: center; justify-items: center; gap: 12px; background: repeating-linear-gradient(-45deg, transparent 0 22px, #1a1a170c 23px 24px); cursor: pointer; transition: background-color .2s; }
+#dropzone.active, #dropzone:hover { background-color: var(--blue); }
+#dropzone input { display: none; }
+.target { display: grid; place-items: center; width: 70px; height: 70px; border: var(--line); border-radius: 50%; background: var(--rust); color: var(--paper); font-size: 36px; transition: transform .2s; }
+#dropzone:hover .target { transform: rotate(90deg); }
+#dropzone strong { font-family: 'Archivo Black'; font-size: 20px; }
+#dropzone small { font-size: 10px; }
+.status { padding: 10px 14px; border-top: var(--line); border-bottom: var(--line); }
+form { display: grid; grid-template-columns: 1fr auto; }
+form input, form button, .result-head button { border: 0; border-radius: 0; padding: 14px; background: var(--paper); }
+form button { border-left: var(--line); color: var(--paper); background: var(--ink); cursor: pointer; }
+button:disabled, input:disabled { opacity: .4; cursor: not-allowed; }
+aside { padding: 22px; background: var(--blue); }
+ol { margin: 24px 0 0; padding: 0; list-style: none; counter-reset: flow; }
+li { position: relative; padding: 0 0 28px 38px; opacity: .38; font-size: 11px; line-height: 1.45; }
+li::before { counter-increment: flow; content: '0' counter(flow); position: absolute; left: 0; top: -5px; display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--ink); border-radius: 50%; }
+li:not(:last-child)::after { content: ''; position: absolute; left: 12px; top: 20px; width: 1px; height: 26px; background: var(--ink); }
+li.active { opacity: 1; font-weight: 600; }
+.result-head { padding: 10px 14px; border-bottom: var(--line); }
+.result-head button { padding: 6px 10px; border: 1px solid var(--ink); cursor: pointer; font-size: 9px; }
+pre { min-height: 270px; max-height: 420px; margin: 0; padding: 22px; overflow: auto; background: #1c1d19; color: #e7efc8; white-space: pre-wrap; word-break: break-word; font-size: 11px; line-height: 1.7; }
+
+@media (max-width: 760px) {
+  .desk { grid-template-columns: 1fr; }
+  .work { border-right: 0; }
+  aside { border-top: var(--line); }
+}

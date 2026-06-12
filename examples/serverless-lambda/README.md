@@ -1,11 +1,17 @@
-# AWS Lambda example
+# AWS Lambda 二进制 Layer 示例
 
-This handler expects the `spoor` Linux binary in a Lambda Layer at
-`/opt/bin/spoor`. Invoke with `{ "filename": "report.pdf", "body": "...",
-"isBase64Encoded": true }`. The parsing process remains isolated from the
-Node.js runtime and inherits the CLI parse/output limits.
+该 handler 期望 Linux 版 `spoor` 位于 Lambda Layer 的 `/opt/bin/spoor`。
+调用参数形如：
 
-Run the integration smoke test against a locally built binary:
+```json
+{ "filename": "报告.pdf", "body": "...", "isBase64Encoded": true }
+```
+
+解析运行在独立 CLI 子进程中，继承 CLI 的 64 MiB 共享解析预算与 256 KiB
+输出上限。Lambda 自身的请求 payload、临时磁盘、内存和超时限制仍需由部署方
+配置；大文件更适合通过 S3 事件传递对象位置，而不是直接放入同步请求。
+
+本地集成测试：
 
 ```bash
 cargo build -p spoor-cli

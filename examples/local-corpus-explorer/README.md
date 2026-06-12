@@ -1,0 +1,31 @@
+# 浏览器本地语料库
+
+这个纯浏览器工作台把一批混合本地文档转换为可检索语料库，全程不上传文件。
+它是浏览器侧的主能力示例，取代了功能重复的单文件“本地文件对话”示例。
+
+它展示：
+
+- DOCX、XLSX、PDF、PPTX、HTML、EPUB、IPYNB 与基础格式的混合批处理；
+- 单文件失败不阻断整个批次，并展示稳定错误码；
+- 跨文档本地全文检索；
+- 确定性的 JSONL chunk 与 manifest 导出，便于接入后续索引流水线。
+
+从 `v0.8.3` 起，发布的 `@harrisonwang/spoor-wasm` 默认包含全部重点格式。
+示例为每个文件设置 16 MiB 解析上限，但没有设置文件数量和语料库总大小上限；
+实际容量受浏览器内存限制，生产实现应自行增加批次数量、总字节数和取消机制。
+XLSX/CSV 仍遵循 spoor 的表格预览契约，默认最多保留每张表前 100 条数据行。
+
+```bash
+cd examples/local-corpus-explorer
+npm install
+npm run dev
+```
+
+验证与部署：
+
+```bash
+npm run check
+npm run deploy
+```
+
+Pages 项目地址为 `spoor-corpus-demo.pages.dev`。

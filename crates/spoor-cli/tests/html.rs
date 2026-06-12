@@ -57,3 +57,13 @@ fn links_preserve_href() {
     let out = extract_fixture("html/06_links.html", Format::Html);
     assert_snapshot!(out);
 }
+
+#[test]
+fn semantic_blocks_preserve_llm_relevant_content() {
+    let out = extract_fixture("html/07_semantic_blocks.html", Format::Html);
+
+    assert!(out.contains("> 文档结构比视觉样式更重要。"));
+    assert!(out.contains("`spoor 报告.docx`"));
+    assert!(out.contains("```\n风险 = \"需要复核\""));
+    assert!(out.contains("[图片：季度收入趋势图]"));
+}

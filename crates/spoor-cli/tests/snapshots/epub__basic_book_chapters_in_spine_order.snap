@@ -2,12 +2,18 @@
 source: tests/epub.rs
 expression: out
 ---
-Chapter One
-This is the first chapter, with a
-bold
-word.
-Item A
-Item B
+## Chapter 1
 
-Chapter Two
+# Chapter One
+
+This is the first chapter, with a **bold** word.
+
+- Item A
+
+- Item B
+
+## Chapter 2
+
+# Chapter Two
+
 Second chapter content.

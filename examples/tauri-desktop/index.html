@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spoor Tauri 本地文档桌面</title>
+  </head>
+  <body>
+    <main>
+      <nav data-tauri-drag-region>
+        <span class="brand">spoor_</span>
+        <span class="runtime"><i></i> TAURI / RUST CORE</span>
+        <span>桌面示例—02</span>
+      </nav>
+
+      <section class="hero">
+        <span class="eyebrow">本地文档工作台</span>
+        <h1>Rust 在里面，<br /><em>文件留在这里。</em></h1>
+        <p>完整 Tauri 2 桌面集成：前端只负责交互，解析由链接到应用内部的 spoor-core 执行。</p>
+      </section>
+
+      <section class="desk">
+        <div class="work">
+          <label id="dropzone" for="picker">
+            <span class="target">＋</span>
+            <strong>拖入或选择文档</strong>
+            <small>PDF · EPUB · IPYNB · DOCX · PPTX · XLSX · CSV · HTML · TEXT</small>
+            <input id="picker" type="file" />
+          </label>
+          <div class="status"><span id="status">等待文档</span><span id="stats">RUST / LOCAL</span></div>
+          <form id="query">
+            <input id="question" placeholder="检索关键词，例如：风险、收入、行动项" disabled />
+            <button disabled>检索段落</button>
+          </form>
+        </div>
+
+        <aside>
+          <span>COMMAND 调用轨迹</span>
+          <ol id="trace">
+            <li class="active">等待文档</li>
+            <li>invoke parse_document</li>
+            <li>spoor-core 解析</li>
+          </ol>
+        </aside>
+      </section>
+
+      <section class="result">
+        <div class="result-head"><span>结构化输出</span><button id="copy" disabled>复制结果</button></div>
+        <pre id="output">选择文档后，Tauri command 返回的结构化结果会显示在这里。</pre>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

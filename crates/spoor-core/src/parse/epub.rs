@@ -5,7 +5,6 @@ use crate::source::Source;
 use anyhow::{Result, anyhow};
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
-use scraper::{Html, Selector};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -25,17 +24,24 @@ pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<String> {
     }
 
     let mut out = String::new();
-    for name in spine {
+    for (index, name) in spine.into_iter().enumerate() {
         let bytes = limits::read_zip_bytes(&mut zip, &name, max_parse_bytes)?;
-        let html = decode_text(&bytes);
-        let chapter = strip_html(&html);
+        let chapter_source = Source::new(&bytes, Some(&name), Some("application/xhtml+xml"));
+        let chapter = super::html::extract(&chapter_source, max_parse_bytes)?;
+        let heading = format!("## Chapter {}\n\n", index + 1);
         limits::ensure_parse_size(
-            out.len().saturating_add(chapter.len()).saturating_add(1),
+            out.len()
+                .saturating_add(heading.len())
+                .saturating_add(chapter.len())
+                .saturating_add(1),
             max_parse_bytes,
             "EPUB extracted text",
         )?;
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(&heading);
         out.push_str(&chapter);
-        out.push('\n');
     }
     Ok(out)
 }
@@ -117,20 +123,4 @@ fn join_opf_relative(opf_path: &str, href: &str) -> String {
         .map(Path::to_path_buf)
         .unwrap_or_default();
     base.join(href).to_string_lossy().replace('\\', "/")
-}
-
-fn strip_html(html: &str) -> String {
-    let doc = Html::parse_document(html);
-    let body = Selector::parse("body").unwrap();
-    let mut out = String::new();
-    for b in doc.select(&body) {
-        for t in b.text() {
-            let t = t.trim();
-            if !t.is_empty() {
-                out.push_str(t);
-                out.push('\n');
-            }
-        }
-    }
-    out
 }

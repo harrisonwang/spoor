@@ -38,7 +38,8 @@
 
 ## 工程约束
 
-- **WASM 体积**：已按格式提供 `core-formats` / `full` 编译特性。2026-06-11 实测发布包 gzip 后分别为 588,506 bytes 与 858,149 bytes，均低于目标。
+- **WASM 体积**：已按格式提供 `core-formats` / `full` 编译特性。2026-06-12
+  实测发布包 gzip 后分别为 591,942 bytes 与 861,544 bytes，均低于 3 MiB 目标。
 - **WASM 包只发 npm**：`spoor-wasm` 是 wasm-bindgen 入口，没有 Rust 消费者，不占 crates.io。
 - **命名占位已核查（2026-06-11）**：crates.io 的 `spoor` / `spoor-core` / `spoor-cli` 可用；PyPI 的 `spoor` 已被占用，改用 `pyspoor`；npm 的 `spoor` 已被占用，改用 `@harrisonwang/spoor`。发布前需再次确认。
 - **不为假设场景预先优化**：每个交付形态以可运行的 demo 作为交付标准，不做"理论上能跑"。
@@ -100,7 +101,11 @@ spoor/
 │
 └── examples/
     ├── serverless-lambda/        # AWS Lambda（spoor-cli 二进制或 WASM）
-    ├── chat-with-local-file/     # 纯前端离线"本地文件对话"
+    ├── local-corpus-explorer/    # 纯前端混合文档语料库与 JSONL 导出
+    ├── rag-ingestion/            # Python binding 驱动的确定性索引摄取流水线
+    ├── electron-desktop/         # 完整 Electron + Node binding 桌面应用
+    ├── tauri-desktop/            # 完整 Tauri 2 + spoor-core 桌面应用
+    ├── cloudflare-pages/         # Pages 本地 WASM + Pages Functions 边缘解析
     └── tauri-core/               # Tauri command 形态的 Rust core 集成
 ```
 
@@ -122,6 +127,6 @@ spoor/
 2. ✅ **行为等价拆分 + 更名**：解析模块位于 `spoor-core`，CLI 只负责 adapter；原测试与快照全量通过。
 3. ✅ **PyO3 MVP**：`pyspoor` 提供 `parse_bytes` / `parse_path` / `detect_format` 与 dataclass/exception 封装。
 4. ✅ **napi-rs 与 WASM 入口**：两套 WASM 特性均通过 wasm32 编译并完成体积实测；Node 使用平台子包发布模式。
-5. ✅ **场景 demo 验收**：浏览器拖拽、CF Worker、Tauri、Lambda 与本地文件检索示例均已落地。
+5. ✅ **场景 demo 验收**：浏览器拖拽、CF Worker / Pages、Tauri、Electron、Lambda、本地混合语料库与 RAG / 搜索索引摄取示例均已落地。
 
 每一步的验收标准（与 CLI 输出一致、跨入口结果等价、先跑基准测试）沿用 [架构设计](../design/architecture.md)，此处不赘述。
