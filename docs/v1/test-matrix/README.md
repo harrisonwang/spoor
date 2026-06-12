@@ -40,6 +40,6 @@
 - 是否防止一个真实回归？
 - 是否覆盖安全、性能或 token 经济边界？
 - 是否只是在换一组内容，但行为和已有用例重复？
-- 是否需要同步更新 `docs/ENGINEERING_DECISIONS.md`？
+- 是否需要同步更新 `docs/v1/design/decisions.md`？
 
 如果只是精确输出变化，不新增契约，通常只需要审阅 snapshot diff；如果新增了行为边界，就应更新对应格式的测试矩阵。

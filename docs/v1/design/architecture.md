@@ -2,7 +2,7 @@
 
 ## 结论
 
-第二阶段已采用 Cargo workspace，并交付 PyO3、napi-rs 与 WASM 绑定。拆分依据是稳定的嵌入边界，而不是未经测量的“子进程更慢”假设；基准与体积脚本位于 `benchmarks/`。
+第二阶段已采用 Cargo workspace，并交付 PyO3、napi-rs 与 WASM 绑定。拆分依据是稳定的嵌入边界，而非未经测量的"子进程更慢"假设；基准与体积脚本位于 `benchmarks/`。
 
 目标不是维护两套产品，而是维护一个确定性的 Rust 引擎和多个薄适配层：
 
@@ -27,8 +27,7 @@ Rust packages 为 `spoor-core`、`spoor-cli`，CLI binary 为 `spoor`。Python d
 - 不依赖 `clap`、glob、stdin/stdout/stderr、进程退出和网络请求。
 - 不依赖 Python，也不把 CLI 字符串错误暴露为 API 契约。
 - 保持每次调用独立，不使用可变全局状态，便于并发和测试。
-- PDF 内存提取器已移除上游直接 stdout/stderr 诊断与 path API；core
-  不会重定向或写入宿主进程流。
+- PDF 内存提取器已移除上游直接 stdout/stderr 诊断与 path API；core 不重定向或写入宿主进程流。
 
 核心 API：
 
@@ -64,7 +63,7 @@ pub struct SpoorError {
 
 `max_parse_bytes` 属于 core。`max_output_bytes`、Markdown truncation marker、stderr warning 数量和 exit code 属于 CLI adapter。Python 应优先拿到结构化结果，而不是被迫消费截断后的 CLI 字符串。
 
-路径读取可由 CLI/Python adapter 提供 `parse_path` 便利 API；URL、glob 和 stdin 保持在 CLI 层。这样 core 保持离线、确定性，也避免绑定层继承爬虫策略。
+路径读取可由 CLI/Python adapter 提供 `parse_path` 便捷 API；URL、glob 和 stdin 保持在 CLI 层。这样 core 保持离线、确定性，也避免绑定层继承爬虫策略。
 
 ## 错误契约
 

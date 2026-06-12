@@ -1,41 +1,35 @@
-# Security model
+# 安全模型
 
-`spoor` parses untrusted documents using a small, deterministic Rust core. The
-core is designed to fail with structured errors, but it is not a substitute
-for an operating-system or WASM-runtime memory limit.
+`spoor` 使用一个小型、确定性的 Rust core 来解析不可信文档。core 的设计目标是失败时返回结构化错误，但它**不能替代**操作系统或 WASM runtime 的内存限制。
 
-## Trust boundaries
+## 信任边界
 
-- `spoor-core` accepts bytes plus explicit metadata. It performs no file,
-  network, stdin/stdout, environment, or process I/O.
-- CLI, Python, Node, and WASM adapters are responsible for acquiring bytes.
-- Native parsers execute in the caller's process. Use the CLI in a constrained
-  worker/container when crash or RSS isolation is required.
-- No parser executes document macros, notebook code, scripts, formulas, or
-  embedded binaries.
+- `spoor-core` 只接收 bytes 和显式 metadata，不执行任何文件、网络、stdin/stdout、环境变量或进程 I/O。
+- CLI、Python、Node 和 WASM 适配层负责获取 bytes。
+- 原生解析器在调用方进程内执行。需要崩溃隔离或 RSS 限制时，应把 CLI 放在受限的 worker/容器中运行。
+- 所有解析器均不执行文档宏、notebook 代码、脚本、公式或内嵌二进制。
 
-## Threats and defenses
+## 威胁与防御
 
-| Threat | Defense | Default | Configurable |
+| 威胁 | 防御措施 | 默认值 | 可配置 |
 | --- | --- | --- | --- |
-| Oversized input | Core checks input bytes before detection/parsing | 64 MiB shared parse budget | `ParseLimits.max_parse_bytes`; CLI `--max-parse-bytes` |
-| ZIP bomb: too many entries | Reject archive during central-directory inspection | 10,000 entries | No public override |
-| ZIP bomb: huge entry | Reject declared or observed oversized entry | 50 MiB per entry | No public override |
-| ZIP bomb: extreme ratio | Reject suspicious declared compression ratio | 200× | No public override |
-| ZIP bomb: aggregate expansion | Sum declared uncompressed sizes against parse budget | Shared parse budget | `max_parse_bytes` |
-| Output/token exhaustion | CLI truncates total stdout with an in-band marker or JSON warning | 256 KiB | CLI `--max-output-bytes` |
-| Encrypted/legacy Office ambiguity | Intercept OLE/CFB before extension fallback | Stable `legacy_or_encrypted_office` error | No |
-| Encrypted PDF | Map decryption failure to stable error | Stable `encrypted_pdf` error | No |
-| Image-only PDF hallucination risk | Reject empty text layer instead of returning silent success | Stable `image_only_pdf` error | No |
-| Corrupt container | Reject unreadable ZIP-based formats | Stable `invalid_container` error | No |
-| Unknown parser failure or Rust panic | Catch unwind at every public core boundary and normalize to `parse_failed` with stage | Structured `SpoorError` | No |
-| Infinite/very slow parse | No in-process timeout; caller must enforce deadline | Not provided | Worker/container/WASM host |
-| Native dependency abort/segfault | Not recoverable in-process | Not provided | Prefer CLI worker isolation for hostile tenants |
+| 输入过大 | core 在检测/解析前检查输入字节量 | 64 MiB 共享解析预算 | `ParseLimits.max_parse_bytes`；CLI `--max-parse-bytes` |
+| ZIP 炸弹：条目过多 | 在中央目录检查阶段拒绝存档 | 10,000 条 | 无公开覆写接口 |
+| ZIP 炸弹：单条目过大 | 拒绝声明或实测超大的条目 | 每条目 50 MiB | 无公开覆写接口 |
+| ZIP 炸弹：压缩比异常 | 拒绝可疑的声明压缩比 | 200× | 无公开覆写接口 |
+| ZIP 炸弹：总解压量膨胀 | 将声明未压缩大小累计计入解析预算 | 共享解析预算 | `max_parse_bytes` |
+| 输出/token 耗尽 | CLI 截断 stdout，附加带内 marker 或 JSON warning | 256 KiB | CLI `--max-output-bytes` |
+| 加密/旧版 Office 混淆 | 在扩展名回退前拦截 OLE/CFB | 稳定错误 `legacy_or_encrypted_office` | 否 |
+| 加密 PDF | 将解密失败映射为稳定错误 | 稳定错误 `encrypted_pdf` | 否 |
+| 纯图片 PDF 幻觉风险 | 拒绝空文本层，而非静默返回成功 | 稳定错误 `image_only_pdf` | 否 |
+| 损坏的容器 | 拒绝无法读取的 ZIP 类格式 | 稳定错误 `invalid_container` | 否 |
+| 未知解析失败或 Rust panic | 在所有公共 core 边界捕获 unwind，归一化为带 stage 的 `parse_failed` | 结构化 `SpoorError` | 否 |
+| 解析无限/极慢 | 无进程内超时；调用方必须自行设置时限 | 不提供 | worker/容器/WASM host |
+| 原生依赖 abort/segfault | 进程内不可恢复 | 不提供 | 对恶意多租户场景优先用 CLI worker 隔离 |
 
-## Stable failure contract
+## 稳定失败契约
 
-Every public adapter exposes `code`, `reason`, `hint`, `recoverable`, and
-`stage`. Consumers must branch on `code`, never localized prose. Current codes:
+所有公共入口统一暴露 `code`、`reason`、`hint`、`recoverable` 和 `stage` 字段。消费者**必须按 `code` 分支**，不得依赖本地化的自然语言文本。当前稳定错误码：
 
 - `image_only_pdf`
 - `parse_budget_exceeded`
@@ -45,11 +39,8 @@ Every public adapter exposes `code`, `reason`, `hint`, `recoverable`, and
 - `invalid_container`
 - `parse_failed`
 
-The core, CLI, Python, Node, and WASM test paths exercise shared budget,
-invalid-container, compression-bomb, and CFB/OLE interception behavior.
+core、CLI、Python、Node 和 WASM 的测试路径均覆盖共享预算、无效容器、压缩炸弹和 CFB/OLE 拦截行为。
 
-## Reporting
+## 报告漏洞
 
-Do not open a public issue for a suspected vulnerability. Send a private
-security advisory through the repository's Security tab with a minimal
-reproducer, affected version, and observed impact.
+**不要**为疑似漏洞创建公开 issue。请通过仓库的 Security 标签页提交私有安全通告，附上最小复现步骤、受影响版本和观察到的实际影响。
