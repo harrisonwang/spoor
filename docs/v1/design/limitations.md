@@ -23,10 +23,10 @@
 
 | 格式 | 当前保留 | 当前明确不保留或限制 |
 | --- | --- | --- |
-| DOCX | 标题 1-6、段落、粗体/斜体、列表、小型 GFM 表格、链接、脚注、Unicode、插入型 tracked changes | 样式与版式、图片、删除型 tracked changes、comments/endnotes、复杂编号重启、复杂合并表格、图表与嵌入对象 |
+| DOCX | 标题 1-6、段落、粗体/斜体、列表、小型 GFM 表格、链接、脚注、Unicode、插入型 tracked changes；合并表格/视觉对象省略会返回 warning | 样式与版式、图片、删除型 tracked changes、comments/endnotes、复杂编号重启、复杂合并表格、图表与嵌入对象 |
 | XLSX | sheet、range、标题/表头/preamble、文本/数字/布尔/日期、缓存公式结果、错误单元格、合并单元格左上值 | 默认每个 sheet 仅前 100 条数据行；不计算公式、不保留公式表达式/样式/图表；Excel 1904 date system 尚未完整处理；一个 sheet 按一个逻辑 table 输出 |
-| PDF | text layer、页顺序、`## Page N` 边界 | 不做 OCR；不恢复版面/标题语义；不保证复杂多栏阅读顺序；不去重页眉页脚、不修复断词；纯图片与加密 PDF 返回结构化错误 |
-| PPTX | 按数字 slide 顺序输出文本、小型表格、speaker notes | 不按 shape 坐标恢复视觉阅读顺序；不保留 bullet 层级、主题、动画、图表、图片或嵌入对象 |
+| PDF | text layer、页顺序、`## Page N` 边界；混合文档的无文本页与明显可疑文本层返回带页码 warning | 不做 OCR；不恢复版面/标题语义；不保证复杂多栏阅读顺序；不去重页眉页脚、不修复断词；纯图片与加密 PDF 返回结构化错误 |
+| PPTX | 按数字 slide 顺序输出文本、小型表格、speaker notes；合并表格/视觉对象省略会返回带 slide 位置 warning | 不按 shape 坐标恢复视觉阅读顺序；不保留 bullet 层级、主题、动画、图表、图片或嵌入对象 |
 | HTML / URL | 优先 `article`、其次 `main`、最后 `body`；标题、段落、列表、链接、表格、引用块、代码块、image alt、粗体/斜体；跳过常见导航与脚本噪声 | 不是完整 readability 引擎；不解析相对链接；caption 与嵌套列表仍有限；core 不抓 URL，只有 CLI 会发起网络请求 |
 | EPUB | OPF spine 阅读顺序、章节边界，并复用 HTML Markdown renderer | 不处理 DRM、固定版式视觉结构、图片/音视频、复杂导航与 CSS 布局 |
 | IPYNB | markdown cell、code cell、cell 顺序、kernelspec language hint | 从不执行代码；跳过 raw cell、outputs、widgets、HTML output 与 base64 图片 |
@@ -85,6 +85,11 @@ Cloudflare 官方当前还限制 Worker 压缩后体积为 Free 3 MB / Paid 10 M
   LLM 调用仍可能泄露内容。
 - `ParseResult` 的 `warnings`、表格的 `truncated` / `warnings` 和稳定错误 `code`
   是调用方必须处理的契约，不能只判断调用是否成功。
+- Agent 应使用 `parse` 或 `parse_document_result` 获取文档完整性 warnings；
+  `parse_document` 只返回 Markdown，兼容调用会丢弃 warnings。
+- 当前文档 warning code 为 `pdf_page_no_text_layer`、
+  `pdf_page_suspicious_text_layer`、`merged_table_structure_not_preserved` 和
+  `embedded_visuals_omitted`；位置使用 `location.kind=page/slide`。
 - 边缘公开示例用于展示能力，不是生产文档服务。生产部署至少需要认证、限流、
   请求审计、内容保留策略、超时与并发隔离。
 
@@ -92,8 +97,10 @@ Cloudflare 官方当前还限制 Worker 压缩后体积为 Free 3 MB / Paid 10 M
 
 近期最值得增强的不是继续增加格式数量，而是：
 
-1. 为 HTML/EPUB 补齐嵌套列表、caption、相对链接与更稳定的 readability。
-2. 改善 PDF 多栏顺序、页眉页脚去重与断词修复；OCR 保持外置。
+1. 建立 PDF 布局中间模型，再改善多栏顺序、页眉页脚分类、标题层级与断词；OCR 保持外置。
+2. 建立 DOCX/PPTX 表格 span 模型，把合并表格从“显式 warning”升级为 HTML 降级输出。
 3. 为 PPTX 按 shape 坐标恢复阅读顺序并保留 bullet 层级。
 4. 为 Python/Node 暴露表格分页筛选能力，避免 RAG 管道只能摄取默认预览。
-5. 在批处理宿主中增加超时、取消和总批次预算；core 内不承诺硬超时。
+5. 在解析器中增加工作量预算，并由批处理宿主提供可真实终止的超时、取消和隔离。
+
+完整能力决策与先后顺序见根目录 [capabilities.md](../../../capabilities.md)。

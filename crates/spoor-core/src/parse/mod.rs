@@ -1,6 +1,7 @@
 use crate::detect::Format;
 use crate::engine::TableFilter;
 use crate::json_schema::TableEntry;
+use crate::result::SpoorWarning;
 use crate::source::Source;
 use anyhow::{Result, anyhow};
 
@@ -30,11 +31,30 @@ mod xlsx;
 #[cfg(any(feature = "office", feature = "epub"))]
 mod xml;
 
-pub fn extract(source: &Source<'_>, format: Format, max_parse_bytes: usize) -> Result<String> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ExtractedMarkdown {
+    pub markdown: String,
+    pub warnings: Vec<SpoorWarning>,
+}
+
+impl ExtractedMarkdown {
+    fn without_warnings(markdown: String) -> Self {
+        Self {
+            markdown,
+            warnings: Vec::new(),
+        }
+    }
+}
+
+pub fn extract(
+    source: &Source<'_>,
+    format: Format,
+    max_parse_bytes: usize,
+) -> Result<ExtractedMarkdown> {
     match format {
         Format::Url => extract_url(source, max_parse_bytes),
         Format::Html => extract_html(source, max_parse_bytes),
-        Format::Markdown => markdown::extract(source),
+        Format::Markdown => markdown::extract(source).map(ExtractedMarkdown::without_warnings),
         Format::Pdf => extract_pdf(source, max_parse_bytes),
         Format::Docx => extract_docx(source, max_parse_bytes),
         Format::Xlsx => extract_xlsx(source, max_parse_bytes),
@@ -42,7 +62,7 @@ pub fn extract(source: &Source<'_>, format: Format, max_parse_bytes: usize) -> R
         Format::Csv => extract_csv(source, max_parse_bytes),
         Format::Ipynb => extract_ipynb(source, max_parse_bytes),
         Format::Epub => extract_epub(source, max_parse_bytes),
-        Format::PlainText => plain::extract(source),
+        Format::PlainText => plain::extract(source).map(ExtractedMarkdown::without_warnings),
     }
 }
 
@@ -65,12 +85,12 @@ pub fn extract_table_entries(
 macro_rules! format_extractor {
     ($name:ident, $feature:literal, $module:ident) => {
         #[cfg(feature = $feature)]
-        fn $name(source: &Source<'_>, max_parse_bytes: usize) -> Result<String> {
-            $module::extract(source, max_parse_bytes)
+        fn $name(source: &Source<'_>, max_parse_bytes: usize) -> Result<ExtractedMarkdown> {
+            $module::extract(source, max_parse_bytes).map(ExtractedMarkdown::without_warnings)
         }
 
         #[cfg(not(feature = $feature))]
-        fn $name(_source: &Source<'_>, _max_parse_bytes: usize) -> Result<String> {
+        fn $name(_source: &Source<'_>, _max_parse_bytes: usize) -> Result<ExtractedMarkdown> {
             Err(anyhow!(concat!(
                 "format disabled at compile time; enable feature ",
                 $feature
@@ -81,13 +101,31 @@ macro_rules! format_extractor {
 
 format_extractor!(extract_url, "html", url);
 format_extractor!(extract_html, "html", html);
-format_extractor!(extract_pdf, "pdf", pdf);
-format_extractor!(extract_docx, "office", docx);
 format_extractor!(extract_xlsx, "tables", xlsx);
-format_extractor!(extract_pptx, "office", pptx);
 format_extractor!(extract_csv, "tables", csv);
 format_extractor!(extract_ipynb, "notebook", ipynb);
 format_extractor!(extract_epub, "epub", epub);
+
+macro_rules! diagnostic_extractor {
+    ($name:ident, $feature:literal, $module:ident) => {
+        #[cfg(feature = $feature)]
+        fn $name(source: &Source<'_>, max_parse_bytes: usize) -> Result<ExtractedMarkdown> {
+            $module::extract(source, max_parse_bytes)
+        }
+
+        #[cfg(not(feature = $feature))]
+        fn $name(_source: &Source<'_>, _max_parse_bytes: usize) -> Result<ExtractedMarkdown> {
+            Err(anyhow!(concat!(
+                "format disabled at compile time; enable feature ",
+                $feature
+            )))
+        }
+    };
+}
+
+diagnostic_extractor!(extract_pdf, "pdf", pdf);
+diagnostic_extractor!(extract_docx, "office", docx);
+diagnostic_extractor!(extract_pptx, "office", pptx);
 
 #[cfg(feature = "tables")]
 fn extract_csv_tables(

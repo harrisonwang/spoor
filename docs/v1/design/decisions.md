@@ -104,8 +104,8 @@ CLI 行为约定：
 当前采用 Cargo workspace。`spoor-core` 的正式 API（以 `crates/spoor-core/src/lib.rs` 的 re-export 为准）：
 
 - 请求与限制：`ParseRequest`、`ParseLimits`、`TableFilter`
-- 检测与解析：`detect_format`、`parse`、`parse_document`、`parse_tables`
-- 类型化结果：`ParseResult`、`ParseContent`、`DocumentResult`、`TableResult`、`ParseStats`
+- 检测与解析：`detect_format`、`parse`、`parse_document_result`、`parse_document`、`parse_tables`
+- 类型化结果：`ParseResult`、`ParseContent`、`DocumentResult`、`TableResult`、`ParseStats`、`SpoorWarning`、`WarningCode`、`WarningLocation`
 - 类型化错误：`SpoorError`、`ErrorCode`、`ParseStage`
 - format / mode：`Format`、`OutputMode`、`default_mode_for`
 - table JSON schema 类型：`JsonOutput`、`HeaderInfo`、`PreambleInfo`、`RowRange`、`TABLE_SCHEMA_VERSION`、`TABLE_USAGE`、`a1_range`、`cells_to_values`
@@ -113,6 +113,11 @@ CLI 行为约定：
 解析器细节保持在 `parse/` 内部，不作为公共 API。文件、URL、stdin、glob
 和进程退出仅存在于 `spoor-cli`；Python 的 `parse_path` 也是绑定层的便捷函数。
 公共边界不暴露 `anyhow::Result`。
+
+`parse` 和 `parse_document_result` 保留结构化完整性 warnings，供 Agent 按稳定
+code 与 `location.kind=page/slide` 分支。`parse_document` 仅用于明确不需要诊断的
+Markdown 兼容调用。CLI Markdown 模式把文档 warning 同时写入 stderr 和 stdout
+尾部，避免 Agent 只消费 stdout 时错过降级信息。
 
 ## 输出模式
 

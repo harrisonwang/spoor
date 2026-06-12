@@ -8,6 +8,8 @@
 从 `v0.8.3` 起，发布的 `@harrisonwang/spoor-wasm` 默认包含 DOCX、XLSX、
 PDF、PPTX、HTML、EPUB、IPYNB 以及基础文本格式。示例在两种模式下都设置
 16 MiB 请求/解析上限；生产环境还应增加身份认证、限流和外层超时。
+两种模式都返回完整 `ParseResult`，页面会显式提示解析完整性 warnings，Agent
+应按 warning code 与 page/slide 位置决定是否信任或转交外部 OCR/VLM。
 
 浏览器构建使用 `vite-plugin-wasm`。Pages Functions 导入 `.wasm` 时得到
 `WebAssembly.Module`，因此 `src/edge-spoor.ts` 会显式实例化模块。

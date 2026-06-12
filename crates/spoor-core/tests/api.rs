@@ -1,6 +1,8 @@
 use spoor_core::{
     ErrorCode, Format, ParseContent, ParseLimits, ParseRequest, detect_format, parse,
 };
+#[cfg(feature = "pdf")]
+use spoor_core::{WarningCode, WarningLocation, parse_document_result};
 
 #[test]
 fn bytes_only_document_api_returns_typed_result() {
@@ -20,6 +22,7 @@ fn bytes_only_document_api_returns_typed_result() {
 }
 
 #[test]
+#[cfg(feature = "tables")]
 fn bytes_only_table_api_returns_native_tables() {
     let bytes = include_bytes!("../../spoor-cli/tests/fixtures/csv/01_basic.csv");
     let mut request = ParseRequest::new(bytes);
@@ -55,4 +58,24 @@ fn parse_budget_is_enforced_before_detection() {
 
     let error = parse(&request).unwrap_err();
     assert_eq!(error.code, ErrorCode::ParseBudgetExceeded);
+}
+
+#[test]
+#[cfg(feature = "pdf")]
+fn document_result_api_preserves_structured_warning_locations() {
+    let bytes = include_bytes!("../../spoor-cli/tests/fixtures/pdf/05_mixed_text_and_image.pdf");
+    let mut request = ParseRequest::new(bytes);
+    request.source_name = Some("mixed.pdf");
+
+    let result = parse_document_result(&request).unwrap();
+
+    assert_eq!(result.warnings.len(), 1);
+    assert_eq!(result.warnings[0].code, WarningCode::PdfPageNoTextLayer);
+    assert_eq!(
+        result.warnings[0].location,
+        Some(WarningLocation::Page { number: 2 })
+    );
+    let serialized = serde_json::to_value(result).unwrap();
+    assert_eq!(serialized["warnings"][0]["location"]["kind"], "page");
+    assert_eq!(serialized["warnings"][0]["location"]["number"], 2);
 }

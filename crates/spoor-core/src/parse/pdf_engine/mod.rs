@@ -2163,41 +2163,29 @@ pub fn extract_text_from_mem_encrypted<PW: AsRef<[u8]>>(
 }
 
 
-fn extract_text_by_page(doc: &Document, page_num: u32) -> Result<String, OutputError> {
-    let mut s = String::new();
-    {
+fn extract_text_by_pages(doc: &Document) -> Result<Vec<String>, OutputError> {
+    let mut pages = Vec::new();
+    let empty_resources = Dictionary::new();
+    let mut processor = Processor::new();
+    for (page_num, object_id) in doc.get_pages() {
+        let mut s = String::new();
         let mut output = PlainTextOutput::new(&mut s);
-        output_doc_page(doc, &mut output, page_num)?;
+        output_doc_inner(page_num, object_id, doc, &mut processor, &mut output, &empty_resources)?;
+        pages.push(s);
     }
-    Ok(s)
+    Ok(pages)
 }
 
 pub fn extract_text_from_mem_by_pages(buffer: &[u8]) -> Result<Vec<String>, OutputError> {
-    let mut v = Vec::new();
-    {
-        let mut doc = Document::load_mem(buffer)?;
-        maybe_decrypt(&mut doc)?;
-        let mut page_num = 1;
-        while let Ok(content) = extract_text_by_page(&doc, page_num) {
-            v.push(content);
-            page_num += 1;
-        }
-    }
-    Ok(v)
+    let mut doc = Document::load_mem(buffer)?;
+    maybe_decrypt(&mut doc)?;
+    extract_text_by_pages(&doc)
 }
 
 pub fn extract_text_from_mem_by_pages_encrypted<PW: AsRef<[u8]>>(buffer: &[u8], password: PW) -> Result<Vec<String>, OutputError> {
-    let mut v = Vec::new();
-    {
-        let mut doc = Document::load_mem(buffer)?;
-        doc.decrypt(password)?;
-        let mut page_num = 1;
-        while let Ok(content) = extract_text_by_page(&doc, page_num) {
-            v.push(content);
-            page_num += 1;
-        }
-    }
-    Ok(v)
+    let mut doc = Document::load_mem(buffer)?;
+    doc.decrypt(password)?;
+    extract_text_by_pages(&doc)
 }
 
 

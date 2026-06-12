@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """PPTX fixtures."""
+import base64
+from io import BytesIO
 from pathlib import Path
 from pptx import Presentation
 from pptx.util import Inches
@@ -66,6 +68,32 @@ def build_05_ordering():
         s = prs.slides.add_slide(prs.slide_layouts[5])
         s.shapes.title.text = f"Slide number {i}"
     prs.save(OUT / "05_ordering.pptx")
+
+
+# ---------- 06: merged table must emit an integrity warning ----------
+def build_06_merged_table():
+    prs = Presentation()
+    s = prs.slides.add_slide(prs.slide_layouts[5])
+    s.shapes.title.text = "Merged table"
+    tbl = s.shapes.add_table(2, 2, Inches(1), Inches(2), Inches(4), Inches(2)).table
+    tbl.cell(0, 0).text = "Merged header"
+    tbl.cell(0, 0).merge(tbl.cell(0, 1))
+    tbl.cell(1, 0).text = "A"
+    tbl.cell(1, 1).text = "B"
+    prs.save(OUT / "06_merged_table.pptx")
+
+
+# ---------- 07: omitted picture must emit an integrity warning ----------
+def build_07_embedded_visual():
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+        "+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    )
+    prs = Presentation()
+    s = prs.slides.add_slide(prs.slide_layouts[5])
+    s.shapes.title.text = "Picture slide"
+    s.shapes.add_picture(BytesIO(png), Inches(1), Inches(2), Inches(2), Inches(2))
+    prs.save(OUT / "07_embedded_visual.pptx")
 
 
 if __name__ == "__main__":

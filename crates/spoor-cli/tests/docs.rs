@@ -32,6 +32,26 @@ fn skill_and_readme_document_every_error_code() {
     }
 }
 
+/// Successful parsing can still be incomplete. Every stable warning code must
+/// be taught to agents and listed for wrapper authors.
+#[test]
+fn skill_and_readme_document_every_warning_code() {
+    let skill = read_doc("skills/spoor/SKILL.md");
+    let readme = read_doc("README.md");
+
+    for code in spoor_core::WarningCode::ALL {
+        let code = code.as_str();
+        assert!(
+            skill.contains(code),
+            "skills/spoor/SKILL.md 缺少完整性警告码 {code} 的处置指引"
+        );
+        assert!(
+            readme.contains(code),
+            "README.md 的 warning code 表缺少 {code}"
+        );
+    }
+}
+
 /// SKILL.md must teach the two stable truncation signals — the `> [!WARNING]`
 /// block prefix and the JSON `truncated` field — and must not teach matching
 /// the old English marker text that no longer exists.

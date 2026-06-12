@@ -59,7 +59,7 @@ class FileRecord:
     input_bytes: int
     output_bytes: int | None
     chunks: int
-    warnings: tuple[dict[str, str], ...]
+    warnings: tuple[dict[str, Any], ...]
     error: dict[str, Any] | None
 
 
@@ -279,7 +279,7 @@ def chunks_from_result(
     return records
 
 
-def result_warnings(result: Any) -> tuple[dict[str, str], ...]:
+def result_warnings(result: Any) -> tuple[dict[str, Any], ...]:
     warnings = list(result.warnings)
     if result.content.kind == "tables":
         for table in result.content.value.tables:

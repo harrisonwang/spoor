@@ -15,6 +15,17 @@ test('detects and parses text bytes', () => {
   assert.equal(result.stats.format, 'text');
 });
 
+test('exposes stable warning code and location', () => {
+  const mixedPdf = readFileSync(join(
+    __dirname,
+    '../../../crates/spoor-cli/tests/fixtures/pdf/05_mixed_text_and_image.pdf',
+  ));
+  const result = parseBytes(mixedPdf, { sourceName: 'mixed.pdf' });
+
+  assert.equal(result.warnings[0].code, 'pdf_page_no_text_layer');
+  assert.deepEqual(result.warnings[0].location, { kind: 'page', number: 2 });
+});
+
 test('exposes stable structured error fields', () => {
   assert.throws(
     () => parseBytes(Buffer.alloc(2048), { format: 'text', maxParseBytes: 1024 }),

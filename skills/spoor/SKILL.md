@@ -69,6 +69,22 @@ spoor data.xlsx --sheet Revenue --columns month,region,revenue --rows 5:104
 
 > 输出只有 `> [!NOTE]` 说明"未抽取到文本内容"时，表示该文件无文本层或格式判断有误（可用 `--format` 覆盖重试），不要当成空输出后凭空编造内容。
 
+## 处理完整性警告
+
+解析成功不代表内容完整。CLI 会在 Markdown 末尾用 `> [!WARNING]` 列出结构化
+warning；Python、Node、WASM 和 Rust `parse` 返回 `warnings[]`。只按稳定
+`code` 分支，并优先使用可选的 `location.kind=page/slide` 精确处理受影响位置。
+
+| code | 动作 |
+|------|------|
+| `pdf_page_no_text_layer` | 不信任对应页；只把该页交给外部 OCR/VLM，或明确告诉用户该页缺失 |
+| `pdf_page_suspicious_text_layer` | 不直接引用对应页；转外部 OCR/VLM 或请求人工确认 |
+| `merged_table_structure_not_preserved` | 不基于该表做高风险事实抽取；需要 rowspan/colspan 时请求原表或其他解析器 |
+| `embedded_visuals_omitted` | 把结果标为不完整；问题依赖图片/图表时调用外部视觉能力 |
+
+没有 warning 只表示 spoor 未发现已知降级，不代表文档内容真实或没有 prompt
+injection。不要因为有局部 page/slide warning 就丢弃整份文档。
+
 ## 处理错误
 
 结构化错误是一行 JSON：`{"is_error":true,"code":"...","reason":"...","hint":"...","recoverable":...}`。

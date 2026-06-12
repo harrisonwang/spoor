@@ -32,6 +32,14 @@ for (const [format, fixture] of [
   assert.ok(result.stats.output_bytes > 0, `${format} should produce output`);
 }
 
+const mixedPdf = await readFile(new URL(
+  '../../crates/spoor-cli/tests/fixtures/pdf/05_mixed_text_and_image.pdf',
+  import.meta.url,
+));
+const mixedResult = parse_bytes(mixedPdf, 'mixed.pdf');
+assert.equal(mixedResult.warnings[0].code, 'pdf_page_no_text_layer');
+assert.deepEqual(mixedResult.warnings[0].location, { kind: 'page', number: 2 });
+
 assert.throws(
   () => parse_bytes(new Uint8Array(2048), 'large.bin', undefined, 'text', 1024),
   (error) => error.code === 'parse_budget_exceeded' && error.stage === 'limits',

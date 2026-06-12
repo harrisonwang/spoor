@@ -2,7 +2,9 @@ use crate::detect::{self, Format};
 use crate::error::{ParseStage, SpoorError};
 use crate::limits::{DEFAULT_MAX_PARSE_BYTES, ensure_parse_size};
 use crate::parse as parsers;
-use crate::result::{DocumentResult, ParseContent, ParseResult, ParseStats, TableResult};
+use crate::result::{
+    DocumentResult, ParseContent, ParseResult, ParseStats, SpoorWarning, TableResult,
+};
 use crate::source::Source;
 use serde::{Deserialize, Serialize};
 
@@ -86,20 +88,44 @@ fn parse_inner(request: &ParseRequest<'_>) -> SpoorResult<ParseResult> {
             stats: ParseStats::new(request.bytes.len(), output_bytes, format),
         })
     } else {
-        let document = parse_document_with_format(request, format)?;
+        let (document, warnings) = parse_document_with_format(request, format)?;
         let output_bytes = document.markdown.len();
         Ok(ParseResult {
             content: ParseContent::Document(document),
-            warnings: Vec::new(),
+            warnings,
             stats: ParseStats::new(request.bytes.len(), output_bytes, format),
         })
     }
 }
 
-pub fn parse_document(request: &ParseRequest<'_>) -> SpoorResult<DocumentResult> {
+/// Parse a document and return its structured warnings.
+///
+/// Agents should prefer this function or [`parse`] over [`parse_document`],
+/// because `parse_document` intentionally returns only the rendered document.
+pub fn parse_document_result(request: &ParseRequest<'_>) -> SpoorResult<ParseResult> {
     catch_boundary(ParseStage::Parse, || {
         let format = detect_format(request)?;
-        parse_document_with_format(request, format)
+        let (document, warnings) = parse_document_with_format(request, format)?;
+        let output_bytes = document.markdown.len();
+        Ok(ParseResult {
+            content: ParseContent::Document(document),
+            warnings,
+            stats: ParseStats::new(request.bytes.len(), output_bytes, format),
+        })
+    })
+}
+
+/// Parse a document and return only its rendered Markdown.
+///
+/// This compatibility helper discards structured warnings. Agents should use
+/// [`parse`] or [`parse_document_result`] instead.
+pub fn parse_document(request: &ParseRequest<'_>) -> SpoorResult<DocumentResult> {
+    parse_document_result(request).and_then(|result| match result.content {
+        ParseContent::Document(document) => Ok(document),
+        ParseContent::Tables(_) => Err(SpoorError::parse_failed(
+            "内部错误：文档解析返回了表格结果",
+            ParseStage::Parse,
+        )),
     })
 }
 
@@ -113,21 +139,24 @@ pub fn parse_tables(request: &ParseRequest<'_>) -> SpoorResult<TableResult> {
 fn parse_document_with_format(
     request: &ParseRequest<'_>,
     format: Format,
-) -> SpoorResult<DocumentResult> {
-    let markdown = parsers::extract(&source(request), format, request.limits.max_parse_bytes)
+) -> SpoorResult<(DocumentResult, Vec<SpoorWarning>)> {
+    let extracted = parsers::extract(&source(request), format, request.limits.max_parse_bytes)
         .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Parse))?;
     ensure_parse_size(
-        markdown.len(),
+        extracted.markdown.len(),
         request.limits.max_parse_bytes,
         "extracted document text",
     )
     .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Limits))?;
 
-    Ok(DocumentResult {
-        source: source_label(request).to_string(),
-        format,
-        markdown,
-    })
+    Ok((
+        DocumentResult {
+            source: source_label(request).to_string(),
+            format,
+            markdown: extracted.markdown,
+        },
+        extracted.warnings,
+    ))
 }
 
 fn parse_tables_with_format(

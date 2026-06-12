@@ -90,7 +90,10 @@ async function handle(file) {
     parsedText = extractText(result);
     paragraphs = parsedText.split(/\n{2,}/).map((value) => value.trim()).filter(Boolean);
     output.textContent = JSON.stringify(result, null, 2);
-    status.textContent = `完成 / ${file.name}`;
+    const warningCount = result.warnings?.length ?? 0;
+    status.textContent = warningCount
+      ? `完成但有 ${warningCount} 条完整性警告 / ${file.name}`
+      : `完成 / ${file.name}`;
     stats.textContent = `${file.size.toLocaleString()} 字节 / ${result.stats.format.toUpperCase()}`;
     query.disabled = false;
     search.disabled = false;
@@ -100,6 +103,7 @@ async function handle(file) {
       mode === 'local' ? '浏览器内调用 WASM' : 'Pages Function 执行 WASM',
       `识别格式 ${result.stats.format}`,
       `生成 ${paragraphs.length} 个可检索块`,
+      ...(warningCount ? [`保留 ${warningCount} 条 Agent 完整性警告`] : []),
     ]);
   } catch (error) {
     const normalized = normalizeError(error);

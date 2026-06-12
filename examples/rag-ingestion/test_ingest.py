@@ -104,6 +104,19 @@ class ResultDispatchTests(unittest.TestCase):
             "table_preview_truncated",
         )
 
+    def test_structured_warning_location_is_preserved(self) -> None:
+        warning = {
+            "code": "pdf_page_no_text_layer",
+            "message": "第 2 页没有可提取文本层。",
+            "location": {"kind": "page", "number": 2},
+        }
+        result = namespace(
+            warnings=(warning,),
+            content=namespace(kind="document"),
+        )
+
+        self.assertEqual(ingest.result_warnings(result), (warning,))
+
 
 class DiscoveryAndOutputTests(unittest.TestCase):
     def test_discovery_filters_unknown_and_hidden_files(self) -> None:

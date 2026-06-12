@@ -8,7 +8,7 @@
 
 - **按形态自动分派输出**：文档型（PDF/DOCX/PPTX/EPUB/IPYNB/HTML）→ Markdown，表格型（CSV/XLSX）→ JSON（headers + preview + range）
 - **离线、单二进制**：无云依赖，不需要 Python 环境，敏感文件本地处理
-- **Agent 友好**：结构化错误（稳定 error code）、输出自描述（usage/truncated/warnings）、JSON 扁平 `tables[]`
+- **Agent 友好**：结构化错误、带页/slide 位置的完整性 warnings、输出自描述（usage/truncated/warnings）、JSON 扁平 `tables[]`
 - **内建防御**：限制单次解析的数据量、ZIP 炸弹三重防御（entry/ratio/total cap）、256 KiB 输出封顶
 - **重点格式**：DOCX、XLSX、PDF、PPTX、HTML/URL、EPUB、IPYNB
 - **基础格式**：CSV/TSV、Markdown、纯文本与常见代码文件
@@ -76,6 +76,9 @@ request.source_name = Some("report.docx");
 let result = spoor_core::parse(&request)?;
 ```
 
+Agent 应优先调用 `parse` 并处理 `warnings[]`。只需要 Markdown 的兼容场景可调用
+`parse_document`；需要强制文档输出并保留 warnings 时使用 `parse_document_result`。
+
 Python 使用 `pyspoor` 的 `parse_bytes` / `parse_path`；Node.js 使用
 `@harrisonwang/spoor`；浏览器与 Edge Runtime 使用
 `@harrisonwang/spoor-wasm`。从 `v0.8.3` 起，发布的 WASM 包默认包含全部重点格式；
@@ -124,6 +127,18 @@ Python 使用 `pyspoor` 的 `parse_bytes` / `parse_path`；Node.js 使用
 | `invalid_container` | ZIP 类容器为空、损坏或类型不符 |
 | `parse_failed` | 已规范化的其他解析失败；查看 `stage` |
 
+成功解析也可能包含完整性 warning。当前稳定 warning code：
+
+| code | 含义 |
+| --- | --- |
+| `pdf_page_no_text_layer` | 混合 PDF 的某页没有可提取文本层 |
+| `pdf_page_suspicious_text_layer` | 某页文本层包含明显可疑字符或 glyph 占位符 |
+| `merged_table_structure_not_preserved` | DOCX/PPTX 合并单元格未被 GFM 表格完整保留 |
+| `embedded_visuals_omitted` | DOCX/PPTX 中存在未进入文本输出的视觉对象 |
+
+warning 可带 `location: {kind: "page" | "slide", number}`。CLI 会同时在 stderr 和
+Markdown stdout 尾部显示这些 warning，避免只读 stdout 的 Agent 静默忽略。
+
 ## 开发
 
 ```bash
@@ -145,6 +160,7 @@ cargo insta review
 
 | 文档 | 内容 |
 | --- | --- |
+| [能力决策与演进规划](capabilities.md) | Agent 场景、调研结论、立即实现项、后续路线与明确边界 |
 | [定位与工程规划](docs/v1/planning/overview.md) | 一句话定位、设计原则、交付形态、推进顺序 |
 | [路线图与竞品分析](docs/v1/planning/roadmap.md) | 竞品调研、平台约束、差异化自查 |
 | [架构设计](docs/v1/design/architecture.md) | Core 边界、错误契约、PyO3 接口、迁移顺序 |

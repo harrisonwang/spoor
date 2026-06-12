@@ -20,9 +20,25 @@ export type ParseContent =
   | { kind: 'document'; value: DocumentResult }
   | { kind: 'tables'; value: TableResult };
 
+export type WarningLocation =
+  | { kind: 'page'; number: number }
+  | { kind: 'slide'; number: number };
+
+export type WarningCode =
+  | 'pdf_page_no_text_layer'
+  | 'pdf_page_suspicious_text_layer'
+  | 'merged_table_structure_not_preserved'
+  | 'embedded_visuals_omitted';
+
+export interface SpoorWarning {
+  code: WarningCode;
+  message: string;
+  location?: WarningLocation;
+}
+
 export interface ParseResult {
   content: ParseContent;
-  warnings: Array<{ code: string; message: string }>;
+  warnings: SpoorWarning[];
   stats: {
     input_bytes: number;
     output_bytes: number;

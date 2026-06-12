@@ -1,7 +1,28 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
+
+WarningCode = Literal[
+    "pdf_page_no_text_layer",
+    "pdf_page_suspicious_text_layer",
+    "merged_table_structure_not_preserved",
+    "embedded_visuals_omitted",
+]
+
+
+class WarningLocation(TypedDict):
+    kind: Literal["page", "slide"]
+    number: int
+
+
+class _SpoorWarningRequired(TypedDict):
+    code: WarningCode
+    message: str
+
+
+class SpoorWarning(_SpoorWarningRequired, total=False):
+    location: WarningLocation
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,7 +54,7 @@ class ParseStats:
 @dataclass(frozen=True, slots=True)
 class ParseResult:
     content: ParseContent
-    warnings: tuple[dict[str, str], ...]
+    warnings: tuple[SpoorWarning, ...]
     stats: ParseStats
 
 

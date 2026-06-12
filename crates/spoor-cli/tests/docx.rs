@@ -4,9 +4,9 @@
 //! diverge from Anthropic's extract-text behavior.
 
 mod common;
-use common::extract_fixture;
+use common::{extract_fixture, parse_fixture};
 use insta::assert_snapshot;
-use spoor_core::Format;
+use spoor_core::{Format, WarningCode};
 
 #[test]
 fn basic_headings_and_inline_formatting() {
@@ -124,4 +124,16 @@ fn tracked_changes_accept_inserts_drop_deletes() {
     // (A `--show-changes` flag could be added later.)
     let out = extract_fixture("docx/12_tracked_changes.docx", Format::Docx);
     assert_snapshot!(out);
+}
+
+#[test]
+fn merged_table_and_visual_omissions_are_explicit() {
+    let merged = parse_fixture("docx/14_merged_table.docx", Format::Docx);
+    let visual = parse_fixture("docx/15_embedded_visual.docx", Format::Docx);
+
+    assert_eq!(
+        merged.warnings[0].code,
+        WarningCode::MergedTableStructureNotPreserved
+    );
+    assert_eq!(visual.warnings[0].code, WarningCode::EmbeddedVisualsOmitted);
 }

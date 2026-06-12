@@ -127,6 +127,22 @@ fn image_only_pdf_emits_machine_readable_error() {
 }
 
 #[test]
+fn document_integrity_warnings_are_visible_in_stdout_and_stderr() {
+    let source = fixture_path("pdf/05_mixed_text_and_image.pdf");
+    let output = spoor_bin().arg(source).output().expect("run spoor");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
+    assert!(stdout.contains("> [!WARNING]"));
+    assert!(stdout.contains("pdf_page_no_text_layer"));
+    assert!(stdout.contains(r#""kind":"page","number":2"#));
+
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    assert!(stderr.contains("warning: 解析结果不完整"));
+    assert!(stderr.contains("pdf_page_no_text_layer"));
+}
+
+#[test]
 fn cfb_container_emits_legacy_or_encrypted_office_error() {
     let dir = TestDir::new("cfb_container_emits_legacy_or_encrypted_office_error");
     let source = dir.path().join("locked.docx");

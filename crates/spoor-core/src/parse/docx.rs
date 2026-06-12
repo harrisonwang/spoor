@@ -1,6 +1,8 @@
 use crate::limits;
 use crate::output::MarkdownBuilder;
+use crate::parse::ExtractedMarkdown;
 use crate::parse::xml::attr;
+use crate::result::{SpoorWarning, WarningCode};
 use crate::source::Source;
 use anyhow::{Result, anyhow};
 use quick_xml::events::{BytesStart, Event};
@@ -12,7 +14,7 @@ use std::collections::HashMap;
 /// We deliberately match by local name and ignore namespace prefixes. This
 /// keeps custom-prefix OOXML fixtures working without relying on version-
 /// sensitive namespace-reader APIs.
-pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<String> {
+pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<ExtractedMarkdown> {
     let mut zip = limits::open_zip_archive(source.bytes(), "docx", max_parse_bytes)?;
 
     let styles_xml = limits::read_zip_text_optional(&mut zip, "word/styles.xml", max_parse_bytes)?
@@ -44,7 +46,61 @@ pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<String> {
         &rel_map,
         &mut md,
     )?;
-    md.build()
+    let markdown = md.build()?;
+    Ok(ExtractedMarkdown {
+        markdown,
+        warnings: feature_warnings(scan_document_features(&document_xml)?),
+    })
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct DocumentFeatures {
+    merged_table: bool,
+    embedded_visuals: bool,
+}
+
+fn scan_document_features(xml: &str) -> Result<DocumentFeatures> {
+    let mut reader = Reader::from_str(xml);
+    let mut buf = Vec::new();
+    let mut features = DocumentFeatures::default();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => match e.local_name().as_ref() {
+                b"gridSpan" => {
+                    features.merged_table |= attr(&e, b"val")
+                        .and_then(|value| value.parse::<usize>().ok())
+                        .is_none_or(|span| span > 1);
+                }
+                b"vMerge" => features.merged_table = true,
+                b"drawing" | b"pict" | b"object" => features.embedded_visuals = true,
+                _ => {}
+            },
+            Ok(Event::Eof) => break,
+            Err(error) => return Err(anyhow!("XML parse error: {error}")),
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    Ok(features)
+}
+
+fn feature_warnings(features: DocumentFeatures) -> Vec<SpoorWarning> {
+    let mut warnings = Vec::new();
+    if features.merged_table {
+        warnings.push(SpoorWarning::new(
+            WarningCode::MergedTableStructureNotPreserved,
+            "DOCX 包含合并单元格；当前 Markdown 表格不保留 rowspan/colspan，Agent 不应把空白或重复单元格解释为原始结构。",
+        ));
+    }
+    if features.embedded_visuals {
+        warnings.push(SpoorWarning::new(
+            WarningCode::EmbeddedVisualsOmitted,
+            "DOCX 包含图片、图表、绘图或嵌入对象；spoor 当前仅提取其中可见文本，Agent 应把结果视为不完整并按需调用外部视觉解析。",
+        ));
+    }
+    warnings
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -667,5 +723,35 @@ mod wrap_run_text_tests {
             wrap_run_text("x", false, false, &Some("https://a".to_string())),
             "[x](https://a)"
         );
+    }
+}
+
+#[cfg(test)]
+mod feature_warning_tests {
+    use super::{DocumentFeatures, feature_warnings, scan_document_features};
+
+    #[test]
+    fn detects_merged_cells_and_visuals_by_local_name() {
+        let features = scan_document_features(
+            r#"<x:document xmlns:x="urn:test"><x:gridSpan x:val="2"/><x:vMerge/><x:drawing/></x:document>"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            features,
+            DocumentFeatures {
+                merged_table: true,
+                embedded_visuals: true,
+            }
+        );
+        assert_eq!(feature_warnings(features).len(), 2);
+    }
+
+    #[test]
+    fn single_column_grid_span_is_not_a_merge() {
+        let features =
+            scan_document_features(r#"<w:gridSpan xmlns:w="urn:test" w:val="1"/>"#).unwrap();
+
+        assert!(!features.merged_table);
     }
 }

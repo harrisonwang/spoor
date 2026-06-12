@@ -3,9 +3,9 @@ use crate::source::{ResolvedInput, is_url, resolve_input};
 use anyhow::{Context, Result, anyhow};
 use glob::{MatchOptions, glob_with};
 use spoor_core::{
-    Format, JsonOutput, OutputMode, ParseLimits, ParseRequest, SpoorError, TableFilter,
-    default_mode_for, detect_format, limit_markdown_output, parse_document, parse_tables,
-    render_documents, render_json_limited,
+    Format, JsonOutput, OutputMode, ParseContent, ParseLimits, ParseRequest, SpoorError,
+    SpoorWarning, TableFilter, default_mode_for, detect_format, limit_markdown_output,
+    parse_document_result, parse_tables, render_documents, render_json_limited,
 };
 
 const MAX_FAILURE_DIAGNOSTICS: usize = 20;
@@ -56,6 +56,7 @@ pub(crate) fn run(cli: Cli) -> Result<String> {
         OutputMode::Md => {
             warn_unused_narrowing(&cli);
             let mut documents = Vec::with_capacity(resolved.len());
+            let mut parse_warnings = Vec::new();
             let mut extracted_bytes = 0usize;
             for resolved in &resolved {
                 let request = request_for(
@@ -64,8 +65,15 @@ pub(crate) fn run(cli: Cli) -> Result<String> {
                     TableFilter::default(),
                     resolved.max_parse_bytes,
                 );
-                match parse_document(&request) {
-                    Ok(document) => {
+                match parse_document_result(&request) {
+                    Ok(result) => {
+                        let ParseContent::Document(document) = result.content else {
+                            failures.push(InputFailure::from_error(
+                                resolved.input.label.clone(),
+                                &anyhow!("内部错误：Markdown 模式返回了表格结果"),
+                            ));
+                            continue;
+                        };
                         if let Err(error) = retain_within_parse_budget(
                             &mut extracted_bytes,
                             document.markdown.len(),
@@ -77,6 +85,12 @@ pub(crate) fn run(cli: Cli) -> Result<String> {
                                 &error,
                             ));
                         } else {
+                            parse_warnings.extend(result.warnings.into_iter().map(|warning| {
+                                InputWarning {
+                                    source: resolved.input.label.clone(),
+                                    warning,
+                                }
+                            }));
                             documents.push(document);
                         }
                     }
@@ -90,20 +104,26 @@ pub(crate) fn run(cli: Cli) -> Result<String> {
                 return Err(all_failed_error(&failures));
             }
             report_skipped(&failures);
+            report_parse_warnings(&parse_warnings);
             let markdown = render_documents(&documents, mode)?;
-            // Reserve room for the in-band skipped block so the total stays
-            // within --max-output-bytes; appending it after truncation keeps
-            // it from being the first thing the truncation cut eats.
-            let skipped_block = markdown_skipped_block(&failures);
+            // Reserve room for in-band diagnostics so the total remains within
+            // --max-output-bytes and agents do not lose warnings first.
+            let diagnostics = [
+                markdown_skipped_block(&failures),
+                markdown_parse_warnings_block(&parse_warnings),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<String>();
+            let limited_diagnostics = limit_markdown_output(diagnostics, cli.max_output_bytes);
+            report_output_truncation(limited_diagnostics.warning.as_deref());
             let budget = cli
                 .max_output_bytes
-                .saturating_sub(skipped_block.as_deref().map_or(0, str::len));
+                .saturating_sub(limited_diagnostics.content.len());
             let limited = limit_markdown_output(markdown, budget);
             report_output_truncation(limited.warning.as_deref());
             let mut content = limited.content;
-            if let Some(block) = skipped_block {
-                content.push_str(&block);
-            }
+            content.push_str(&limited_diagnostics.content);
             Ok(content)
         }
         OutputMode::Json => {
@@ -151,6 +171,20 @@ pub(crate) fn run(cli: Cli) -> Result<String> {
             report_output_truncation(limited.warning.as_deref());
             Ok(limited.content)
         }
+    }
+}
+
+#[derive(Debug)]
+struct InputWarning {
+    source: String,
+    warning: SpoorWarning,
+}
+
+impl InputWarning {
+    fn display(&self) -> String {
+        let warning = serde_json::to_string(&self.warning)
+            .unwrap_or_else(|_| format!("{}: {}", self.warning.code, self.warning.message));
+        format!("{}: {warning}", self.source)
     }
 }
 
@@ -244,6 +278,18 @@ fn report_skipped(failures: &[InputFailure]) {
     }
 }
 
+fn report_parse_warnings(warnings: &[InputWarning]) {
+    for warning in warnings.iter().take(MAX_FAILURE_DIAGNOSTICS) {
+        eprintln!("warning: 解析结果不完整 {}", warning.display());
+    }
+    if warnings.len() > MAX_FAILURE_DIAGNOSTICS {
+        eprintln!(
+            "warning: 另有 {} 条解析完整性警告未显示",
+            warnings.len() - MAX_FAILURE_DIAGNOSTICS
+        );
+    }
+}
+
 /// In-band counterpart of `report_skipped` for markdown mode. Agents often
 /// read only stdout (e.g. redirected to a file), so a partial-batch failure
 /// must be visible there too — mirroring the JSON envelope's `warnings[]`.
@@ -266,6 +312,31 @@ fn markdown_skipped_block(failures: &[InputFailure]) -> Option<String> {
         block.push_str(&format!(
             "> - …… 另有 {} 个失败未列出\n",
             failures.len() - MAX_FAILURE_DIAGNOSTICS
+        ));
+    }
+
+    Some(block)
+}
+
+fn markdown_parse_warnings_block(warnings: &[InputWarning]) -> Option<String> {
+    if warnings.is_empty() {
+        return None;
+    }
+
+    let mut block = format!(
+        "\n> [!WARNING]\n> spoor 返回 {} 条解析完整性警告；Agent 不应把受影响位置视为完整原文：\n",
+        warnings.len()
+    );
+    for warning in warnings.iter().take(MAX_FAILURE_DIAGNOSTICS) {
+        block.push_str(&format!(
+            "> - {}\n",
+            warning.display().replace(['\r', '\n'], " ")
+        ));
+    }
+    if warnings.len() > MAX_FAILURE_DIAGNOSTICS {
+        block.push_str(&format!(
+            "> - …… 另有 {} 条解析完整性警告未列出\n",
+            warnings.len() - MAX_FAILURE_DIAGNOSTICS
         ));
     }
 

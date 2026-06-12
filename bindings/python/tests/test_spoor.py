@@ -2,10 +2,8 @@ from pathlib import Path
 
 from spoor import SpoorError, detect_format, parse_bytes, parse_path
 
-ADVERSARIAL = (
-    Path(__file__).resolve().parents[3]
-    / "crates/spoor-cli/tests/fixtures/adversarial"
-)
+FIXTURES = Path(__file__).resolve().parents[3] / "crates/spoor-cli/tests/fixtures"
+ADVERSARIAL = FIXTURES / "adversarial"
 
 
 def test_parse_bytes_returns_typed_result() -> None:
@@ -23,6 +21,13 @@ def test_parse_path(tmp_path: Path) -> None:
     path = tmp_path / "note.txt"
     path.write_text("hello path\n")
     assert parse_path(path).content.value.markdown == "hello path\n"
+
+
+def test_warning_code_and_location_match_core_contract() -> None:
+    result = parse_path(FIXTURES / "pdf/05_mixed_text_and_image.pdf")
+
+    assert result.warnings[0]["code"] == "pdf_page_no_text_layer"
+    assert result.warnings[0]["location"] == {"kind": "page", "number": 2}
 
 
 def test_error_fields_are_stable() -> None:

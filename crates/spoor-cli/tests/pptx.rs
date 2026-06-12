@@ -1,9 +1,9 @@
 //! PPTX integration tests.
 
 mod common;
-use common::extract_fixture;
+use common::{extract_fixture, parse_fixture};
 use insta::assert_snapshot;
-use spoor_core::Format;
+use spoor_core::{Format, WarningCode, WarningLocation};
 
 #[test]
 fn basic_slides_with_titles_and_bullets() {
@@ -50,4 +50,24 @@ fn slide_ordering_handles_double_digits() {
     // Test verifies this for slides 1..12.
     let out = extract_fixture("pptx/05_ordering.pptx", Format::Pptx);
     assert_snapshot!(out);
+}
+
+#[test]
+fn merged_table_and_visual_omissions_are_located_by_slide() {
+    let merged = parse_fixture("pptx/06_merged_table.pptx", Format::Pptx);
+    let visual = parse_fixture("pptx/07_embedded_visual.pptx", Format::Pptx);
+
+    assert_eq!(
+        merged.warnings[0].code,
+        WarningCode::MergedTableStructureNotPreserved
+    );
+    assert_eq!(
+        merged.warnings[0].location,
+        Some(WarningLocation::Slide { number: 1 })
+    );
+    assert_eq!(visual.warnings[0].code, WarningCode::EmbeddedVisualsOmitted);
+    assert_eq!(
+        visual.warnings[0].location,
+        Some(WarningLocation::Slide { number: 1 })
+    );
 }

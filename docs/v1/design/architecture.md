@@ -52,6 +52,12 @@ pub struct ParseResult {
     pub stats: ParseStats,
 }
 
+pub struct SpoorWarning {
+    pub code: WarningCode,
+    pub message: String,
+    pub location: Option<WarningLocation>,
+}
+
 pub struct SpoorError {
     pub code: ErrorCode,
     pub reason: String,
@@ -61,7 +67,7 @@ pub struct SpoorError {
 }
 ```
 
-`max_parse_bytes` 属于 core。`max_output_bytes`、Markdown truncation marker、stderr warning 数量和 exit code 属于 CLI adapter。Python 应优先拿到结构化结果，而不是被迫消费截断后的 CLI 字符串。
+`max_parse_bytes` 属于 core。`max_output_bytes`、Markdown truncation marker、stderr warning 数量和 exit code 属于 CLI adapter。Python 应优先拿到结构化结果，而不是被迫消费截断后的 CLI 字符串。Agent 应调用 `parse` 或 `parse_document_result` 并处理 warnings；`parse_document` 是只取 Markdown 的兼容便捷接口。
 
 路径读取可由 CLI/Python adapter 提供 `parse_path` 便捷 API；URL、glob 和 stdin 保持在 CLI 层。这样 core 保持离线、确定性，也避免绑定层继承爬虫策略。
 

@@ -5,11 +5,14 @@ from typing import Any
 
 from . import _native
 from .exceptions import SpoorError
-from .types import ParseResult, parse_result
+from .types import ParseResult, SpoorWarning, WarningCode, WarningLocation, parse_result
 
 __all__ = [
     "ParseResult",
     "SpoorError",
+    "SpoorWarning",
+    "WarningCode",
+    "WarningLocation",
     "detect_format",
     "parse_bytes",
     "parse_path",

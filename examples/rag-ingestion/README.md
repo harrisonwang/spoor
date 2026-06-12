@@ -10,7 +10,7 @@
 - 自动分派文档型与表格型结果；
 - 按段落切分文档，并为表格输出 schema 与行记录；
 - 内容派生的稳定 chunk ID；
-- 局部失败与结构化错误；
+- 局部失败、结构化错误与带位置的完整性 warnings；
 - 确定性的 `chunks.jsonl` 和 `manifest.json`。
 
 ```bash

@@ -217,6 +217,28 @@ def build_13_formatted_whitespace_only_runs():
     )
 
 
+# ---------- 14: merged table must emit an integrity warning ----------
+def build_14_merged_table():
+    document_xml = """<?xml version="1.0"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body><w:tbl><w:tr>
+<w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>Merged header</w:t></w:r></w:p></w:tc>
+</w:tr><w:tr>
+<w:tc><w:p><w:r><w:t>A</w:t></w:r></w:p></w:tc>
+<w:tc><w:p><w:r><w:t>B</w:t></w:r></w:p></w:tc>
+</w:tr></w:tbl></w:body></w:document>"""
+    write_minimal_docx(OUT / "14_merged_table.docx", document_xml)
+
+
+# ---------- 15: omitted drawing must emit an integrity warning ----------
+def build_15_embedded_visual():
+    document_xml = """<?xml version="1.0"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body><w:p><w:r><w:t>Text before visual.</w:t></w:r><w:r><w:drawing/></w:r></w:p></w:body>
+</w:document>"""
+    write_minimal_docx(OUT / "15_embedded_visual.docx", document_xml)
+
+
 # ============================================================
 # helper to write a minimal valid docx with custom XML
 # ============================================================

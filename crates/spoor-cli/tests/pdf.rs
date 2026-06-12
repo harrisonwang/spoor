@@ -1,10 +1,10 @@
 //! PDF integration tests.
 
 mod common;
-use common::{extract_fixture, extract_fixture_err};
+use common::{extract_fixture, extract_fixture_err, parse_fixture};
 use insta::assert_snapshot;
 use serde_json::json;
-use spoor_core::Format;
+use spoor_core::{Format, WarningCode, WarningLocation};
 
 #[test]
 fn basic_text_layer() {
@@ -44,5 +44,17 @@ fn image_only_pdf_returns_structured_error() {
             "recoverable": true,
             "stage": "parse"
         })
+    );
+}
+
+#[test]
+fn mixed_pdf_reports_page_level_missing_text() {
+    let result = parse_fixture("pdf/05_mixed_text_and_image.pdf", Format::Pdf);
+
+    assert_eq!(result.warnings.len(), 1);
+    assert_eq!(result.warnings[0].code, WarningCode::PdfPageNoTextLayer);
+    assert_eq!(
+        result.warnings[0].location,
+        Some(WarningLocation::Page { number: 2 })
     );
 }

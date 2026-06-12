@@ -17,7 +17,7 @@ mod source;
 pub use detect::Format;
 pub use engine::{
     ExtractedDocument, ExtractedTables, ParseLimits, ParseRequest, SpoorResult, TableFilter,
-    detect_format, parse, parse_document, parse_tables,
+    detect_format, parse, parse_document, parse_document_result, parse_tables,
 };
 pub use error::{ErrorCode, ParseStage, SpoorError, StructuredError};
 pub use json_schema::{
@@ -30,5 +30,6 @@ pub use render::{
     limit_markdown_output, render_documents, render_json, render_json_limited,
 };
 pub use result::{
-    DocumentResult, ParseContent, ParseResult, ParseStats, SpoorWarning, TableResult,
+    DocumentResult, ParseContent, ParseResult, ParseStats, SpoorWarning, TableResult, WarningCode,
+    WarningLocation,
 };

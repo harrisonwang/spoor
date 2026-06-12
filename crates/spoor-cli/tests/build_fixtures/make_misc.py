@@ -73,6 +73,30 @@ def build_image_only_pdf():
     c.save()
 
 
+def build_mixed_text_and_image_pdf():
+    """Build a mixed PDF where only one page lacks a text layer."""
+    out = ROOT / "pdf"
+    out.mkdir(parents=True, exist_ok=True)
+    try:
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.utils import ImageReader
+    except ImportError:
+        print("reportlab not installed - skipping mixed PDF")
+        return
+
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+        "+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    )
+    c = canvas.Canvas(str(out / "05_mixed_text_and_image.pdf"), pagesize=letter)
+    c.drawString(72, 720, "This page has a text layer.")
+    c.showPage()
+    c.drawImage(ImageReader(BytesIO(png)), 72, 620, width=300, height=180)
+    c.showPage()
+    c.save()
+
+
 # ============================================================
 # EPUB — minimal but correct structure (container + OPF + spine)
 # ============================================================

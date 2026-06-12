@@ -1,13 +1,15 @@
 use crate::limits;
 use crate::output::MarkdownBuilder;
+use crate::parse::ExtractedMarkdown;
 use crate::parse::xml::attr;
+use crate::result::{SpoorWarning, WarningCode};
 use crate::source::Source;
 use anyhow::{Result, anyhow};
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 use std::path::{Component, Path};
 
-pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<String> {
+pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<ExtractedMarkdown> {
     let mut zip = limits::open_zip_archive(source.bytes(), "pptx", max_parse_bytes)?;
 
     // Collect ppt/slides/slideN.xml entries, sort by N.
@@ -20,16 +22,81 @@ pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<String> {
     slides.sort_by_key(|(n, _)| *n);
 
     let mut md = MarkdownBuilder::with_max_bytes(max_parse_bytes);
+    let mut warnings = Vec::new();
     for (n, name) in &slides {
         md.heading(2, &format!("Slide {n}"));
         let xml = limits::read_zip_text(&mut zip, name, max_parse_bytes)?;
+        warnings.extend(feature_warnings(*n as usize, scan_slide_features(&xml)?));
         render_slide(&xml, &mut md)?;
         if let Some(notes_name) = notes_slide_for(&mut zip, name, max_parse_bytes)? {
             let notes_xml = limits::read_zip_text(&mut zip, &notes_name, max_parse_bytes)?;
             render_notes(&notes_xml, &mut md)?;
         }
     }
-    md.build()
+    Ok(ExtractedMarkdown {
+        markdown: md.build()?,
+        warnings,
+    })
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct SlideFeatures {
+    merged_table: bool,
+    embedded_visuals: bool,
+}
+
+fn scan_slide_features(xml: &str) -> Result<SlideFeatures> {
+    let mut reader = Reader::from_str(xml);
+    let mut buf = Vec::new();
+    let mut features = SlideFeatures::default();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
+                features.merged_table |= [
+                    b"gridSpan".as_slice(),
+                    b"rowSpan".as_slice(),
+                    b"hMerge".as_slice(),
+                    b"vMerge".as_slice(),
+                ]
+                .iter()
+                .any(|name| attr(&e, name).is_some());
+                features.embedded_visuals |= matches!(
+                    e.local_name().as_ref(),
+                    b"pic" | b"blip" | b"chart" | b"oleObj"
+                );
+            }
+            Ok(Event::Eof) => break,
+            Err(error) => return Err(anyhow!("XML parse error: {error}")),
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    Ok(features)
+}
+
+fn feature_warnings(slide: usize, features: SlideFeatures) -> Vec<SpoorWarning> {
+    let mut warnings = Vec::new();
+    if features.merged_table {
+        warnings.push(SpoorWarning::at_slide(
+            WarningCode::MergedTableStructureNotPreserved,
+            format!(
+                "第 {slide} 张幻灯片包含合并单元格；当前 Markdown 表格不保留 rowspan/colspan，Agent 不应把空白或重复单元格解释为原始结构。"
+            ),
+            slide,
+        ));
+    }
+    if features.embedded_visuals {
+        warnings.push(SpoorWarning::at_slide(
+            WarningCode::EmbeddedVisualsOmitted,
+            format!(
+                "第 {slide} 张幻灯片包含图片、图表或嵌入对象；spoor 当前仅提取文本，Agent 应把该页视为不完整并按需调用外部视觉解析。"
+            ),
+            slide,
+        ));
+    }
+    warnings
 }
 
 fn slide_number(name: &str) -> Option<u32> {
@@ -212,4 +279,32 @@ fn normalize_zip_path(path: impl AsRef<Path>) -> String {
         }
     }
     parts.join("/")
+}
+
+#[cfg(test)]
+mod feature_warning_tests {
+    use super::{SlideFeatures, feature_warnings, scan_slide_features};
+    use crate::result::WarningLocation;
+
+    #[test]
+    fn detects_merged_cells_and_visuals() {
+        let features = scan_slide_features(
+            r#"<p:sld xmlns:p="urn:p" xmlns:a="urn:a"><a:tc gridSpan="2"/><p:pic/></p:sld>"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            features,
+            SlideFeatures {
+                merged_table: true,
+                embedded_visuals: true,
+            }
+        );
+        let warnings = feature_warnings(3, features);
+        assert_eq!(warnings.len(), 2);
+        assert_eq!(
+            warnings[0].location,
+            Some(WarningLocation::Slide { number: 3 })
+        );
+    }
 }

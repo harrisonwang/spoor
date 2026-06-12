@@ -186,13 +186,14 @@ function render() {
 function renderMetrics() {
   const ready = state.records.filter((record) => record.status === 'ready');
   const errors = state.records.filter((record) => record.status === 'error');
+  const warnings = ready.reduce((total, record) => total + record.result.warnings.length, 0);
   const formats = [...new Set(ready.map((record) => record.format))].sort();
   const chunkCount = ready.reduce((total, record) => total + record.chunks.length, 0);
   const outputBytes = ready.reduce((total, record) => total + record.result.stats.output_bytes, 0);
 
   elements.intakeCount.textContent = String(state.records.length).padStart(2, '0');
   elements.metricReady.textContent = ready.length;
-  elements.metricErrors.textContent = `${errors.length} 个解析错误`;
+  elements.metricErrors.textContent = `${errors.length} 个解析错误 / ${warnings} 条完整性警告`;
   elements.metricFormats.textContent = formats.length;
   elements.formatList.textContent = formats.length ? formats.join(' / ') : '等待添加文档';
   elements.metricChunks.textContent = chunkCount.toLocaleString();
@@ -252,9 +253,10 @@ function renderViewer() {
     badge(record.format || '未知格式'),
     badge(formatBytes(record.file.size)),
     badge(`${record.chunks.length} 个记录`),
+    ...(record.result?.warnings.length ? [badge(`${record.result.warnings.length} 条警告`)] : []),
   );
   elements.viewerOutput.textContent = record.status === 'ready'
-    ? record.text.slice(0, 30000)
+    ? viewerText(record).slice(0, 30000)
     : JSON.stringify(record.error, null, 2);
 }
 
@@ -359,6 +361,7 @@ function exportManifest() {
     input_bytes: record.file.size,
     output_bytes: record.result?.stats.output_bytes ?? null,
     chunks: record.chunks.length,
+    warnings: record.result?.warnings ?? [],
     error: record.error,
   }));
   download('spoor-corpus-manifest.json', `${JSON.stringify(manifest, null, 2)}\n`, 'application/json');
@@ -372,10 +375,23 @@ async function copySelected() {
 
 function recordMeta(record) {
   if (record.status === 'ready') {
-    return `${record.format} / ${record.chunks.length} 个记录 / ${formatBytes(record.file.size)}`;
+    const warningText = record.result.warnings.length
+      ? ` / ${record.result.warnings.length} 条警告`
+      : '';
+    return `${record.format} / ${record.chunks.length} 个记录${warningText} / ${formatBytes(record.file.size)}`;
   }
   if (record.status === 'error') return record.error.code || 'unknown_error';
   return `${formatBytes(record.file.size)} / ${record.status}`;
+}
+
+function viewerText(record) {
+  if (!record.result.warnings.length) return record.text;
+  return [
+    '解析完整性警告：',
+    JSON.stringify(record.result.warnings, null, 2),
+    '---',
+    record.text,
+  ].join('\n\n');
 }
 
 function emptyItem(message) {
