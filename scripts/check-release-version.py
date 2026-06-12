@@ -23,6 +23,16 @@ def read_json(path: str) -> dict:
         return json.load(file)
 
 
+def read_node_binding_version() -> str:
+    source = (ROOT / "bindings/node/index.js").read_text(encoding="utf-8")
+    versions = set(re.findall(r"bindingPackageVersion !== '([^']+)'", source))
+    if len(versions) != 1:
+        raise ValueError(
+            f"expected one generated Node binding version, found {sorted(versions)}"
+        )
+    return versions.pop()
+
+
 def main() -> int:
     if len(sys.argv) != 2 or not re.fullmatch(r"v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", sys.argv[1]):
         print("usage: check-release-version.py vMAJOR.MINOR.PATCH", file=sys.stderr)
@@ -31,8 +41,19 @@ def main() -> int:
     expected = sys.argv[1][1:]
     versions = {
         "Cargo workspace": read_toml("Cargo.toml")["workspace"]["package"]["version"],
+        "Cargo workspace spoor-core dependency": read_toml("Cargo.toml")["workspace"][
+            "dependencies"
+        ]["spoor-core"]["version"],
+        "Cargo WASM spoor-core dependency": read_toml("crates/spoor-wasm/Cargo.toml")[
+            "dependencies"
+        ]["spoor-core"]["version"],
         "Python pyspoor": read_toml("bindings/python/pyproject.toml")["project"]["version"],
         "Node @harrisonwang/spoor": read_json("bindings/node/package.json")["version"],
+        "Node package-lock": read_json("bindings/node/package-lock.json")["version"],
+        "Node package-lock root": read_json("bindings/node/package-lock.json")["packages"][
+            ""
+        ]["version"],
+        "Node generated binding": read_node_binding_version(),
         "WASM @harrisonwang/spoor-wasm": read_json("crates/spoor-wasm/package.json")["version"],
     }
 

@@ -12,6 +12,7 @@ permissions:
 jobs:
   ci:
     name: full ci
+    needs: release-config
     uses: ./.github/workflows/ci.yml
 
   release-config:
@@ -250,14 +251,27 @@ jobs:
         run: |
           set -euo pipefail
           for pkg in npm/spoor-cli-*; do
-            (cd "$pkg" && npm publish --access public --provenance)
+            name="$(node -p "require('./$pkg/package.json').name")"
+            version="$(node -p "require('./$pkg/package.json').version")"
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version already exists; skipping"
+            else
+              (cd "$pkg" && npm publish --access public --provenance)
+            fi
           done
 
       - name: Publish main package
         shell: bash
         run: |
           set -euo pipefail
-          cd npm/spoor-cli && npm publish --access public --provenance
+          pkg="npm/spoor-cli"
+          name="$(node -p "require('./$pkg/package.json').name")"
+          version="$(node -p "require('./$pkg/package.json').version")"
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "$name@$version already exists; skipping"
+          else
+            (cd "$pkg" && npm publish --access public --provenance)
+          fi
 
   notify-scoop-bucket:
     if: github.ref_type == 'tag'

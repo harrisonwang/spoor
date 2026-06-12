@@ -12,6 +12,7 @@ permissions:
 jobs:
   ci:
     name: full ci
+    needs: release-config
     uses: ./.github/workflows/ci.yml
 
   release-config:
@@ -23,20 +24,6 @@ jobs:
       - name: Validate release version
         if: github.ref_type == 'tag'
         run: python3 scripts/check-release-version.py "${{ github.ref_name }}"
-
-      - name: Validate required secrets
-        if: github.ref_type == 'tag'
-        env:
-          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          for name in CRATES_IO_TOKEN; do
-            if [[ -z "${!name:-}" ]]; then
-              echo "$name is not configured" >&2
-              exit 1
-            fi
-          done
 
   python-wheels:
     name: python wheel (${{ matrix.target }})
@@ -81,6 +68,8 @@ jobs:
           path: dist
           merge-multiple: true
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
 
   node-build:
     name: node binding (${{ matrix.target }})
@@ -144,9 +133,34 @@ jobs:
       - name: Stage artifacts
         working-directory: bindings/node
         run: npm run artifacts
-      - name: Publish
+      - name: Prepare packages
         working-directory: bindings/node
-        run: npm publish --access public --provenance
+        run: npx napi prepublish -t npm --skip-optional-publish --no-gh-release
+      - name: Publish platform packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          for pkg in bindings/node/npm/*; do
+            name="$(node -p "require('./$pkg/package.json').name")"
+            version="$(node -p "require('./$pkg/package.json').version")"
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version already exists; skipping"
+            else
+              (cd "$pkg" && npm publish --access public --provenance)
+            fi
+          done
+      - name: Publish main package
+        shell: bash
+        run: |
+          set -euo pipefail
+          pkg="bindings/node"
+          name="$(node -p "require('./$pkg/package.json').name")"
+          version="$(node -p "require('./$pkg/package.json').version")"
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "$name@$version already exists; skipping"
+          else
+            (cd "$pkg" && npm publish --ignore-scripts --access public --provenance)
+          fi
 
   publish-wasm:
     name: publish @harrisonwang/spoor-wasm
@@ -179,23 +193,73 @@ jobs:
           npm pack --dry-run
       - name: Publish
         working-directory: crates/spoor-wasm/pkg
-        run: npm publish --access public --provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "$name@$version already exists; skipping"
+          else
+            npm publish --access public --provenance
+          fi
 
   publish-crates:
     name: publish Rust crates
     needs: [ci, release-config]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
       - name: Publish spoor-core
-        run: cargo publish --locked -p spoor-core --token "$CRATES_IO_TOKEN"
+        shell: bash
         env:
-          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          set -euo pipefail
+          version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "spoor-core") | .version')"
+          if cargo info "spoor-core@$version" >/dev/null 2>&1; then
+            echo "spoor-core@$version already exists; skipping"
+          else
+            cargo publish --locked -p spoor-core
+          fi
       - name: Wait for sparse index propagation
-        run: sleep 120
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "spoor-core") | .version')"
+          for attempt in {1..20}; do
+            if cargo info "spoor-core@$version" >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "spoor-core@$version did not appear in crates.io index" >&2
+          exit 1
       - name: Publish spoor-cli
-        run: cargo publish --locked -p spoor-cli --token "$CRATES_IO_TOKEN"
+        shell: bash
         env:
-          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+          OIDC_TOKEN: ${{ steps.auth.outputs.token }}
+          BOOTSTRAP_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "spoor-cli") | .version')"
+          if cargo info "spoor-cli@$version" >/dev/null 2>&1; then
+            echo "spoor-cli@$version already exists; skipping"
+          else
+            token="$OIDC_TOKEN"
+            if ! cargo info spoor-cli >/dev/null 2>&1; then
+              if [[ -z "$BOOTSTRAP_TOKEN" ]]; then
+                echo "spoor-cli requires CRATES_IO_TOKEN for its initial publish" >&2
+                exit 1
+              fi
+              token="$BOOTSTRAP_TOKEN"
+            fi
+            CARGO_REGISTRY_TOKEN="$token" cargo publish --locked -p spoor-cli
+          fi
