@@ -1,6 +1,6 @@
 {
   "name": "@harrisonwang/spoor-wasm",
-  "version": "0.8.4",
+  "version": "0.8.5",
   "private": true,
   "description": "Browser and edge WASM bindings for spoor-core",
   "license": "MIT",
