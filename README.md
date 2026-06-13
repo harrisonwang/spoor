@@ -66,6 +66,12 @@ spoor report.pdf | llm "总结风险和行动项"
 
 输出模式按格式自动分派，`-m` 可显式覆盖。表格型 JSON 默认返回前 100 行预览，通过 `--rows` / `--columns` / `--limit` / `--offset` 收窄。详见 `spoor --help`。
 
+DOCX 内嵌栅格图片会在原始正文位置输出安全占位符，例如
+`![DOCX image 1](spoor-docx://word/media/image1.png)`。具备 shell/file 能力的
+Agent 可去掉 `spoor-docx://` 后使用
+`unzip -p document.docx word/media/image1.png` 提取相关图片并交给外部 VLM；
+spoor 自身不解码、导出或理解图片。
+
 ## 嵌入
 
 Rust core 只接收 bytes 与 metadata，不执行文件、网络或进程 I/O：
@@ -134,7 +140,7 @@ Python 使用 `pyspoor` 的 `parse_bytes` / `parse_path`；Node.js 使用
 | `pdf_page_no_text_layer` | 混合 PDF 的某页没有可提取文本层 |
 | `pdf_page_suspicious_text_layer` | 某页文本层包含明显可疑字符或 glyph 占位符 |
 | `merged_table_structure_not_preserved` | DOCX/PPTX 合并单元格未被 GFM 表格完整保留 |
-| `embedded_visuals_omitted` | DOCX/PPTX 中存在未进入文本输出的视觉对象 |
+| `embedded_visuals_omitted` | DOCX/PPTX 中存在尚未被理解或未进入文本输出的视觉对象；DOCX 内嵌栅格图片可能已有 `spoor-docx://` 占位符 |
 
 warning 可带 `location: {kind: "page" | "slide", number}`。CLI 会同时在 stderr 和
 Markdown stdout 尾部显示这些 warning，避免只读 stdout 的 Agent 静默忽略。

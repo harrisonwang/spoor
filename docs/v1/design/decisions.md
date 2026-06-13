@@ -220,18 +220,19 @@ JSON 不从 Markdown 反解析，也不承诺 DOCX/PDF/PPTX/IPYNB 的通用 bloc
 - 脚注：`[^N]` 和文末定义
 - Unicode、smart quotes、RTL 文本
 - tracked changes 的插入内容
+- 内嵌栅格图片在正文中的安全 `spoor-docx://word/media/*` 占位符
 
 默认丢弃：
 
 - 字体、字号、颜色、边距、对齐
-- 纯装饰图片和图形
+- 图片语义、纯装饰图形
 - tracked changes 的删除内容
 - Word 内部样式细节
 
 待补：
 
 - comments/endnotes
-- image alt/caption placeholder
+- image alt/caption
 - 复杂 numbering restart
 - chart / embedded object placeholder
 

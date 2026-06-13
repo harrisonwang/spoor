@@ -239,11 +239,77 @@ def build_15_embedded_visual():
     write_minimal_docx(OUT / "15_embedded_visual.docx", document_xml)
 
 
+# ---------- 16: image placeholders, relationship safety, AlternateContent ----------
+def build_16_image_placeholders():
+    document_xml = """<?xml version="1.0"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+            xmlns:v="urn:schemas-microsoft-com:vml"
+            xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+<w:body>
+<w:p><w:r><w:t>Before.</w:t></w:r></w:p>
+<w:p><w:r><w:drawing><w:txbxContent><w:p><w:r><w:t>Nested label.</w:t></w:r></w:p></w:txbxContent><a:blip r:embed="rIdImage1"/></w:drawing></w:r></w:p>
+<w:p><w:r><w:t>Between.</w:t></w:r><w:r><w:drawing><a:blip r:embed="rIdImage1"/></w:drawing></w:r></w:p>
+<mc:AlternateContent>
+  <mc:Choice Requires="a">
+    <w:p><w:r><w:t>Choice only.</w:t></w:r><w:r><w:drawing><a:blip r:embed="rIdImage2"/></w:drawing></w:r></w:p>
+  </mc:Choice>
+  <mc:Fallback>
+    <w:p><w:r><w:t>Fallback duplicate.</w:t></w:r><w:r><w:pict><v:imagedata r:id="rIdFallback"/></w:pict></w:r></w:p>
+  </mc:Fallback>
+</mc:AlternateContent>
+<mc:AlternateContent>
+  <mc:Fallback>
+    <w:p><w:r><w:t>Fallback only.</w:t></w:r><w:r><w:pict><v:imagedata r:id="rIdFallbackOnly"/></w:pict></w:r></w:p>
+  </mc:Fallback>
+</mc:AlternateContent>
+<w:p><w:r><w:drawing><a:blip r:embed="rIdHdPhoto"/></w:drawing></w:r></w:p>
+<w:p><w:r><w:drawing><a:blip r:embed="rIdExternal"/></w:drawing></w:r></w:p>
+<w:p><w:r><w:drawing><a:blip r:embed="rIdTraversal"/></w:drawing></w:r></w:p>
+<w:p><w:r><w:t>After.</w:t></w:r></w:p>
+</w:body></w:document>"""
+    image_type = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+    write_minimal_docx(
+        OUT / "16_image_placeholders.docx",
+        document_xml,
+        extra_rels=[
+            ("rIdImage1", image_type, "media/image1.png"),
+            ("rIdImage2", image_type, "media/image2.png"),
+            ("rIdFallback", image_type, "media/fallback.png"),
+            ("rIdFallbackOnly", image_type, "media/fallback-only.png"),
+            (
+                "rIdHdPhoto",
+                "http://schemas.microsoft.com/office/2007/relationships/hdphoto",
+                "media/image-hd.png",
+            ),
+            (
+                "rIdExternal",
+                image_type,
+                "https://example.com/external.png",
+                "External",
+            ),
+            ("rIdTraversal", image_type, "media/../evil.png"),
+        ],
+        extra_entries={
+            "word/media/image1.png": b"first-image",
+            "word/media/image2.png": b"second-image",
+            "word/media/fallback.png": b"fallback-image",
+            "word/media/fallback-only.png": b"fallback-only-image",
+            "word/media/image-hd.png": b"hd-photo",
+            "word/evil.png": b"must-not-be-referenced",
+        },
+    )
+
+
 # ============================================================
 # helper to write a minimal valid docx with custom XML
 # ============================================================
-def write_minimal_docx(path, document_xml, extra_rels=None, footnotes_xml=None):
+def write_minimal_docx(
+    path, document_xml, extra_rels=None, footnotes_xml=None, extra_entries=None
+):
     extra_rels = extra_rels or []
+    extra_entries = extra_entries or {}
 
     content_types = """<?xml version="1.0"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -262,9 +328,17 @@ def write_minimal_docx(path, document_xml, extra_rels=None, footnotes_xml=None):
     doc_rels_parts = ['<Relationship Id="rIdSt" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>']
     if footnotes_xml:
         doc_rels_parts.append('<Relationship Id="rIdFn" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>')
-    for rid, rtype, target in extra_rels:
-        if rtype.endswith("/hyperlink"):
-            doc_rels_parts.append(f'<Relationship Id="{rid}" Type="{rtype}" Target="{target}" TargetMode="External"/>')
+    for relationship in extra_rels:
+        rid, rtype, target, *target_mode = relationship
+        if target_mode:
+            mode = target_mode[0]
+            doc_rels_parts.append(
+                f'<Relationship Id="{rid}" Type="{rtype}" Target="{target}" TargetMode="{mode}"/>'
+            )
+        elif rtype.endswith("/hyperlink"):
+            doc_rels_parts.append(
+                f'<Relationship Id="{rid}" Type="{rtype}" Target="{target}" TargetMode="External"/>'
+            )
         else:
             doc_rels_parts.append(f'<Relationship Id="{rid}" Type="{rtype}" Target="{target}"/>')
     doc_rels = '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + "".join(doc_rels_parts) + "</Relationships>"
@@ -285,6 +359,8 @@ def write_minimal_docx(path, document_xml, extra_rels=None, footnotes_xml=None):
         z.writestr("word/styles.xml", styles_xml)
         if footnotes_xml:
             z.writestr("word/footnotes.xml", footnotes_xml)
+        for name, data in extra_entries.items():
+            z.writestr(name, data)
 
 
 if __name__ == "__main__":

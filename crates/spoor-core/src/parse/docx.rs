@@ -9,6 +9,9 @@ use quick_xml::events::{BytesStart, Event};
 use quick_xml::reader::Reader;
 use std::collections::HashMap;
 
+const HYPERLINK_REL_TYPE_SUFFIX: &str = "/hyperlink";
+const IMAGE_REL_TYPE_SUFFIX: &str = "/image";
+
 /// DOCX → Markdown-like text (md output mode).
 ///
 /// We deliberately match by local name and ignore namespace prefixes. This
@@ -97,7 +100,7 @@ fn feature_warnings(features: DocumentFeatures) -> Vec<SpoorWarning> {
     if features.embedded_visuals {
         warnings.push(SpoorWarning::new(
             WarningCode::EmbeddedVisualsOmitted,
-            "DOCX 包含图片、图表、绘图或嵌入对象；spoor 当前仅提取其中可见文本，Agent 应把结果视为不完整并按需调用外部视觉解析。",
+            "DOCX 包含图片、图表、绘图或嵌入对象；内嵌栅格图片会以 spoor-docx URI 标出位置但尚未被理解，其他视觉内容可能省略。Agent 应按需提取相关图片并调用外部视觉解析。",
         ));
     }
     warnings
@@ -163,6 +166,17 @@ struct TableState {
     rows: Vec<Vec<String>>,
     current_row: Option<Vec<String>>,
     current_cell: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Relationship {
+    Hyperlink(String),
+    Image(String),
+}
+
+#[derive(Debug, Default)]
+struct AlternateContentState {
+    choice_seen: bool,
 }
 
 /// styleId -> heading/list metadata.
@@ -340,8 +354,8 @@ fn parse_footnotes(xml: &str) -> HashMap<String, String> {
     notes
 }
 
-/// rId → URL.
-fn parse_rels(xml: &str) -> HashMap<String, String> {
+/// rId → safe relationship target used by the Markdown renderer.
+fn parse_rels(xml: &str) -> HashMap<String, Relationship> {
     let mut map = HashMap::new();
     if xml.is_empty() {
         return map;
@@ -354,9 +368,20 @@ fn parse_rels(xml: &str) -> HashMap<String, String> {
                 if e.local_name().as_ref() == b"Relationship" =>
             {
                 let id = attr(&e, b"Id");
+                let relationship_type = attr(&e, b"Type");
                 let target = attr(&e, b"Target");
-                if let (Some(id), Some(target)) = (id, target) {
-                    map.insert(id, target);
+                let target_mode = attr(&e, b"TargetMode");
+                if let (Some(id), Some(relationship_type), Some(target)) =
+                    (id, relationship_type, target)
+                {
+                    if relationship_type.ends_with(HYPERLINK_REL_TYPE_SUFFIX) {
+                        map.insert(id, Relationship::Hyperlink(target));
+                    } else if relationship_type.ends_with(IMAGE_REL_TYPE_SUFFIX)
+                        && !target_mode.is_some_and(|mode| mode.eq_ignore_ascii_case("external"))
+                        && let Some(path) = safe_docx_media_path(&target)
+                    {
+                        map.insert(id, Relationship::Image(path));
+                    }
                 }
             }
             Ok(Event::Eof) | Err(_) => break,
@@ -367,33 +392,106 @@ fn parse_rels(xml: &str) -> HashMap<String, String> {
     map
 }
 
+fn safe_docx_media_path(target: &str) -> Option<String> {
+    if target.is_empty()
+        || target.starts_with('/')
+        || target.contains('\\')
+        || target.contains(['?', '#'])
+        || target.contains(':')
+    {
+        return None;
+    }
+
+    let mut components = target.split('/');
+    if components.next()? != "media" {
+        return None;
+    }
+    let remaining = components.collect::<Vec<_>>();
+    if remaining.is_empty()
+        || remaining
+            .iter()
+            .any(|component| !is_safe_media_component(component))
+    {
+        return None;
+    }
+
+    Some(format!("word/{target}"))
+}
+
+fn is_safe_media_component(component: &str) -> bool {
+    !component.is_empty()
+        && component != "."
+        && component != ".."
+        && component
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
 fn render_document(
     xml: &str,
     style_map: &HashMap<String, StyleKind>,
     numbering: &HashMap<String, HashMap<usize, ListKind>>,
     footnotes: &HashMap<String, String>,
-    rel_map: &HashMap<String, String>,
+    rel_map: &HashMap<String, Relationship>,
     md: &mut MarkdownBuilder,
 ) -> Result<()> {
     let mut reader = Reader::from_str(xml);
     let mut buf = Vec::new();
 
-    let mut paragraph: Option<ParagraphState> = None;
+    let mut paragraphs = Vec::<ParagraphState>::new();
     let mut table: Option<TableState> = None;
 
     let mut in_run = false;
     let mut run_bold = false;
     let mut run_italic = false;
     let mut in_num_pr = false;
+    let mut in_text = false;
     let mut in_deleted = 0usize;
 
     let mut hyperlink_target: Option<String> = None;
     let mut used_footnotes: Vec<String> = Vec::new();
     let mut list_counters: HashMap<(String, usize), usize> = HashMap::new();
+    let mut image_number = 0usize;
+    let mut alternate_content = Vec::<AlternateContentState>::new();
+    let mut skipped_branch_depth = 0usize;
 
     loop {
-        match reader.read_event_into(&mut buf) {
+        let event = reader.read_event_into(&mut buf);
+
+        if skipped_branch_depth > 0 {
+            match &event {
+                Ok(Event::Start(_)) => skipped_branch_depth += 1,
+                Ok(Event::End(_)) => skipped_branch_depth -= 1,
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(anyhow!("XML parse error: {e}")),
+                _ => {}
+            }
+            buf.clear();
+            continue;
+        }
+
+        match event {
             Ok(Event::Start(e)) => match e.local_name().as_ref() {
+                b"AlternateContent" => {
+                    alternate_content.push(AlternateContentState::default());
+                }
+                b"Choice" => {
+                    if let Some(state) = alternate_content.last_mut() {
+                        if state.choice_seen {
+                            skipped_branch_depth = 1;
+                        } else {
+                            state.choice_seen = true;
+                        }
+                    }
+                }
+                b"Fallback" => {
+                    if alternate_content
+                        .last()
+                        .is_some_and(|state| state.choice_seen)
+                    {
+                        skipped_branch_depth = 1;
+                    }
+                }
                 b"tbl" => {
                     table = Some(TableState::default());
                 }
@@ -408,64 +506,100 @@ fn render_document(
                     }
                 }
                 b"p" => {
-                    paragraph = Some(ParagraphState::new());
+                    paragraphs.push(ParagraphState::new());
                 }
                 b"r" => {
                     in_run = true;
                     run_bold = false;
                     run_italic = false;
                 }
+                b"t" => in_text = true,
                 b"hyperlink" => {
                     if let Some(rid) = attr(&e, b"id") {
-                        hyperlink_target = rel_map.get(&rid).cloned();
+                        hyperlink_target = rel_map.get(&rid).and_then(|relationship| {
+                            if let Relationship::Hyperlink(target) = relationship {
+                                Some(target.clone())
+                            } else {
+                                None
+                            }
+                        });
                     }
+                }
+                b"blip" => push_image_placeholder(
+                    &e,
+                    b"embed",
+                    &mut paragraphs,
+                    rel_map,
+                    &mut image_number,
+                ),
+                b"imagedata" => {
+                    push_image_placeholder(&e, b"id", &mut paragraphs, rel_map, &mut image_number)
                 }
                 b"b" => run_bold = true,
                 b"i" => run_italic = true,
-                b"pStyle" => apply_pstyle(&e, &mut paragraph, style_map),
+                b"pStyle" => apply_pstyle(&e, &mut paragraphs, style_map),
                 b"numPr" => {
                     in_num_pr = true;
-                    if let Some(p) = &mut paragraph {
+                    if let Some(p) = paragraphs.last_mut() {
                         p.list.get_or_insert_with(|| ListInfo::new(None));
                     }
                 }
-                b"ilvl" if in_num_pr => apply_list_level(&e, &mut paragraph),
-                b"numId" if in_num_pr => apply_list_num_id(&e, &mut paragraph, numbering),
+                b"ilvl" if in_num_pr => apply_list_level(&e, &mut paragraphs),
+                b"numId" if in_num_pr => apply_list_num_id(&e, &mut paragraphs, numbering),
                 b"footnoteReference" => {
-                    push_footnote_reference(&e, &mut paragraph, &mut used_footnotes);
+                    push_footnote_reference(&e, &mut paragraphs, &mut used_footnotes);
                 }
                 b"del" => in_deleted += 1,
                 _ => {}
             },
             Ok(Event::Empty(e)) => match e.local_name().as_ref() {
+                b"Choice" => {
+                    if let Some(state) = alternate_content.last_mut() {
+                        state.choice_seen = true;
+                    }
+                }
                 b"b" => run_bold = true,
                 b"i" => run_italic = true,
-                b"pStyle" => apply_pstyle(&e, &mut paragraph, style_map),
+                b"pStyle" => apply_pstyle(&e, &mut paragraphs, style_map),
                 b"numPr" => {
-                    if let Some(p) = &mut paragraph {
+                    if let Some(p) = paragraphs.last_mut() {
                         p.list.get_or_insert_with(|| ListInfo::new(None));
                     }
                 }
-                b"ilvl" if in_num_pr => apply_list_level(&e, &mut paragraph),
-                b"numId" if in_num_pr => apply_list_num_id(&e, &mut paragraph, numbering),
+                b"ilvl" if in_num_pr => apply_list_level(&e, &mut paragraphs),
+                b"numId" if in_num_pr => apply_list_num_id(&e, &mut paragraphs, numbering),
                 b"footnoteReference" => {
-                    push_footnote_reference(&e, &mut paragraph, &mut used_footnotes);
+                    push_footnote_reference(&e, &mut paragraphs, &mut used_footnotes);
                 }
-                b"tab" => push_text(&mut paragraph, "\t", false, false, &hyperlink_target),
-                b"br" => push_text(&mut paragraph, "\n", false, false, &hyperlink_target),
+                b"tab" => push_text(&mut paragraphs, "\t", false, false, &hyperlink_target),
+                b"br" => push_text(&mut paragraphs, "\n", false, false, &hyperlink_target),
+                b"blip" => push_image_placeholder(
+                    &e,
+                    b"embed",
+                    &mut paragraphs,
+                    rel_map,
+                    &mut image_number,
+                ),
+                b"imagedata" => {
+                    push_image_placeholder(&e, b"id", &mut paragraphs, rel_map, &mut image_number)
+                }
                 _ => {}
             },
-            Ok(Event::Text(t)) if in_run && in_deleted == 0 => {
+            Ok(Event::Text(t)) if in_run && in_text && in_deleted == 0 => {
                 let s = t.unescape().map(|c| c.into_owned()).unwrap_or_default();
-                push_text(&mut paragraph, &s, run_bold, run_italic, &hyperlink_target);
+                push_text(&mut paragraphs, &s, run_bold, run_italic, &hyperlink_target);
             }
             Ok(Event::End(e)) => match e.local_name().as_ref() {
+                b"AlternateContent" => {
+                    alternate_content.pop();
+                }
                 b"r" => in_run = false,
+                b"t" => in_text = false,
                 b"hyperlink" => hyperlink_target = None,
                 b"numPr" => in_num_pr = false,
                 b"del" => in_deleted = in_deleted.saturating_sub(1),
                 b"p" => {
-                    if let Some(p) = paragraph.take() {
+                    if let Some(p) = paragraphs.pop() {
                         if let Some(table) = &mut table {
                             append_cell_paragraph(table, &p.text);
                         } else {
@@ -509,12 +643,35 @@ fn render_document(
     Ok(())
 }
 
+fn push_image_placeholder(
+    e: &BytesStart,
+    relationship_attribute: &[u8],
+    paragraphs: &mut [ParagraphState],
+    rel_map: &HashMap<String, Relationship>,
+    image_number: &mut usize,
+) {
+    let Some(rid) = attr(e, relationship_attribute) else {
+        return;
+    };
+    let Some(Relationship::Image(path)) = rel_map.get(&rid) else {
+        return;
+    };
+    let Some(paragraph) = paragraphs.last_mut() else {
+        return;
+    };
+
+    *image_number += 1;
+    paragraph.text.push_str(&format!(
+        "![DOCX image {image_number}](spoor-docx://{path})"
+    ));
+}
+
 fn apply_pstyle(
     e: &BytesStart,
-    paragraph: &mut Option<ParagraphState>,
+    paragraphs: &mut [ParagraphState],
     style_map: &HashMap<String, StyleKind>,
 ) {
-    let Some(p) = paragraph else {
+    let Some(p) = paragraphs.last_mut() else {
         return;
     };
     let Some(val) = attr(e, b"val") else {
@@ -534,9 +691,9 @@ fn apply_pstyle(
     }
 }
 
-fn apply_list_level(e: &BytesStart, paragraph: &mut Option<ParagraphState>) {
+fn apply_list_level(e: &BytesStart, paragraphs: &mut [ParagraphState]) {
     if let (Some(p), Some(level)) = (
-        paragraph,
+        paragraphs.last_mut(),
         attr(e, b"val").and_then(|value| value.parse().ok()),
     ) {
         let list = p.list.get_or_insert_with(|| ListInfo::new(None));
@@ -546,10 +703,10 @@ fn apply_list_level(e: &BytesStart, paragraph: &mut Option<ParagraphState>) {
 
 fn apply_list_num_id(
     e: &BytesStart,
-    paragraph: &mut Option<ParagraphState>,
+    paragraphs: &mut [ParagraphState],
     numbering: &HashMap<String, HashMap<usize, ListKind>>,
 ) {
-    let Some(p) = paragraph else {
+    let Some(p) = paragraphs.last_mut() else {
         return;
     };
     let Some(num_id) = attr(e, b"val") else {
@@ -567,13 +724,13 @@ fn apply_list_num_id(
 
 fn push_footnote_reference(
     e: &BytesStart,
-    paragraph: &mut Option<ParagraphState>,
+    paragraphs: &mut [ParagraphState],
     used_footnotes: &mut Vec<String>,
 ) {
     let Some(id) = attr(e, b"id") else {
         return;
     };
-    if let Some(p) = paragraph {
+    if let Some(p) = paragraphs.last_mut() {
         p.text.push_str(&format!("[^{id}]"));
         if !used_footnotes.iter().any(|seen| seen == &id) {
             used_footnotes.push(id);
@@ -582,13 +739,13 @@ fn push_footnote_reference(
 }
 
 fn push_text(
-    paragraph: &mut Option<ParagraphState>,
+    paragraphs: &mut [ParagraphState],
     text: &str,
     bold: bool,
     italic: bool,
     hyperlink_target: &Option<String>,
 ) {
-    if let Some(p) = paragraph {
+    if let Some(p) = paragraphs.last_mut() {
         p.text
             .push_str(&wrap_run_text(text, bold, italic, hyperlink_target));
     }
@@ -728,7 +885,10 @@ mod wrap_run_text_tests {
 
 #[cfg(test)]
 mod feature_warning_tests {
-    use super::{DocumentFeatures, feature_warnings, scan_document_features};
+    use super::{
+        DocumentFeatures, Relationship, feature_warnings, parse_rels, safe_docx_media_path,
+        scan_document_features,
+    };
 
     #[test]
     fn detects_merged_cells_and_visuals_by_local_name() {
@@ -753,5 +913,30 @@ mod feature_warning_tests {
             scan_document_features(r#"<w:gridSpan xmlns:w="urn:test" w:val="1"/>"#).unwrap();
 
         assert!(!features.merged_table);
+    }
+
+    #[test]
+    fn image_relationships_are_limited_to_safe_word_media_paths() {
+        let rels = parse_rels(
+            r#"<Relationships>
+<Relationship Id="image" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>
+<Relationship Id="external" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="https://example.com/image.png" TargetMode="External"/>
+<Relationship Id="traversal" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/../evil.png"/>
+<Relationship Id="hd" Type="http://schemas.microsoft.com/office/2007/relationships/hdphoto" Target="media/image2.png"/>
+</Relationships>"#,
+        );
+
+        assert_eq!(
+            rels.get("image"),
+            Some(&Relationship::Image("word/media/image1.png".to_string()))
+        );
+        assert!(!rels.contains_key("external"));
+        assert!(!rels.contains_key("traversal"));
+        assert!(!rels.contains_key("hd"));
+        assert_eq!(
+            safe_docx_media_path("media/image_1.png").as_deref(),
+            Some("word/media/image_1.png")
+        );
+        assert_eq!(safe_docx_media_path("../media/image.png"), None);
     }
 }

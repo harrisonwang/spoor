@@ -1,0 +1,17 @@
+---
+source: crates/spoor-cli/tests/docx.rs
+expression: out
+---
+Before.
+
+Nested label.
+
+![DOCX image 1](spoor-docx://word/media/image1.png)
+
+Between.![DOCX image 2](spoor-docx://word/media/image1.png)
+
+Choice only.![DOCX image 3](spoor-docx://word/media/image2.png)
+
+Fallback only.![DOCX image 4](spoor-docx://word/media/fallback-only.png)
+
+After.
