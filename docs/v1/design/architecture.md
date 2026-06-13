@@ -24,6 +24,7 @@ Rust packages 为 `spoor-core`、`spoor-cli`，CLI binary 为 `spoor`。Python d
 
 - 接受 bytes 和显式 metadata（source name、content type、format hint）。
 - 负责 format 检测、解析、限制单次解析的数据量、ZIP 安全检查，以及返回结构化结果。
+- 通过格式无关的 `extract_media` 按安全资源 URI 提取单个内嵌媒体；当前仅实现 `spoor-docx://`。
 - 不依赖 `clap`、glob、stdin/stdout/stderr、进程退出和网络请求。
 - 不依赖 Python，也不把 CLI 字符串错误暴露为 API 契约。
 - 保持每次调用独立，不使用可变全局状态，便于并发和测试。
@@ -65,9 +66,14 @@ pub struct SpoorError {
     pub recoverable: bool,
     pub stage: Option<ParseStage>,
 }
+
+pub fn extract_media(
+    request: &ParseRequest<'_>,
+    resource: &str,
+) -> Result<Vec<u8>, SpoorError>;
 ```
 
-`max_parse_bytes` 属于 core。`max_output_bytes`、Markdown truncation marker、stderr warning 数量和 exit code 属于 CLI adapter。Python 应优先拿到结构化结果，而不是被迫消费截断后的 CLI 字符串。Agent 应调用 `parse` 或 `parse_document_result` 并处理 warnings；`parse_document` 是只取 Markdown 的兼容便捷接口。
+`max_parse_bytes` 属于 core，也约束单资源媒体提取。`max_output_bytes`、Markdown truncation marker、stderr warning 数量和 exit code 属于 CLI adapter；二进制 `--extract` 不应用文本输出截断。Python 应优先拿到结构化结果，而不是被迫消费截断后的 CLI 字符串。Agent 应调用 `parse` 或 `parse_document_result` 并处理 warnings；`parse_document` 是只取 Markdown 的兼容便捷接口。
 
 路径读取可由 CLI/Python adapter 提供 `parse_path` 便捷 API；URL、glob 和 stdin 保持在 CLI 层。这样 core 保持离线、确定性，也避免绑定层继承爬虫策略。
 

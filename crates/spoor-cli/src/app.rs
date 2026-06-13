@@ -4,15 +4,38 @@ use anyhow::{Context, Result, anyhow};
 use glob::{MatchOptions, glob_with};
 use spoor_core::{
     Format, JsonOutput, OutputMode, ParseContent, ParseLimits, ParseRequest, SpoorError,
-    SpoorWarning, TableFilter, default_mode_for, detect_format, limit_markdown_output,
-    parse_document_result, parse_tables, render_documents, render_json_limited,
+    SpoorWarning, TableFilter, default_mode_for, detect_format, extract_media,
+    limit_markdown_output, parse_document_result, parse_tables, render_documents,
+    render_json_limited,
 };
 
 const MAX_FAILURE_DIAGNOSTICS: usize = 20;
 
-pub(crate) fn run(cli: Cli) -> Result<String> {
-    validate_max_output_bytes(cli.max_output_bytes)?;
+pub(crate) enum CommandOutput {
+    Text(String),
+    Binary(Vec<u8>),
+}
+
+pub(crate) fn run(cli: Cli) -> Result<CommandOutput> {
     validate_max_parse_bytes(cli.max_parse_bytes)?;
+    if let Some(resource) = cli.extract.clone() {
+        return extract_resource(&cli, &resource).map(CommandOutput::Binary);
+    }
+    validate_max_output_bytes(cli.max_output_bytes)?;
+    run_parse(cli).map(CommandOutput::Text)
+}
+
+fn extract_resource(cli: &Cli, resource: &str) -> Result<Vec<u8>> {
+    let inputs = expand_inputs(&cli.inputs)?;
+    if inputs.len() != 1 {
+        return Err(anyhow!("--extract 仅支持单个输入"));
+    }
+    let input = resolve_input(&inputs[0], cli.max_parse_bytes)?;
+    let request = request_for(&input, None, TableFilter::default(), cli.max_parse_bytes);
+    extract_media(&request, resource).map_err(Into::into)
+}
+
+fn run_parse(cli: Cli) -> Result<String> {
     let inputs = expand_inputs(&cli.inputs)?;
     let format_hint = cli.format.map(Into::into);
 

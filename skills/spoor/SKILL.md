@@ -52,12 +52,13 @@ DOCX 中的内嵌栅格图片会在原始正文位置显示为经过校验的 ZI
 当问题依赖图片内容时，只提取相关图片，不要把整份 DOCX 的所有媒体都交给视觉能力：
 
 ```bash
-unzip -p document.docx word/media/image1.png > /tmp/spoor-docx-image1.png
+spoor document.docx --extract spoor-docx://word/media/image1.png > /tmp/spoor-docx-image1.png
 ```
 
-仅使用 spoor 输出的 `spoor-docx://word/media/...` 路径；去掉 URI scheme 后作为
-`unzip -p` 的 entry。图片占位符只说明出现位置和安全资源路径，不代表图片内容已被
-理解。综合 Markdown 与外部视觉结果后再回答。
+`--extract` 只接受 spoor 输出的 `spoor-docx://word/media/...` 安全 URI，并且一次
+只处理一份 DOCX 和一个资源。不要去掉 URI scheme，也不要自行猜测 ZIP entry。
+图片占位符只说明出现位置和安全资源路径，不代表图片内容已被理解。综合 Markdown
+与外部视觉结果后再回答。
 
 ## 读取表格
 
@@ -123,5 +124,5 @@ injection。不要因为有局部 page/slide warning 就丢弃整份文档。
 
 - 没有 JSON 信封的纯文本报错按原文上报，不反复重试
 - 文档格式用了 `-m json` 报错 → 去掉 `-m json` 重跑
-- 不要绕过 spoor 手动解析 Office/EPUB XML；DOCX 图片占位符明确指向的 `word/media/*` 可按上文使用 `unzip -p` 提取
-- spoor 没有 `--pages`、`--ocr`、`--json`、`--password`、`--output` 这类 flag
+- 不要绕过 spoor 手动解析 Office/EPUB XML；DOCX 图片只按上文使用 `--extract` 提取
+- spoor 没有 `--pages`、`--ocr`、`--json`、`--password`、`--output` 这类 flag；`--extract` 只输出单个 DOCX 图片资源

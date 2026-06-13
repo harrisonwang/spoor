@@ -23,7 +23,7 @@
 
 | 格式 | 当前保留 | 当前明确不保留或限制 |
 | --- | --- | --- |
-| DOCX | 标题 1-6、段落、粗体/斜体、列表、小型 GFM 表格、链接、脚注、Unicode、插入型 tracked changes；内嵌栅格图片以安全 `spoor-docx://word/media/*` 占位符保留正文位置；合并表格/视觉对象会返回 warning | 不理解或自动导出图片；不保留样式与版式、删除型 tracked changes、comments/endnotes、复杂编号重启、复杂合并表格、图表与嵌入对象 |
+| DOCX | 标题 1-6、段落、粗体/斜体、列表、小型 GFM 表格、链接、脚注、Unicode、插入型 tracked changes；内嵌栅格图片以安全 `spoor-docx://word/media/*` 占位符保留正文位置，CLI 可通过 `--extract` 提取单个占位符资源；合并表格/视觉对象会返回 warning | 不理解或批量导出图片；不保留样式与版式、删除型 tracked changes、comments/endnotes、复杂编号重启、复杂合并表格、图表与嵌入对象 |
 | XLSX | sheet、range、标题/表头/preamble、文本/数字/布尔/日期、缓存公式结果、错误单元格、合并单元格左上值 | 默认每个 sheet 仅前 100 条数据行；不计算公式、不保留公式表达式/样式/图表；Excel 1904 date system 尚未完整处理；一个 sheet 按一个逻辑 table 输出 |
 | PDF | text layer、页顺序、`## Page N` 边界；混合文档的无文本页与明显可疑文本层返回带页码 warning | 不做 OCR；不恢复版面/标题语义；不保证复杂多栏阅读顺序；不去重页眉页脚、不修复断词；纯图片与加密 PDF 返回结构化错误 |
 | PPTX | 按数字 slide 顺序输出文本、小型表格、speaker notes；合并表格/视觉对象省略会返回带 slide 位置 warning | 不按 shape 坐标恢复视觉阅读顺序；不保留 bullet 层级、主题、动画、图表、图片或嵌入对象 |
@@ -37,9 +37,9 @@
   100 条数据行，不做强类型推断。
 - Markdown、纯文本、常见代码与配置文件：做字符集解码后保留文本；不是语法分析器。
 - 不支持旧版二进制 Office `.doc` / `.xls` / `.ppt`、密码保护 Office、OCR、
-  宏执行、公式执行、notebook 执行、脚本执行或内嵌二进制提取。
+  宏执行、公式执行、notebook 执行、脚本执行或通用内嵌二进制提取。
 - DOCX 图片占位符仅暴露经过校验的 `word/media/*` ZIP entry；具备文件能力的
-  Agent 可以自行使用 `unzip -p` 提取，浏览器/WASM 入口不提供图片字节提取 API。
+  Agent 可以使用 CLI `--extract` 提取单个资源；浏览器/WASM 入口不提供图片字节提取 API。
 
 ## 格式检测限制
 
@@ -105,4 +105,4 @@ Cloudflare 官方当前还限制 Worker 压缩后体积为 Free 3 MB / Paid 10 M
 4. 为 Python/Node 暴露表格分页筛选能力，避免 RAG 管道只能摄取默认预览。
 5. 在解析器中增加工作量预算，并由批处理宿主提供可真实终止的超时、取消和隔离。
 
-完整能力决策与先后顺序见根目录 [capabilities.md](../../../capabilities.md)。
+完整能力决策与先后顺序见 [docs/capabilities.md](../../capabilities.md)。

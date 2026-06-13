@@ -20,7 +20,7 @@ DOCX 测试重点是 WordprocessingML 的语义结构能否稳定转成 LLM-frie
 | `docx/13_formatted_whitespace_only_runs.docx` | `formatted_whitespace_only_runs_no_panic` | 仅空白 run 上带粗斜体/链接时不 panic；不叠 Markdown 噪声 | Word 常见；对齐 md 输出降噪契约 | passed | — |
 | `docx/14_merged_table.docx` | `merged_table_and_visual_omissions_are_explicit` | 合并单元格返回 `merged_table_structure_not_preserved` | Agent 不把降级 GFM 当原始表格结构 | passed | span 模型与 HTML 降级 |
 | `docx/15_embedded_visual.docx` | `merged_table_and_visual_omissions_are_explicit` | 绘图/视觉对象省略返回 `embedded_visuals_omitted` | Agent 知道文本结果不完整 | passed | 稳定 visual id、alt/caption、外部 VLM 回填 |
-| `docx/16_image_placeholders.docx` | `image_placeholders_follow_document_order_and_only_reference_safe_entries` | 图片按正文顺序输出安全 `spoor-docx://word/media/*` 占位符；过滤 fallback、HD Photo、外链和路径穿越 | Agent 可准确选择并自行解压需要交给 VLM 的图片 | passed | alt/caption、非 shell 宿主提取接口 |
+| `docx/16_image_placeholders.docx` | `image_placeholders_follow_document_order_and_only_reference_safe_entries` | 图片按正文顺序输出安全 `spoor-docx://word/media/*` 占位符；过滤 fallback、HD Photo、外链和路径穿越；CLI `--extract` 原样输出单个安全资源 | Agent 可准确选择并提取需要交给 VLM 的图片，无需系统 unzip | passed | alt/caption、非 CLI 宿主提取接口 |
 
 ## 下一批优先用例
 

@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::{fs::File, io::Read};
+use zip::ZipArchive;
 
 fn spoor_bin() -> Command {
     Command::new(env!("CARGO_BIN_EXE_spoor"))
@@ -88,6 +90,84 @@ fn format_override_is_honored() {
     let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
     assert!(stdout.contains("<a href=\"https://example.com\""));
     assert!(!stdout.contains("[our site](https://example.com)"));
+}
+
+#[test]
+fn extract_outputs_the_referenced_docx_media_bytes() {
+    let source = fixture_path("docx/16_image_placeholders.docx");
+    let output = spoor_bin()
+        .args([&source, "--extract", "spoor-docx://word/media/image1.png"])
+        .output()
+        .expect("run spoor");
+
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+
+    let mut archive = ZipArchive::new(File::open(source).unwrap()).unwrap();
+    let mut expected = Vec::new();
+    archive
+        .by_name("word/media/image1.png")
+        .unwrap()
+        .read_to_end(&mut expected)
+        .unwrap();
+    assert_eq!(output.stdout, expected);
+}
+
+#[test]
+fn extract_rejects_paths_that_were_not_emitted_as_safe_docx_uris() {
+    let source = fixture_path("docx/16_image_placeholders.docx");
+    for resource in [
+        "word/media/image1.png",
+        "spoor-docx://word/media/../evil.png",
+        "spoor-docx://ppt/media/image1.png",
+    ] {
+        let output = spoor_bin()
+            .args([&source, "--extract", resource])
+            .output()
+            .expect("run spoor");
+
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+        let value: serde_json::Value =
+            serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
+        assert_eq!(value["code"], "parse_failed");
+    }
+}
+
+#[test]
+fn extract_rejects_non_docx_and_multiple_inputs() {
+    let text = fixture_path("plain/01_ascii.txt");
+    let output = spoor_bin()
+        .args([&text, "--extract", "spoor-docx://word/media/image1.png"])
+        .output()
+        .expect("run spoor");
+    assert!(!output.status.success());
+    let value: serde_json::Value =
+        serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
+    assert_eq!(value["code"], "parse_failed");
+    assert!(
+        value["reason"]
+            .as_str()
+            .unwrap()
+            .contains("当前仅支持 DOCX")
+    );
+
+    let docx = fixture_path("docx/16_image_placeholders.docx");
+    let output = spoor_bin()
+        .args([
+            &docx,
+            &docx,
+            "--extract",
+            "spoor-docx://word/media/image1.png",
+        ])
+        .output()
+        .expect("run spoor");
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("--extract 仅支持单个输入")
+    );
 }
 
 #[test]

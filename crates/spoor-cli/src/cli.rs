@@ -77,6 +77,7 @@ Examples:
   cat data.csv | spoor --format csv -
   spoor https://example.com/article
   spoor \"*.pdf\"
+  spoor document.docx --extract spoor-docx://word/media/image1.png > image.png
   spoor report.pdf | llm \"Summarize risks and action items\"
 ";
 
@@ -147,6 +148,23 @@ pub(crate) struct Cli {
     )]
     pub(crate) max_parse_bytes: usize,
 
+    /// 将 spoor 输出的单个内嵌媒体资源原样输出到 stdout；当前支持 spoor-docx://。
+    #[arg(
+        long,
+        value_name = "uri",
+        conflicts_with_all = [
+            "format",
+            "mode",
+            "sheet",
+            "rows",
+            "columns",
+            "limit",
+            "offset",
+            "max_output_bytes"
+        ]
+    )]
+    pub(crate) extract: Option<String>,
+
     /// 显示帮助。
     #[arg(short = 'h', long = "help", action = ArgAction::Help)]
     help: Option<bool>,
@@ -174,6 +192,7 @@ mod tests {
         assert!(cli.offset.is_none());
         assert_eq!(cli.max_output_bytes, spoor_core::DEFAULT_MAX_OUTPUT_BYTES);
         assert_eq!(cli.max_parse_bytes, spoor_core::DEFAULT_MAX_PARSE_BYTES);
+        assert!(cli.extract.is_none());
     }
 
     #[test]
@@ -226,6 +245,32 @@ mod tests {
     }
 
     #[test]
+    fn extract_parses_and_conflicts_with_text_output_options() {
+        let cli = Cli::try_parse_from([
+            "spoor",
+            "document.docx",
+            "--extract",
+            "spoor-docx://word/media/image1.png",
+        ])
+        .unwrap();
+        assert_eq!(
+            cli.extract.as_deref(),
+            Some("spoor-docx://word/media/image1.png")
+        );
+
+        let err = Cli::try_parse_from([
+            "spoor",
+            "document.docx",
+            "--extract",
+            "spoor-docx://word/media/image1.png",
+            "--mode",
+            "md",
+        ])
+        .unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
     fn help_uses_bilingual_headings_and_english_placeholders() {
         let err = Cli::try_parse_from(["spoor", "-h"]).unwrap_err();
 
@@ -245,6 +290,7 @@ mod tests {
         assert!(help.contains("--offset <n>"));
         assert!(help.contains("--max-output-bytes <n>"));
         assert!(help.contains("--max-parse-bytes <n>"));
+        assert!(help.contains("--extract <uri>"));
         assert!(help.contains("spoor \"*.pdf\""));
         assert!(help.contains("Examples:"));
         assert!(help.contains("spoor report.pdf | llm \"Summarize risks and action items\""));
@@ -272,6 +318,7 @@ mod tests {
             "mode",
             "max-output-bytes",
             "max-parse-bytes",
+            "extract",
             "help",
             "version",
         ];

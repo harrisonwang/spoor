@@ -3,6 +3,7 @@ mod cli;
 mod source;
 
 use clap::Parser;
+use std::io::Write;
 
 fn main() {
     if let Err(e) = run() {
@@ -17,6 +18,9 @@ fn main() {
 
 fn run() -> anyhow::Result<()> {
     let output = app::run(cli::Cli::parse())?;
-    print!("{output}");
+    match output {
+        app::CommandOutput::Text(text) => print!("{text}"),
+        app::CommandOutput::Binary(bytes) => std::io::stdout().lock().write_all(&bytes)?,
+    }
     Ok(())
 }

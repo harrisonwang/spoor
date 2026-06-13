@@ -1,6 +1,6 @@
 use crate::detect::{self, Format};
 use crate::error::{ParseStage, SpoorError};
-use crate::limits::{DEFAULT_MAX_PARSE_BYTES, ensure_parse_size};
+use crate::limits::{self, DEFAULT_MAX_PARSE_BYTES, ensure_parse_size};
 use crate::parse as parsers;
 use crate::result::{
     DocumentResult, ParseContent, ParseResult, ParseStats, SpoorWarning, TableResult,
@@ -136,6 +136,64 @@ pub fn parse_tables(request: &ParseRequest<'_>) -> SpoorResult<TableResult> {
     })
 }
 
+/// Extract one safe embedded media resource referenced by a URI emitted by spoor.
+///
+/// This is intentionally narrower than a general archive extraction API.
+/// Supported resource schemes are dispatched by document format and apply the
+/// same archive and parse-budget checks used during parsing. Currently only
+/// safe `spoor-docx://word/media/*` resources are emitted and supported.
+pub fn extract_media(request: &ParseRequest<'_>, resource: &str) -> SpoorResult<Vec<u8>> {
+    catch_boundary(ParseStage::Parse, || {
+        let format = detect_format(request)?;
+        match format {
+            Format::Docx => extract_media_from_docx(request, resource),
+            _ => Err(SpoorError::parse_failed(
+                format!("--extract 当前仅支持 DOCX 内嵌媒体；当前格式为 {format}"),
+                ParseStage::Parse,
+            )),
+        }
+    })
+}
+
+fn extract_media_from_docx(request: &ParseRequest<'_>, resource: &str) -> SpoorResult<Vec<u8>> {
+    let path = safe_docx_media_resource(resource).ok_or_else(|| {
+        SpoorError::parse_failed(
+            "--extract 仅接受 spoor 输出的安全内嵌媒体 URI；DOCX 使用 spoor-docx://word/media/*",
+            ParseStage::Parse,
+        )
+    })?;
+    let mut zip = limits::open_zip_archive(request.bytes, "docx", request.limits.max_parse_bytes)
+        .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Parse))?;
+    limits::read_zip_bytes(&mut zip, path, request.limits.max_parse_bytes)
+        .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Parse))
+}
+
+fn safe_docx_media_resource(resource: &str) -> Option<&str> {
+    let path = resource.strip_prefix("spoor-docx://")?;
+    let mut components = path.split('/');
+    if components.next()? != "word" || components.next()? != "media" {
+        return None;
+    }
+    let remaining = components.collect::<Vec<_>>();
+    if remaining.is_empty()
+        || remaining
+            .iter()
+            .any(|component| !is_safe_media_component(component))
+    {
+        return None;
+    }
+    Some(path)
+}
+
+fn is_safe_media_component(component: &str) -> bool {
+    !component.is_empty()
+        && component != "."
+        && component != ".."
+        && component
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
 fn parse_document_with_format(
     request: &ParseRequest<'_>,
     format: Format,
@@ -238,7 +296,7 @@ pub type ExtractedTables = TableResult;
 
 #[cfg(test)]
 mod tests {
-    use super::{ParseStage, catch_boundary};
+    use super::{ParseStage, catch_boundary, safe_docx_media_resource};
     use crate::ErrorCode;
 
     #[test]
@@ -251,5 +309,22 @@ mod tests {
         assert_eq!(error.code, ErrorCode::ParseFailed);
         assert_eq!(error.stage, Some(ParseStage::Parse));
         assert!(error.reason.contains("malformed parser input"));
+    }
+
+    #[test]
+    fn docx_media_resources_require_safe_spoor_uri() {
+        assert_eq!(
+            safe_docx_media_resource("spoor-docx://word/media/image1.png"),
+            Some("word/media/image1.png")
+        );
+        assert_eq!(safe_docx_media_resource("word/media/image1.png"), None);
+        assert_eq!(
+            safe_docx_media_resource("spoor-docx://word/media/../evil.png"),
+            None
+        );
+        assert_eq!(
+            safe_docx_media_resource("spoor-docx://ppt/media/image1.png"),
+            None
+        );
     }
 }

@@ -79,7 +79,8 @@ ParseContent + stats
 | PDF 可疑文本层保守诊断 | `pdf_page_suspicious_text_layer` | 不直接信任包含替换字符、控制字符或重复 glyph 占位符的页面 |
 | DOCX/PPTX 合并表格降级诊断 | `merged_table_structure_not_preserved` | 不把 GFM 空白/重复单元格当作原始 rowspan/colspan |
 | DOCX/PPTX 视觉对象省略诊断 | `embedded_visuals_omitted` | 知道文本输出是残缺视图；DOCX 可按安全图片占位符提取相关图片，其他对象按需调用外部视觉解析 |
-| DOCX 内嵌图片位置与安全路径 | `spoor-docx://word/media/*` | shell Agent 可按正文顺序选择图片，自行解压后交给外部 VLM |
+| DOCX 内嵌图片位置与安全路径 | `spoor-docx://word/media/*` | Agent 可按正文顺序选择图片，通过 CLI 安全提取后交给外部 VLM |
+| 单资源内嵌媒体提取 | `--extract <uri>` / `extract_media` | 使用格式无关入口按安全 URI 原样输出；当前仅支持 DOCX，后续格式沿用同一入口 |
 | warning 结构化位置 | `location.kind = page/slide` | 精确路由受影响页或幻灯片 |
 | CLI in-band warning | stdout + stderr | 只读取 stdout 的 Agent 也不会错过完整性警告 |
 | PDF 中间页失败传播 | `parse_failed` | 不再把前几页的部分结果误报为完整成功 |
@@ -160,7 +161,7 @@ Document
 | DOCX OMML 转 LaTeX | 科研/技术文档采用信号增强后 | 单源需求，且公式转换边界复杂 |
 | XLSX 语义样式 | Agent 确实需要通过颜色/粗体判断业务语义时 | 样式常是装饰，也可能携带语义；需定义可移植 schema |
 | 编码探测加固 | 新增真实失败样本后 | 当前已有 UTF-8/GBK/UTF-16 等覆盖，继续扩展应由 fixture 驱动 |
-| 图片导出适配器 | 外部 VLM 回填协议稳定后 | 二进制提取会扩大 API、安全和资源边界 |
+| 图片导出适配器 | 外部 VLM 回填协议稳定后 | 当前通用入口仅支持按安全占位符提取单个 DOCX 图片；批量导出和更多格式实现仍需按采用信号投入 |
 | 输出无损不变式测试 | 与结构化 IR 同步推进 | 很有价值，但“无损”的定义必须按格式与场景拆分 |
 | 密码文档解析 | 有可信密钥输入与宿主安全模型后 | 密钥生命周期、日志泄露、浏览器交互和错误语义都未定义 |
 

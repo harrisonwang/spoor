@@ -60,6 +60,9 @@ cat data.csv | spoor --format csv -
 # glob
 spoor "docs/*.pdf"
 
+# 按正文占位符提取单个 DOCX 图片
+spoor document.docx --extract spoor-docx://word/media/image1.png > image.png
+
 # 直接喂给 LLM
 spoor report.pdf | llm "总结风险和行动项"
 ```
@@ -67,10 +70,10 @@ spoor report.pdf | llm "总结风险和行动项"
 输出模式按格式自动分派，`-m` 可显式覆盖。表格型 JSON 默认返回前 100 行预览，通过 `--rows` / `--columns` / `--limit` / `--offset` 收窄。详见 `spoor --help`。
 
 DOCX 内嵌栅格图片会在原始正文位置输出安全占位符，例如
-`![DOCX image 1](spoor-docx://word/media/image1.png)`。具备 shell/file 能力的
-Agent 可去掉 `spoor-docx://` 后使用
-`unzip -p document.docx word/media/image1.png` 提取相关图片并交给外部 VLM；
-spoor 自身不解码、导出或理解图片。
+`![DOCX image 1](spoor-docx://word/media/image1.png)`。Agent 可使用
+`spoor document.docx --extract spoor-docx://word/media/image1.png > image.png`
+提取相关图片并交给外部 VLM；`--extract` 只接受 spoor 输出的安全 DOCX 图片 URI，
+只支持单个输入和单个资源。spoor 不解码或理解图片。
 
 ## 嵌入
 
@@ -81,6 +84,9 @@ let mut request = spoor_core::ParseRequest::new(bytes);
 request.source_name = Some("report.docx");
 let result = spoor_core::parse(&request)?;
 ```
+
+需要按解析结果中的安全 URI 提取单个内嵌媒体时，使用格式无关的
+`spoor_core::extract_media(&request, uri)`；当前仅支持 `spoor-docx://`。
 
 Agent 应优先调用 `parse` 并处理 `warnings[]`。只需要 Markdown 的兼容场景可调用
 `parse_document`；需要强制文档输出并保留 warnings 时使用 `parse_document_result`。
@@ -166,7 +172,7 @@ cargo insta review
 
 | 文档 | 内容 |
 | --- | --- |
-| [能力决策与演进规划](capabilities.md) | Agent 场景、调研结论、立即实现项、后续路线与明确边界 |
+| [能力决策与演进规划](docs/capabilities.md) | Agent 场景、调研结论、立即实现项、后续路线与明确边界 |
 | [定位与工程规划](docs/v1/planning/overview.md) | 一句话定位、设计原则、交付形态、推进顺序 |
 | [路线图与竞品分析](docs/v1/planning/roadmap.md) | 竞品调研、平台约束、差异化自查 |
 | [架构设计](docs/v1/design/architecture.md) | Core 边界、错误契约、PyO3 接口、迁移顺序 |

@@ -1,5 +1,5 @@
 use spoor_core::{
-    ErrorCode, Format, ParseContent, ParseLimits, ParseRequest, detect_format, parse,
+    ErrorCode, Format, ParseContent, ParseLimits, ParseRequest, detect_format, extract_media, parse,
 };
 #[cfg(feature = "pdf")]
 use spoor_core::{WarningCode, WarningLocation, parse_document_result};
@@ -58,6 +58,20 @@ fn parse_budget_is_enforced_before_detection() {
 
     let error = parse(&request).unwrap_err();
     assert_eq!(error.code, ErrorCode::ParseBudgetExceeded);
+}
+
+#[test]
+#[cfg(feature = "office")]
+fn extract_media_uses_safe_format_specific_resource_uris() {
+    let bytes = include_bytes!("../../spoor-cli/tests/fixtures/docx/16_image_placeholders.docx");
+    let mut request = ParseRequest::new(bytes);
+    request.source_name = Some("images.docx");
+
+    let image = extract_media(&request, "spoor-docx://word/media/image1.png").unwrap();
+    assert_eq!(image, b"first-image");
+
+    let error = extract_media(&request, "word/media/image1.png").unwrap_err();
+    assert_eq!(error.code, ErrorCode::ParseFailed);
 }
 
 #[test]

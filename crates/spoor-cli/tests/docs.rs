@@ -76,5 +76,6 @@ fn skill_teaches_docx_image_placeholder_protocol() {
     let skill = read_doc("skills/spoor/SKILL.md");
 
     assert!(skill.contains("spoor-docx://word/media/"));
-    assert!(skill.contains("unzip -p"));
+    assert!(skill.contains("spoor document.docx --extract spoor-docx://word/media/image1.png"));
+    assert!(!skill.contains("unzip -p"));
 }
