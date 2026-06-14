@@ -39,6 +39,29 @@ pub fn parse_bytes(
     serde_wasm_bindgen::to_value(&result).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+/// Extract one safe embedded media resource referenced by a `spoor-docx://` URI
+/// emitted in the Markdown output. Returns the raw resource bytes as a
+/// `Uint8Array`. Lets browser and edge callers resolve DOCX image placeholders
+/// without filesystem access. spoor does not decode or interpret the bytes.
+#[wasm_bindgen]
+pub fn extract_media(
+    bytes: &[u8],
+    resource: String,
+    source_name: Option<String>,
+    content_type: Option<String>,
+    format: Option<String>,
+    max_parse_bytes: Option<usize>,
+) -> Result<Vec<u8>, JsValue> {
+    let request = request(
+        bytes,
+        source_name.as_deref(),
+        content_type.as_deref(),
+        format.as_deref(),
+        max_parse_bytes,
+    )?;
+    spoor_core::extract_media(&request, &resource).map_err(error_value)
+}
+
 fn request<'a>(
     bytes: &'a [u8],
     source_name: Option<&'a str>,
