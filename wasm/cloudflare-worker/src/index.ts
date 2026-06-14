@@ -1,4 +1,4 @@
-import { parseBytes } from './spoor';
+import { extractMedia, parseBytes } from './spoor';
 
 const MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 
@@ -8,12 +8,18 @@ export default {
       return new Response(null, { status: 204, headers: responseHeaders() });
     }
 
+    const url = new URL(request.url);
+
     if (request.method === 'GET') {
       return Response.json({
         name: 'spoor-document-cleaner',
         runtime: 'cloudflare-workers',
         max_request_bytes: MAX_REQUEST_BYTES,
         formats: ['docx', 'xlsx', 'pdf', 'pptx', 'html', 'epub', 'ipynb', 'markdown', 'text', 'csv'],
+        endpoints: {
+          'POST /': 'POST 原始文档字节解析为结构化结果',
+          'POST /extract?uri=spoor-docx://word/media/*': 'POST 原始 DOCX 字节，按占位符返回单张内嵌图片字节',
+        },
       }, { headers: responseHeaders() });
     }
 
@@ -40,14 +46,30 @@ export default {
       );
     }
 
+    const filename = request.headers.get('x-filename') ?? undefined;
+    const contentType = request.headers.get('content-type') ?? undefined;
+
+    // /extract：按占位符返回单张内嵌图片的原始字节（懒取、单资源）
+    if (url.pathname === '/extract') {
+      const uri = url.searchParams.get('uri');
+      if (!uri) {
+        return Response.json(
+          { code: 'missing_uri', message: '缺少 uri 查询参数（spoor-docx://word/media/*）。' },
+          { status: 400, headers: responseHeaders() },
+        );
+      }
+      try {
+        const media = extractMedia(bytes, uri, filename, contentType, undefined, MAX_REQUEST_BYTES);
+        return new Response(media, {
+          headers: { ...responseHeaders(), 'content-type': mediaContentType(uri) },
+        });
+      } catch (error) {
+        return Response.json(normalizeError(error), { status: 422, headers: responseHeaders() });
+      }
+    }
+
     try {
-      const result = parseBytes(
-        bytes,
-        request.headers.get('x-filename') ?? undefined,
-        request.headers.get('content-type') ?? undefined,
-        undefined,
-        MAX_REQUEST_BYTES,
-      );
+      const result = parseBytes(bytes, filename, contentType, undefined, MAX_REQUEST_BYTES);
       return Response.json(result, { headers: responseHeaders() });
     } catch (error) {
       return Response.json(normalizeError(error), {
@@ -57,6 +79,15 @@ export default {
     }
   },
 };
+
+function mediaContentType(uri: string): string {
+  const ext = uri.split('.').pop()?.toLowerCase();
+  if (ext === 'png') return 'image/png';
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  if (ext === 'gif') return 'image/gif';
+  if (ext === 'webp') return 'image/webp';
+  return 'application/octet-stream';
+}
 
 function normalizeError(error: unknown): unknown {
   if (error && typeof error === 'object') {

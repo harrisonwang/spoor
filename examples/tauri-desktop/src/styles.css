@@ -55,3 +55,41 @@ pre { min-height: 270px; max-height: 420px; margin: 0; padding: 22px; overflow: 
   .work { border-right: 0; }
   aside { border-top: var(--line); }
 }
+
+/* 内嵌图片提取（extract_document_media）演示 */
+.media-panel {
+  margin-top: 1rem;
+  padding: 0.9rem;
+  border: var(--line);
+  background: var(--paper);
+}
+.media-panel .result-head small { font-size: 0.78rem; opacity: 0.72; }
+.media-grid {
+  margin-top: 0.7rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 0.6rem;
+}
+.media-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.45rem;
+  border: var(--line);
+  background: #fff;
+  text-align: center;
+  cursor: pointer;
+}
+.media-card:hover { border-color: var(--rust); }
+.media-card.failed { border-color: var(--rust); }
+.media-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 88px;
+  font-size: 0.74rem;
+  opacity: 0.65;
+  background: rgba(26, 26, 23, 0.05);
+}
+.media-card img { width: 100%; height: auto; display: block; border: 1px solid var(--ink); }
+.media-uri { font-size: 0.66rem; word-break: break-all; opacity: 0.78; }

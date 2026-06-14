@@ -8,3 +8,4 @@ const instance = new WebAssembly.Instance(wasmModule, {
 bindings.__wbg_set_wasm(instance.exports);
 
 export const parseBytes = bindings.parse_bytes;
+export const extractMedia = bindings.extract_media;

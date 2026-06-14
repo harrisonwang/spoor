@@ -47,6 +47,10 @@
       <section class="result">
         <div class="result-head"><span>结构化输出</span><button id="copy" disabled>复制结果</button></div>
         <pre id="output">选择文档后，Tauri command 返回的结构化结果会显示在这里。</pre>
+        <div class="media-panel" id="media-panel" hidden>
+          <div class="result-head"><span>内嵌图片占位符</span><small id="media-hint"></small></div>
+          <div class="media-grid" id="media-grid"></div>
+        </div>
       </section>
     </main>
     <script type="module" src="/src/main.js"></script>

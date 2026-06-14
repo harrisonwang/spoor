@@ -277,3 +277,62 @@ footer {
   .query-panel > div { grid-template-columns: 1fr; gap: 8px; }
   .readout-bar, footer { flex-direction: column; }
 }
+
+/* 内嵌图片提取（extract_media）演示 */
+.sample-btn {
+  margin-top: .8rem;
+  width: 100%;
+  padding: .7rem 1rem;
+  border: 1px dashed var(--line);
+  background: var(--paper-bright);
+  color: var(--ink);
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+.sample-btn:hover { border-color: var(--signal); }
+
+.media-panel {
+  margin-top: 1.2rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+.media-panel .output-head small { opacity: .72; }
+.media-grid {
+  margin-top: .8rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+  gap: .7rem;
+}
+.media-card {
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+  padding: .5rem;
+  border: 1px solid var(--line);
+  background: var(--paper-bright);
+  align-items: stretch;
+  text-align: center;
+}
+.media-card:hover { border-color: var(--signal); }
+.media-card.failed { border-color: var(--signal); }
+.media-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 92px;
+  font-size: .76rem;
+  opacity: .7;
+  background: rgba(25, 25, 20, .05);
+}
+.media-card img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border: 1px solid var(--line);
+}
+.media-uri {
+  font-size: .68rem;
+  word-break: break-all;
+  opacity: .8;
+}

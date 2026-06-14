@@ -62,6 +62,9 @@
           </span>
           <span class="privacy" id="privacy">本地 / 不上传</span>
         </label>
+        <button id="load-sample" class="sample-btn" type="button">
+          加载图片示例（DOCX）
+        </button>
       </section>
 
       <section class="readout">
@@ -92,6 +95,14 @@
             </div>
             <pre id="output">选择文档后，结构化结果会显示在这里。</pre>
           </section>
+        </div>
+
+        <div class="media-panel" id="media-panel" hidden>
+          <div class="output-head">
+            <span class="section-label">内嵌图片占位符</span>
+            <small id="media-hint"></small>
+          </div>
+          <div class="media-grid" id="media-grid"></div>
         </div>
       </section>
 

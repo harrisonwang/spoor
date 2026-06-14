@@ -1,7 +1,10 @@
-import { parse_bytes } from '@harrisonwang/spoor-wasm';
+import { parse_bytes, extract_media } from '@harrisonwang/spoor-wasm';
 import './styles.css';
 
 const $ = (selector) => document.querySelector(selector);
+
+// 占位符正则：![DOCX image N](spoor-docx://word/media/imageN.png)
+const PLACEHOLDER = /spoor-docx:\/\/[^\s)"']+/g;
 const state = {
   records: [],
   selectedId: null,
@@ -34,6 +37,7 @@ const elements = {
   searchResults: $('#search-results'),
   viewerTitle: $('#viewer-title'),
   viewerMeta: $('#viewer-meta'),
+  viewerMedia: $('#viewer-media'),
   viewerOutput: $('#viewer-output'),
   copy: $('#copy'),
 };
@@ -243,6 +247,7 @@ function renderViewer() {
   if (!record) {
     elements.viewerTitle.textContent = '尚未选择';
     elements.viewerMeta.replaceChildren();
+    renderViewerMedia(null);
     elements.viewerOutput.textContent = '选择已解析文件后查看规范化输出。';
     return;
   }
@@ -255,9 +260,67 @@ function renderViewer() {
     badge(`${record.chunks.length} 个记录`),
     ...(record.result?.warnings.length ? [badge(`${record.result.warnings.length} 条警告`)] : []),
   );
+  renderViewerMedia(record);
   elements.viewerOutput.textContent = record.status === 'ready'
     ? viewerText(record).slice(0, 30000)
     : JSON.stringify(record.error, null, 2);
+}
+
+// 选中文件若含 spoor-docx:// 占位符，渲染缩略图条；点击才提取该图字节（懒取、单资源）
+function renderViewerMedia(record) {
+  const uris = record?.status === 'ready'
+    ? [...new Set(record.text.match(PLACEHOLDER) ?? [])]
+    : [];
+  if (!uris.length) {
+    elements.viewerMedia.hidden = true;
+    elements.viewerMedia.replaceChildren();
+    return;
+  }
+  elements.viewerMedia.hidden = false;
+  const hint = document.createElement('p');
+  hint.className = 'viewer-media-hint';
+  hint.textContent = `${uris.length} 张内嵌图片 / 点击在浏览器本地提取（extract_media）`;
+  const grid = document.createElement('div');
+  grid.className = 'viewer-media-grid';
+  grid.append(...uris.map((uri) => mediaCard(record, uri)));
+  elements.viewerMedia.replaceChildren(hint, grid);
+}
+
+function mediaCard(record, uri) {
+  const card = document.createElement('button');
+  card.type = 'button';
+  card.className = 'media-card';
+  const slot = document.createElement('span');
+  slot.className = 'media-slot';
+  slot.textContent = '点击提取';
+  const label = document.createElement('span');
+  label.className = 'media-uri';
+  label.textContent = uri.replace('spoor-docx://word/media/', '');
+  card.append(slot, label);
+  card.addEventListener('click', async () => {
+    if (card.dataset.done === '1') return;
+    try {
+      const bytes = extract_media(
+        new Uint8Array(await record.file.arrayBuffer()),
+        uri,
+        record.name,
+        record.file.type || undefined,
+        undefined,
+        16 * 1024 * 1024,
+      );
+      const url = URL.createObjectURL(new Blob([bytes]));
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = uri;
+      img.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
+      slot.replaceWith(img);
+      card.dataset.done = '1';
+    } catch (error) {
+      slot.textContent = normalizeError(error).code ?? '提取失败';
+      card.classList.add('failed');
+    }
+  });
+  return card;
 }
 
 function runSearch(event) {
@@ -322,8 +385,8 @@ function updateControls() {
   }
 }
 
-function loadSample() {
-  addFiles([
+async function loadSample() {
+  const files = [
     new File([
       '# 北港改造项目现场报告\n\n港区改造计划的目标是把船舶平均等待时间降低 22%。\n\n## 主要风险\n\n审批仍在关键路径上，东侧泊位需要补充第二轮环境评估。\n\n## 行动项\n\n周五前确认审批负责人，并发布修订后的施工顺序。',
     ], '北港现场报告.md', { type: 'text/markdown' }),
@@ -333,7 +396,17 @@ function loadSample() {
     new File([
       '<article><h1>北港项目简报</h1><p>改造计划在提高泊位吞吐量的同时保障本地就业。</p><h2>待决策事项</h2><p>进场施工前，为东侧泊位补充环境评估预算。</p></article>',
     ], '项目简报.html', { type: 'text/html' }),
-  ]);
+  ];
+  // 含内嵌图片的脱敏 DOCX：解析后在查看器内点击占位符即可本地提取图片
+  try {
+    const blob = await (await fetch('/sample-image-doc.docx')).blob();
+    files.push(new File([blob], '图片示例.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    }));
+  } catch {
+    // 取不到示例 DOCX 时静默跳过，其余样例正常加载
+  }
+  addFiles(files);
 }
 
 function clearCorpus() {
