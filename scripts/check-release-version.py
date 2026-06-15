@@ -33,6 +33,18 @@ def read_node_binding_version() -> str:
     return versions.pop()
 
 
+def read_limitations_version() -> str:
+    text = (ROOT / "docs/v1/design/limitations.md").read_text(encoding="utf-8")
+    versions = set(
+        re.findall(r"spoor `v(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)`", text)
+    )
+    if len(versions) != 1:
+        raise ValueError(
+            f"expected one limitations.md version, found {sorted(versions)}"
+        )
+    return versions.pop()
+
+
 def main() -> int:
     if len(sys.argv) != 2 or not re.fullmatch(r"v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", sys.argv[1]):
         print("usage: check-release-version.py vMAJOR.MINOR.PATCH", file=sys.stderr)
@@ -55,6 +67,7 @@ def main() -> int:
         ]["version"],
         "Node generated binding": read_node_binding_version(),
         "WASM @harrisonwang/spoor-wasm": read_json("crates/spoor-wasm/package.json")["version"],
+        "limitations.md": read_limitations_version(),
     }
 
     lock_packages = read_toml("Cargo.lock")["package"]
@@ -62,6 +75,11 @@ def main() -> int:
         versions[f"Cargo.lock {name}"] = next(
             package["version"] for package in lock_packages if package["name"] == name
         )
+
+    tauri_lock_packages = read_toml("examples/tauri-desktop/src-tauri/Cargo.lock")["package"]
+    versions["tauri-desktop Cargo.lock spoor-core"] = next(
+        package["version"] for package in tauri_lock_packages if package["name"] == "spoor-core"
+    )
 
     mismatches = {
         label: version for label, version in versions.items() if version != expected
