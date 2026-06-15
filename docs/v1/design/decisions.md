@@ -373,11 +373,13 @@ CSV 不应默认做强类型推断，因为 CSV 本质是文本格式。
 
 ### HTML / URL
 
-当前不是重点，但已有基础策略：
+目标场景是 `spoor https://…` 的 URL 抓取；本地 `.html` 文件是边角，不为它单独设计。已有策略：
 
 - 优先 `article`，其次 `main`，最后 `body`。
 - 跳过 `script/style/nav/header/footer/aside`。
-- heading/list/link/table/blockquote/pre/code/image alt 转 Markdown。
+- heading/list/table/blockquote/pre/code 转 Markdown。
+- `<img>` 转标准 Markdown 图片 `![alt](src)`，Agent 可直接把 URL 交给外部 VLM；`data:` URI 或无 src 的图片退回 `[图片：alt]` 占位符，避免把 base64 灌进上下文。
+- `<a href>` / `<img src>` 的相对地址按页面 URL 做 best-effort 绝对化：`source_name` 是 http(s) URL 时解析相对路径（`/abs`、`../rel`、`?query`），已是绝对地址、协议相对 `//`、`data:`/`mailto:` 等 scheme、`#fragment` 一律不动。绝对化是纯字符串运算（不引入 `url` crate、不联网），CLI / 库 / WASM 行为一致；没有 http(s) base（本地文件、stdin、未带 URL 的字节调用）时链接保持原样。
 
 待补：
 

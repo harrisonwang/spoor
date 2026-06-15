@@ -1,7 +1,7 @@
 //! HTML integration tests.
 
 mod common;
-use common::extract_fixture;
+use common::{extract_fixture, extract_fixture_from_url};
 use insta::assert_snapshot;
 use spoor_core::Format;
 
@@ -65,5 +65,30 @@ fn semantic_blocks_preserve_llm_relevant_content() {
     assert!(out.contains("> 文档结构比视觉样式更重要。"));
     assert!(out.contains("`spoor 报告.docx`"));
     assert!(out.contains("```\n风险 = \"需要复核\""));
-    assert!(out.contains("[图片：季度收入趋势图]"));
+    // <img> now renders as a standard Markdown image so an agent can hand the
+    // URL to a VLM. Loaded as a local fixture there is no base, so the relative
+    // src stays verbatim.
+    assert!(out.contains("![季度收入趋势图](chart.png)"));
+}
+
+#[test]
+fn url_source_absolutizes_relative_links_and_images() {
+    // The real target: `spoor https://…`. Relative <a href> and <img src>
+    // resolve against the page URL so the agent gets fetchable URLs; absolute
+    // links are left untouched.
+    let out = extract_fixture_from_url(
+        "html/08_relative_urls.html",
+        Format::Html,
+        "https://example.com/blog/post.html",
+    );
+    assert!(out.contains("[关于页](https://example.com/about)"), "{out}");
+    assert!(
+        out.contains("[往期归档](https://example.com/archive/2024.html)"),
+        "{out}"
+    );
+    assert!(
+        out.contains("![收入趋势](https://example.com/blog/images/chart.png)"),
+        "{out}"
+    );
+    assert!(out.contains("[第三方](https://other.example/x)"), "{out}");
 }

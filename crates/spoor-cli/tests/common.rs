@@ -30,6 +30,20 @@ pub fn extract_fixture(rel_path: &str, format: Format) -> String {
         .unwrap_or_else(|e| panic!("extract failed on {}: {}", rel_path, e))
 }
 
+/// Extract a fixture as if it had been fetched from `source_url`, so relative
+/// links/images resolve against that URL — the real `spoor https://…` path.
+pub fn extract_fixture_from_url(rel_path: &str, format: Format, source_url: &str) -> String {
+    let path = Path::new("tests/fixtures").join(rel_path);
+    let bytes =
+        std::fs::read(&path).unwrap_or_else(|error| panic!("read failed on {rel_path}: {error}"));
+    let mut request = ParseRequest::new(&bytes);
+    request.source_name = Some(source_url);
+    request.format_hint = Some(format);
+    parse_document(&request)
+        .map(|document| document.markdown)
+        .unwrap_or_else(|e| panic!("extract failed on {}: {}", rel_path, e))
+}
+
 pub fn parse_fixture(rel_path: &str, format: Format) -> ParseResult {
     let path = Path::new("tests/fixtures").join(rel_path);
     let bytes =

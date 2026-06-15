@@ -30,6 +30,14 @@ impl<'a> Source<'a> {
         self.source_name.is_some_and(is_url)
     }
 
+    /// The document's base for resolving relative links, available only when
+    /// the source is an absolute http(s) URL. Local paths, stdin (`-`), and
+    /// raw library/WASM byte calls return `None`, so relative links are left
+    /// verbatim instead of being resolved against a fabricated `file://` base.
+    pub(crate) fn url_base(&self) -> Option<&'a str> {
+        self.source_name.filter(|name| is_url(name))
+    }
+
     pub(crate) fn content_type(&self) -> Option<&'a str> {
         self.content_type
     }
