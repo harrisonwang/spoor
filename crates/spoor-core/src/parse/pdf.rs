@@ -1,6 +1,7 @@
 use crate::error::StructuredError;
 use crate::limits;
 use crate::parse::ExtractedMarkdown;
+use crate::parse::pdf_media::{self, PageImage};
 use crate::result::{SpoorWarning, WarningCode};
 use crate::source::Source;
 use anyhow::{Result, anyhow};
@@ -9,43 +10,65 @@ pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<ExtractedM
     let pages =
         super::pdf_engine::extract_text_from_mem_by_pages(source.bytes()).map_err(map_pdf_error)?;
 
-    if pages.iter().all(|page| page.trim().is_empty()) {
+    // Best-effort: locate image XObjects so the renderer can mark their page
+    // position and warn. A discovery failure just yields no image markers.
+    let images = pdf_media::discover_images(source.bytes(), pages.len());
+
+    // A PDF with no text layer is only a dead end when it also has no images to
+    // hand off. When it *does* (a scan or an exported diagram), surface the page
+    // skeleton plus image markers/handles and let the agent read them with a
+    // vision model — hard-failing here would block exactly that handoff.
+    let has_text = pages.iter().any(|page| !page.trim().is_empty());
+    let has_images = images.iter().any(|page| !page.is_empty());
+    if !has_text && !has_images {
         return Err(StructuredError::image_only_pdf().into());
     }
 
-    let rendered_bytes = pages
-        .iter()
-        .enumerate()
-        .fold(0usize, |total, (index, page)| {
-            total
-                .saturating_add(if index > 0 { "\n\n".len() } else { 0 })
-                .saturating_add(format!("## Page {}\n\n", index + 1).len())
-                .saturating_add(page.trim().len())
-        });
-    limits::ensure_parse_size(rendered_bytes, max_parse_bytes, "PDF Markdown rendering")?;
+    let markdown = render_pages(&pages, &images);
+    limits::ensure_parse_size(markdown.len(), max_parse_bytes, "PDF Markdown rendering")?;
 
     Ok(ExtractedMarkdown {
-        markdown: render_pages(&pages),
-        warnings: page_warnings(&pages),
+        markdown,
+        warnings: page_warnings(&pages, &images),
     })
 }
 
-fn render_pages(pages: &[String]) -> String {
+fn render_pages(pages: &[String], images: &[Vec<PageImage>]) -> String {
     let mut markdown = String::new();
+    let mut image_number = 0usize;
 
     for (index, page) in pages.iter().enumerate() {
         if index > 0 {
             markdown.push_str("\n\n");
         }
 
-        markdown.push_str(&format!("## Page {}\n\n", index + 1));
+        let number = index + 1;
+        markdown.push_str(&format!("## Page {number}\n\n"));
         markdown.push_str(page.trim());
+
+        for image in images.get(index).map(Vec::as_slice).unwrap_or_default() {
+            image_number += 1;
+            markdown.push_str("\n\n");
+            if image.extractable {
+                // A real handle: `--extract` returns the JPEG/JPEG2000 bytes.
+                markdown.push_str(&format!(
+                    "![PDF image {image_number} (p{number})](spoor-pdf://obj/{}/{})",
+                    image.id, image.generation
+                ));
+            } else {
+                // Present but not directly extractable; mark position only so
+                // the agent knows the page is more than its text.
+                markdown.push_str(&format!(
+                    "[PDF image {image_number} (p{number})：内嵌图，编码需外部渲染]"
+                ));
+            }
+        }
     }
 
     markdown
 }
 
-fn page_warnings(pages: &[String]) -> Vec<SpoorWarning> {
+fn page_warnings(pages: &[String], images: &[Vec<PageImage>]) -> Vec<SpoorWarning> {
     let mut warnings = Vec::new();
     for (index, page) in pages.iter().enumerate() {
         let number = index + 1;
@@ -63,6 +86,30 @@ fn page_warnings(pages: &[String]) -> Vec<SpoorWarning> {
                 format!(
                     "第 {number} 页文本层包含替换字符、控制字符或重复 glyph 占位符；Agent 应避免直接信任该页文本，并按需转交外部 OCR/VLM。"
                 ),
+                number,
+            ));
+        }
+
+        let page_images = images.get(index).map(Vec::as_slice).unwrap_or_default();
+        if !page_images.is_empty() {
+            let total = page_images.len();
+            let extractable = page_images.iter().filter(|image| image.extractable).count();
+            let message = if extractable == total {
+                format!(
+                    "第 {number} 页含 {total} 张图片，未进入文本；已用 spoor-pdf:// 标注，Agent 可用 --extract 取出交给视觉模型。"
+                )
+            } else if extractable == 0 {
+                format!(
+                    "第 {number} 页含 {total} 张图片，未进入文本，且编码 spoor 不能直出；请在外部渲染该页后交给视觉模型。"
+                )
+            } else {
+                format!(
+                    "第 {number} 页含 {total} 张图片，未进入文本；其中 {extractable} 张可用 --extract 取出（已标 spoor-pdf://），其余需外部渲染。"
+                )
+            };
+            warnings.push(SpoorWarning::at_page(
+                WarningCode::EmbeddedVisualsOmitted,
+                message,
                 number,
             ));
         }
@@ -103,11 +150,33 @@ mod tests {
     #[test]
     fn page_boundaries_preserve_blank_pages() {
         let pages = vec!["first".into(), " \n".into(), "third".into()];
+        let images = vec![Vec::new(); pages.len()];
 
         assert_eq!(
-            render_pages(&pages),
+            render_pages(&pages, &images),
             "## Page 1\n\nfirst\n\n## Page 2\n\n\n\n## Page 3\n\nthird"
         );
+    }
+
+    #[test]
+    fn extractable_image_renders_handle_others_render_marker() {
+        let pages = vec!["text".to_string()];
+        let images = vec![vec![
+            super::PageImage {
+                id: 7,
+                generation: 0,
+                extractable: true,
+            },
+            super::PageImage {
+                id: 9,
+                generation: 0,
+                extractable: false,
+            },
+        ]];
+
+        let markdown = render_pages(&pages, &images);
+        assert!(markdown.contains("![PDF image 1 (p1)](spoor-pdf://obj/7/0)"));
+        assert!(markdown.contains("[PDF image 2 (p1)：内嵌图，编码需外部渲染]"));
     }
 
     #[test]
@@ -137,10 +206,32 @@ mod tests {
 
     #[test]
     fn mixed_pdf_reports_blank_page_without_failing_document() {
-        let warnings = page_warnings(&["text".into(), " \n".into(), "more".into()]);
+        let pages = vec!["text".to_string(), " \n".to_string(), "more".to_string()];
+        let warnings = page_warnings(&pages, &vec![Vec::new(); pages.len()]);
 
         assert_eq!(warnings.len(), 1);
         assert_eq!(warnings[0].code, WarningCode::PdfPageNoTextLayer);
+        assert_eq!(
+            warnings[0].location,
+            Some(WarningLocation::Page { number: 2 })
+        );
+    }
+
+    #[test]
+    fn pages_with_images_warn_with_page_location() {
+        let pages = vec!["text".to_string(), "more".to_string()];
+        let images = vec![
+            Vec::new(),
+            vec![super::PageImage {
+                id: 5,
+                generation: 0,
+                extractable: false,
+            }],
+        ];
+
+        let warnings = page_warnings(&pages, &images);
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].code, WarningCode::EmbeddedVisualsOmitted);
         assert_eq!(
             warnings[0].location,
             Some(WarningLocation::Page { number: 2 })

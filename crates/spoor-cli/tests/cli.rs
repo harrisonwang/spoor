@@ -187,8 +187,10 @@ fn extraction_errors_exit_nonzero() {
 }
 
 #[test]
-fn image_only_pdf_emits_machine_readable_error() {
-    let source = fixture_path("pdf/04_image_only.pdf");
+fn pdf_without_text_or_images_emits_machine_readable_error() {
+    // No text layer and no images to hand off: still a hard, branchable error.
+    // (An image-only PDF that *has* images is surfaced for vision instead.)
+    let source = fixture_path("pdf/06_vector_only.pdf");
     let output = spoor_bin().arg(source).output().expect("run spoor");
 
     assert!(!output.status.success());

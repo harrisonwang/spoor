@@ -83,12 +83,14 @@ fn document_result_api_preserves_structured_warning_locations() {
 
     let result = parse_document_result(&request).unwrap();
 
-    assert_eq!(result.warnings.len(), 1);
+    // Page 2 lacks a text layer and carries an image: a missing-text warning
+    // followed by an embedded-visual warning, both page-located.
+    assert_eq!(result.warnings.len(), 2);
     assert_eq!(result.warnings[0].code, WarningCode::PdfPageNoTextLayer);
-    assert_eq!(
-        result.warnings[0].location,
-        Some(WarningLocation::Page { number: 2 })
-    );
+    assert_eq!(result.warnings[1].code, WarningCode::EmbeddedVisualsOmitted);
+    for warning in &result.warnings {
+        assert_eq!(warning.location, Some(WarningLocation::Page { number: 2 }));
+    }
     let serialized = serde_json::to_value(result).unwrap();
     assert_eq!(serialized["warnings"][0]["location"]["kind"], "page");
     assert_eq!(serialized["warnings"][0]["location"]["number"], 2);

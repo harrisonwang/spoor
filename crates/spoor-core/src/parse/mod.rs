@@ -21,6 +21,8 @@ mod pdf;
 #[cfg(feature = "pdf")]
 #[rustfmt::skip]
 mod pdf_engine;
+#[cfg(feature = "pdf")]
+pub(crate) mod pdf_media;
 mod plain;
 #[cfg(feature = "office")]
 mod pptx;

@@ -147,12 +147,65 @@ pub fn extract_media(request: &ParseRequest<'_>, resource: &str) -> SpoorResult<
         let format = detect_format(request)?;
         match format {
             Format::Docx => extract_media_from_docx(request, resource),
+            Format::Pdf => extract_media_from_pdf(request, resource),
             _ => Err(SpoorError::parse_failed(
-                format!("--extract 当前仅支持 DOCX 内嵌媒体；当前格式为 {format}"),
+                format!("--extract 当前仅支持 DOCX 与 PDF 内嵌媒体；当前格式为 {format}"),
                 ParseStage::Parse,
             )),
         }
     })
+}
+
+/// Resolve a `spoor-pdf://obj/{id}/{gen}` image handle to its raw JPEG/JPEG2000
+/// bytes. Unlike DOCX media (already standalone files), only images whose PDF
+/// stream is itself a usable file are returned; other encodings degrade to a
+/// structured error and stay marked-only in the rendered text.
+#[cfg(feature = "pdf")]
+fn extract_media_from_pdf(request: &ParseRequest<'_>, resource: &str) -> SpoorResult<Vec<u8>> {
+    let (id, generation) = safe_pdf_image_resource(resource).ok_or_else(|| {
+        SpoorError::parse_failed(
+            "--extract 仅接受 spoor 输出的安全内嵌媒体 URI；PDF 使用 spoor-pdf://obj/{id}/{gen}",
+            ParseStage::Parse,
+        )
+    })?;
+    let bytes = crate::parse::pdf_media::extract_image(
+        request.bytes,
+        id,
+        generation,
+        request.limits.max_parse_bytes,
+    )
+    .map_err(|error| SpoorError::parse_failed(error.message(), ParseStage::Parse))?;
+    ensure_parse_size(
+        bytes.len(),
+        request.limits.max_parse_bytes,
+        "extracted pdf image",
+    )
+    .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Limits))?;
+    Ok(bytes)
+}
+
+#[cfg(not(feature = "pdf"))]
+fn extract_media_from_pdf(_request: &ParseRequest<'_>, _resource: &str) -> SpoorResult<Vec<u8>> {
+    Err(SpoorError::parse_failed(
+        "PDF 支持在编译期被关闭",
+        ParseStage::Parse,
+    ))
+}
+
+/// Parse and validate a `spoor-pdf://obj/{id}/{gen}` handle into `(id, gen)`.
+/// Mirrors `safe_docx_media_resource`: never trust the URI shape blindly.
+#[cfg(feature = "pdf")]
+fn safe_pdf_image_resource(resource: &str) -> Option<(u32, u16)> {
+    let mut parts = resource.strip_prefix("spoor-pdf://")?.split('/');
+    if parts.next()? != "obj" {
+        return None;
+    }
+    let id = parts.next()?.parse::<u32>().ok()?;
+    let generation = parts.next()?.parse::<u16>().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some((id, generation))
 }
 
 fn extract_media_from_docx(request: &ParseRequest<'_>, resource: &str) -> SpoorResult<Vec<u8>> {
@@ -326,5 +379,21 @@ mod tests {
             safe_docx_media_resource("spoor-docx://ppt/media/image1.png"),
             None
         );
+    }
+
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn pdf_image_resources_require_obj_id_gen_uri() {
+        use super::safe_pdf_image_resource;
+        assert_eq!(
+            safe_pdf_image_resource("spoor-pdf://obj/12/0"),
+            Some((12, 0))
+        );
+        // Wrong scheme, missing/extra segments, and non-numeric ids are rejected.
+        assert_eq!(safe_pdf_image_resource("spoor-docx://obj/12/0"), None);
+        assert_eq!(safe_pdf_image_resource("spoor-pdf://12/0"), None);
+        assert_eq!(safe_pdf_image_resource("spoor-pdf://obj/12"), None);
+        assert_eq!(safe_pdf_image_resource("spoor-pdf://obj/12/0/extra"), None);
+        assert_eq!(safe_pdf_image_resource("spoor-pdf://obj/x/0"), None);
     }
 }
