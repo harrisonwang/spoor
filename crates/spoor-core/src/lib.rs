@@ -16,8 +16,9 @@ mod source;
 
 pub use detect::Format;
 pub use engine::{
-    ExtractedDocument, ExtractedTables, ParseLimits, ParseRequest, SpoorResult, TableFilter,
-    detect_format, extract_media, parse, parse_document, parse_document_result, parse_tables,
+    DocumentFilter, ExtractedDocument, ExtractedTables, ParseLimits, ParseRequest, SpoorResult,
+    TableFilter, detect_format, extract_media, parse, parse_document, parse_document_result,
+    parse_tables,
 };
 pub use error::{ErrorCode, ParseStage, SpoorError, StructuredError};
 pub use json_schema::{

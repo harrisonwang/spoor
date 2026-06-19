@@ -4,7 +4,9 @@ mod common;
 use common::{extract_fixture, extract_fixture_err, parse_fixture};
 use insta::assert_snapshot;
 use serde_json::json;
-use spoor_core::{Format, WarningCode, WarningLocation};
+use spoor_core::{
+    DocumentFilter, Format, ParseRequest, WarningCode, WarningLocation, parse_document,
+};
 
 #[test]
 fn basic_text_layer() {
@@ -76,4 +78,27 @@ fn mixed_pdf_reports_page_level_missing_text_and_image() {
     let codes: Vec<_> = result.warnings.iter().map(|warning| warning.code).collect();
     assert!(codes.contains(&WarningCode::PdfPageNoTextLayer));
     assert!(codes.contains(&WarningCode::EmbeddedVisualsOmitted));
+}
+
+#[test]
+fn page_filter_limits_pdf_output_to_requested_pages() {
+    let path = std::path::Path::new("tests/fixtures/pdf/02_multipage.pdf");
+    let bytes = std::fs::read(path).expect("read fixture");
+    let mut request = ParseRequest::new(&bytes);
+    request.source_name = path.to_str();
+    request.format_hint = Some(Format::Pdf);
+    request.document_filter = DocumentFilter {
+        page_range: Some((2, 2)),
+    };
+
+    let markdown = parse_document(&request)
+        .expect("parse filtered PDF")
+        .markdown;
+    assert!(!markdown.contains("## Page 1"), "{markdown}");
+    assert!(markdown.contains("## Page 2"), "{markdown}");
+    assert!(!markdown.contains("## Page 3"), "{markdown}");
+    assert!(
+        markdown.contains("Page 2 content begins here."),
+        "{markdown}"
+    );
 }

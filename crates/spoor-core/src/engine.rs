@@ -32,6 +32,13 @@ pub struct TableFilter {
     pub offset: Option<usize>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DocumentFilter {
+    /// Inclusive 1-based page range for page-oriented document formats.
+    /// Currently only PDF uses this to avoid extracting unrequested pages.
+    pub page_range: Option<(usize, usize)>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ParseRequest<'a> {
     pub bytes: &'a [u8],
@@ -39,6 +46,7 @@ pub struct ParseRequest<'a> {
     pub content_type: Option<&'a str>,
     pub format_hint: Option<Format>,
     pub table_filter: TableFilter,
+    pub document_filter: DocumentFilter,
     pub limits: ParseLimits,
 }
 
@@ -50,6 +58,7 @@ impl<'a> ParseRequest<'a> {
             content_type: None,
             format_hint: None,
             table_filter: TableFilter::default(),
+            document_filter: DocumentFilter::default(),
             limits: ParseLimits::default(),
         }
     }
@@ -251,8 +260,13 @@ fn parse_document_with_format(
     request: &ParseRequest<'_>,
     format: Format,
 ) -> SpoorResult<(DocumentResult, Vec<SpoorWarning>)> {
-    let extracted = parsers::extract(&source(request), format, request.limits.max_parse_bytes)
-        .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Parse))?;
+    let extracted = parsers::extract(
+        &source(request),
+        format,
+        &request.document_filter,
+        request.limits.max_parse_bytes,
+    )
+    .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Parse))?;
     ensure_parse_size(
         extracted.markdown.len(),
         request.limits.max_parse_bytes,

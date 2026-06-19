@@ -1163,7 +1163,9 @@ impl Function {
                 let n = get::<f64>(doc, dict, b"N");
                 Function::Type2(Type2Func { c0, c1, n})
             }
-            _ => { panic!("unhandled function type {}", function_type) }
+            3 => Function::Type3,
+            4 => Function::Type4,
+            _ => Function::Type4,
         };
         f
     }
@@ -2163,29 +2165,43 @@ pub fn extract_text_from_mem_encrypted<PW: AsRef<[u8]>>(
 }
 
 
-fn extract_text_by_pages(doc: &Document) -> Result<Vec<String>, OutputError> {
+fn extract_text_by_pages(doc: &Document) -> Result<Vec<(usize, String)>, OutputError> {
+    extract_text_by_page_range(doc, None)
+}
+
+fn extract_text_by_page_range(doc: &Document, page_range: Option<(usize, usize)>) -> Result<Vec<(usize, String)>, OutputError> {
     let mut pages = Vec::new();
     let empty_resources = Dictionary::new();
     let mut processor = Processor::new();
     for (page_num, object_id) in doc.get_pages() {
+        let page_number = page_num as usize;
+        if let Some((first, last)) = page_range {
+            if page_number < first || page_number > last {
+                continue;
+            }
+        }
         let mut s = String::new();
         let mut output = PlainTextOutput::new(&mut s);
         output_doc_inner(page_num, object_id, doc, &mut processor, &mut output, &empty_resources)?;
-        pages.push(s);
+        pages.push((page_number, s));
     }
     Ok(pages)
 }
 
-pub fn extract_text_from_mem_by_pages(buffer: &[u8]) -> Result<Vec<String>, OutputError> {
+pub fn extract_text_from_mem_by_pages(buffer: &[u8]) -> Result<Vec<(usize, String)>, OutputError> {
+    extract_text_from_mem_by_page_range(buffer, None)
+}
+
+pub fn extract_text_from_mem_by_page_range(buffer: &[u8], page_range: Option<(usize, usize)>) -> Result<Vec<(usize, String)>, OutputError> {
     let mut doc = Document::load_mem(buffer)?;
     maybe_decrypt(&mut doc)?;
-    extract_text_by_pages(&doc)
+    extract_text_by_page_range(&doc, page_range)
 }
 
 pub fn extract_text_from_mem_by_pages_encrypted<PW: AsRef<[u8]>>(buffer: &[u8], password: PW) -> Result<Vec<String>, OutputError> {
     let mut doc = Document::load_mem(buffer)?;
     doc.decrypt(password)?;
-    extract_text_by_pages(&doc)
+    Ok(extract_text_by_pages(&doc)?.into_iter().map(|(_, text)| text).collect())
 }
 
 
