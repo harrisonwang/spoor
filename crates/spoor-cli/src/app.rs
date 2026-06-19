@@ -404,9 +404,11 @@ fn build_filter(cli: &Cli) -> Result<TableFilter> {
         None => None,
     };
     // Funnel through the same validator the language bindings use, so the
-    // row-range bounds (>= 1, first <= last) and the rows/limit-offset
-    // exclusion are enforced in one place (clap also rejects the conflict at
-    // flag-parse time for a friendlier CLI error).
+    // row-range rules (>= 1, first <= last, rows ⟂ limit/offset) live in one
+    // place. Surface a failure as a friendly CLI arg error (matching the
+    // sibling `parse_row_range` shape errors) rather than the structured JSON
+    // reserved for content/parse failures; clap also rejects the rows/limit
+    // conflict at flag-parse time.
     TableFilter::build(
         cli.sheet.clone(),
         rows,
@@ -414,7 +416,7 @@ fn build_filter(cli: &Cli) -> Result<TableFilter> {
         cli.limit,
         cli.offset,
     )
-    .map_err(Into::into)
+    .map_err(|error| anyhow!("{}", error.reason))
 }
 
 /// Parse the CLI `--rows <first>:<last>` string into a 1-based pair. Bound

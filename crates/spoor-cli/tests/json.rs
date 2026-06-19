@@ -389,6 +389,34 @@ fn rows_filter_excluding_data_returns_empty_rows() {
 }
 
 #[test]
+fn rows_out_of_bounds_is_a_friendly_arg_error_not_json() {
+    // An out-of-bounds --rows value is an argument error: it should print a
+    // friendly stderr message, not the structured JSON envelope reserved for
+    // content/parse failures (which the sibling missing-sheet error uses).
+    let output = spoor_bin()
+        .args([
+            "-m",
+            "json",
+            "--rows",
+            "104:5",
+            &fixture_path("csv/01_basic.csv"),
+        ])
+        .output()
+        .expect("run spoor");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("不能大于终点"),
+        "stderr should explain the bound violation: {stderr}"
+    );
+    assert!(
+        !stderr.trim_start().starts_with('{'),
+        "an arg error must not be the structured JSON envelope: {stderr}"
+    );
+}
+
+#[test]
 fn columns_filter_keeps_only_selected_keys() {
     let path = titled_table_fixture();
     let value = spoor_json(&[
