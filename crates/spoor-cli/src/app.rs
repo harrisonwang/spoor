@@ -37,6 +37,7 @@ fn extract_resource(cli: &Cli, resource: &str) -> Result<Vec<u8>> {
         TableFilter::default(),
         DocumentFilter::default(),
         cli.max_parse_bytes,
+        cli.max_work_units,
     );
     extract_media(&request, resource).map_err(Into::into)
 }
@@ -63,6 +64,7 @@ fn run_parse(cli: Cli) -> Result<String> {
                     TableFilter::default(),
                     build_document_filter(&cli)?,
                     remaining,
+                    cli.max_work_units,
                 );
                 match detect_format(&request) {
                     Ok(format) => {
@@ -100,6 +102,7 @@ fn run_parse(cli: Cli) -> Result<String> {
                     TableFilter::default(),
                     build_document_filter(&cli)?,
                     resolved.max_parse_bytes,
+                    cli.max_work_units,
                 );
                 match parse_document_result(&request) {
                     Ok(result) => {
@@ -185,6 +188,7 @@ fn run_parse(cli: Cli) -> Result<String> {
                     filter.clone(),
                     DocumentFilter::default(),
                     resolved.max_parse_bytes,
+                    cli.max_work_units,
                 );
                 match parse_tables(&request) {
                     Ok(extracted) => {
@@ -546,6 +550,7 @@ fn request_for<'a>(
     table_filter: TableFilter,
     document_filter: DocumentFilter,
     max_parse_bytes: usize,
+    max_work_units: Option<usize>,
 ) -> ParseRequest<'a> {
     ParseRequest {
         bytes: &input.bytes,
@@ -554,7 +559,10 @@ fn request_for<'a>(
         format_hint,
         table_filter,
         document_filter,
-        limits: ParseLimits { max_parse_bytes },
+        limits: ParseLimits {
+            max_parse_bytes,
+            max_work_units,
+        },
     }
 }
 

@@ -33,6 +33,7 @@ def parse_bytes(
     limit: int | None = None,
     offset: int | None = None,
     pages: tuple[int, int] | None = None,
+    max_work_units: int | None = None,
 ) -> ParseResult:
     """Parse document/table bytes into a typed result.
 
@@ -56,6 +57,7 @@ def parse_bytes(
             limit,
             offset,
             pages,
+            max_work_units,
         )
     except _native.SpoorError as error:
         raise SpoorError.from_native(error) from None
@@ -73,6 +75,7 @@ def parse_path(
     limit: int | None = None,
     offset: int | None = None,
     pages: tuple[int, int] | None = None,
+    max_work_units: int | None = None,
 ) -> ParseResult:
     path = Path(path)
     return parse_bytes(
@@ -86,6 +89,7 @@ def parse_path(
         limit=limit,
         offset=offset,
         pages=pages,
+        max_work_units=max_work_units,
     )
 
 

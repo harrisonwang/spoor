@@ -157,6 +157,11 @@ pub(crate) struct Cli {
     )]
     pub(crate) max_parse_bytes: usize,
 
+    /// 解析工作量上限（如 PDF 操作数），用于约束字节预算管不到的 CPU；默认不限。
+    /// 不可信输入还应配合宿主级超时与进程/容器隔离才能真正掐断。
+    #[arg(long, value_name = "n")]
+    pub(crate) max_work_units: Option<usize>,
+
     /// 将 spoor 输出的单个内嵌媒体资源原样输出到 stdout；当前支持 spoor-docx://。
     #[arg(
         long,
@@ -335,6 +340,7 @@ mod tests {
             "pages",
             "max-output-bytes",
             "max-parse-bytes",
+            "max-work-units",
             "extract",
             "help",
             "version",

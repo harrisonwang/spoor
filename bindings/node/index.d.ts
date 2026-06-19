@@ -17,4 +17,5 @@ export interface ParseOptions {
   limit?: number
   offset?: number
   pages?: Array<number>
+  maxWorkUnits?: number
 }

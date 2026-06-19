@@ -120,3 +120,11 @@ assert.ok(
   pageMd.includes('## Page 2') && !pageMd.includes('## Page 1') && !pageMd.includes('## Page 3'),
   pageMd,
 );
+
+// Work budget aborts with a stable, branchable error (12th positional arg).
+assert.throws(
+  () => parse_bytes(
+    multipagePdf, 'doc.pdf', undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 1,
+  ),
+  (error) => error.code === 'work_budget_exceeded',
+);

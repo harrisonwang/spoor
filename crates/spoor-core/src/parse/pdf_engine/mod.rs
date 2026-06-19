@@ -43,7 +43,8 @@ pub enum OutputError
 {
     FormatError(std::fmt::Error),
     IoError(std::io::Error),
-    PdfError(lopdf::Error)
+    PdfError(lopdf::Error),
+    WorkBudgetExceeded,
 }
 
 impl std::fmt::Display for OutputError
@@ -52,7 +53,8 @@ impl std::fmt::Display for OutputError
         match self {
             OutputError::FormatError(e) => write!(f, "Formating error: {}", e),
             OutputError::IoError(e) => write!(f, "IO error: {}", e),
-            OutputError::PdfError(e) => write!(f, "PDF error: {}", e)
+            OutputError::PdfError(e) => write!(f, "PDF error: {}", e),
+            OutputError::WorkBudgetExceeded => write!(f, "work budget exceeded")
         }
     }
 }
@@ -1548,6 +1550,12 @@ impl<'a> Processor<'a> {
         dlog!("MediaBox {:?}", media_box);
         for operation in &content.operations {
             //dlog!("op: {:?}", operation);
+            // Cooperative work budget: a pathological content stream (or a
+            // recursive XObject loop via `Do`) can pin the CPU regardless of
+            // input size. Charge one unit per operation and abort if exhausted.
+            if crate::limits::charge_work(1) {
+                return Err(OutputError::WorkBudgetExceeded);
+            }
 
             match operation.operator.as_ref() {
                 "BT" => {

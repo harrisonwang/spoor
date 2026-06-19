@@ -18,6 +18,8 @@ export interface ParseOptions {
   offset?: number;
   /** PDF only: inclusive 1-based `[first, last]` page range to parse. */
   pages?: [number, number];
+  /** Cooperative cap on in-parser work units (e.g. PDF operations) to bound CPU. */
+  maxWorkUnits?: number;
 }
 
 export interface DocumentResult {

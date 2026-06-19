@@ -417,9 +417,12 @@ ZIP/Office 安全是自动调用和批处理的前置条件。
 - JSON 保持合法结构，顶层 `truncated: true` + `warnings[]`；优先移除末尾 rows/tables。
 - skipped/error diagnostics 最多详细输出前 20 条，其余汇总，避免 stderr / CI log warning flood。
 - 输入读取、ZIP archive 总解压量、提取结果和多输入保留结果共享默认 64 MiB 数据量预算；支持 `--max-parse-bytes`，超限返回结构化错误。
+- 合作式工作量预算 `max_work_units`（`--max-work-units`）：字节预算管不到 CPU，小 PDF 也可能用病态内容流把 CPU 打满。解析器在循环边界按操作数计费，超限返回 `work_budget_exceeded`。当前覆盖 PDF 内容流操作；线程局部、随解析安装/清除，guard 在 panic 时也会复位。
 
 待补：
 
+- 把工作量预算扩展到 XML/表格等其余解析器循环。
+- 可真正中断的 wall-clock 超时与取消：合作式预算只能在循环边界中止，真正掐断需调用方用 Web Worker terminate、子进程/容器（cgroups + RLIMIT）等宿主手段。
 - 操作系统级精确 RSS / address-space 严格限制；当前数据量预算约束可控数据体积，不承诺覆盖第三方库所有短时分配。
 - 更细粒度的用户可配置 ZIP limits。
 - XLSX 依赖层的额外安全包裹评估。

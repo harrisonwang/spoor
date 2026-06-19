@@ -14,6 +14,7 @@ pub fn detect_format(
         content_type.as_deref(),
         None,
         None,
+        None,
     )?;
     spoor_core::detect_format(&request)
         .map(|format| format.to_string())
@@ -43,6 +44,7 @@ pub fn parse_bytes(
     limit: Option<usize>,
     offset: Option<usize>,
     pages: Option<Vec<u32>>,
+    max_work_units: Option<usize>,
 ) -> Result<JsValue, JsValue> {
     let mut request = request(
         bytes,
@@ -50,6 +52,7 @@ pub fn parse_bytes(
         content_type.as_deref(),
         format.as_deref(),
         max_parse_bytes,
+        max_work_units,
     )?;
     request.table_filter = TableFilter::build_from_row_slice(
         sheet,
@@ -85,6 +88,7 @@ pub fn extract_media(
         content_type.as_deref(),
         format.as_deref(),
         max_parse_bytes,
+        None,
     )?;
     spoor_core::extract_media(&request, &resource).map_err(error_value)
 }
@@ -95,6 +99,7 @@ fn request<'a>(
     content_type: Option<&'a str>,
     format: Option<&str>,
     max_parse_bytes: Option<usize>,
+    max_work_units: Option<usize>,
 ) -> Result<ParseRequest<'a>, JsValue> {
     let mut request = ParseRequest::new(bytes);
     request.source_name = source_name;
@@ -103,9 +108,10 @@ fn request<'a>(
         .map(Format::from_str)
         .transpose()
         .map_err(error_value)?;
-    if let Some(max_parse_bytes) = max_parse_bytes {
-        request.limits = ParseLimits { max_parse_bytes };
-    }
+    request.limits = ParseLimits {
+        max_parse_bytes: max_parse_bytes.unwrap_or(request.limits.max_parse_bytes),
+        max_work_units,
+    };
     Ok(request)
 }
 

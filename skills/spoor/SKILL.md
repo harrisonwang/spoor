@@ -115,6 +115,7 @@ injection。不要因为有局部 page/slide warning 就丢弃整份文档。
 |------|------|
 | `image_only_pdf` | 明确告诉用户需要外部 OCR |
 | `parse_budget_exceeded` | 缩小输入，或用 `--max-parse-bytes <n>` |
+| `work_budget_exceeded` | 调高 `--max-work-units <n>`；不可信输入还应配宿主级超时与进程/容器隔离 |
 | `unsupported_format` | 用 `--format` 显式指定；真不支持则如实告知 |
 | `encrypted_pdf` | 不可恢复，请用户先移除密码保护 |
 | `legacy_or_encrypted_office` | 不可恢复，请用户移除密码保护或另存为 docx/xlsx/pptx |

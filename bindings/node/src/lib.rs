@@ -23,6 +23,9 @@ pub struct ParseOptions {
     pub offset: Option<u32>,
     /// PDF only: inclusive 1-based `[first, last]` page range to parse.
     pub pages: Option<Vec<u32>>,
+    /// Cooperative cap on in-parser work units (e.g. PDF operations) to bound
+    /// CPU on pathological inputs. Omit to disable.
+    pub max_work_units: Option<i64>,
 }
 
 #[napi]
@@ -72,12 +75,22 @@ fn build_request<'a>(data: &'a Buffer, options: &'a ParseOptions) -> Result<Pars
         .map(Format::from_str)
         .transpose()
         .map_err(to_node_error)?;
-    if let Some(max_parse_bytes) = options.max_parse_bytes {
-        request.limits = ParseLimits {
-            max_parse_bytes: usize::try_from(max_parse_bytes)
-                .map_err(|_| Error::new(Status::InvalidArg, "max_parse_bytes must be positive"))?,
-        };
-    }
+    let max_parse_bytes = match options.max_parse_bytes {
+        Some(value) => usize::try_from(value)
+            .map_err(|_| Error::new(Status::InvalidArg, "max_parse_bytes must be positive"))?,
+        None => request.limits.max_parse_bytes,
+    };
+    let max_work_units = match options.max_work_units {
+        Some(value) => Some(
+            usize::try_from(value)
+                .map_err(|_| Error::new(Status::InvalidArg, "max_work_units must be positive"))?,
+        ),
+        None => None,
+    };
+    request.limits = ParseLimits {
+        max_parse_bytes,
+        max_work_units,
+    };
     Ok(request)
 }
 

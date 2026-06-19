@@ -7,7 +7,7 @@ use std::str::FromStr;
 pyo3::create_exception!(_native, SpoorError, PyException);
 
 #[allow(clippy::too_many_arguments)]
-#[pyfunction(signature = (data, source_name=None, content_type=None, format=None, max_parse_bytes=None, sheet=None, rows=None, columns=None, limit=None, offset=None, pages=None))]
+#[pyfunction(signature = (data, source_name=None, content_type=None, format=None, max_parse_bytes=None, sheet=None, rows=None, columns=None, limit=None, offset=None, pages=None, max_work_units=None))]
 fn parse_bytes(
     py: Python<'_>,
     data: &[u8],
@@ -21,8 +21,16 @@ fn parse_bytes(
     limit: Option<usize>,
     offset: Option<usize>,
     pages: Option<(usize, usize)>,
+    max_work_units: Option<usize>,
 ) -> PyResult<Py<PyAny>> {
-    let mut request = request(data, source_name, content_type, format, max_parse_bytes)?;
+    let mut request = request(
+        data,
+        source_name,
+        content_type,
+        format,
+        max_parse_bytes,
+        max_work_units,
+    )?;
     request.table_filter =
         TableFilter::build(sheet, rows, columns.unwrap_or_default(), limit, offset)
             .map_err(to_py_error)?;
@@ -49,7 +57,14 @@ fn extract_media<'py>(
     format: Option<&str>,
     max_parse_bytes: Option<usize>,
 ) -> PyResult<Bound<'py, PyBytes>> {
-    let request = request(data, source_name, content_type, format, max_parse_bytes)?;
+    let request = request(
+        data,
+        source_name,
+        content_type,
+        format,
+        max_parse_bytes,
+        None,
+    )?;
     let bytes = py
         .detach(|| spoor_core::extract_media(&request, resource))
         .map_err(to_py_error)?;
@@ -63,7 +78,7 @@ fn detect_format(
     source_name: Option<&str>,
     content_type: Option<&str>,
 ) -> PyResult<String> {
-    let request = request(data, source_name, content_type, None, None)?;
+    let request = request(data, source_name, content_type, None, None, None)?;
     py.detach(|| spoor_core::detect_format(&request))
         .map(|format| format.to_string())
         .map_err(to_py_error)
@@ -75,6 +90,7 @@ fn request<'a>(
     content_type: Option<&'a str>,
     format: Option<&str>,
     max_parse_bytes: Option<usize>,
+    max_work_units: Option<usize>,
 ) -> PyResult<ParseRequest<'a>> {
     let mut request = ParseRequest::new(data);
     request.source_name = source_name;
@@ -83,9 +99,10 @@ fn request<'a>(
         .map(Format::from_str)
         .transpose()
         .map_err(to_py_error)?;
-    if let Some(max_parse_bytes) = max_parse_bytes {
-        request.limits = ParseLimits { max_parse_bytes };
-    }
+    request.limits = ParseLimits {
+        max_parse_bytes: max_parse_bytes.unwrap_or(request.limits.max_parse_bytes),
+        max_work_units,
+    };
     Ok(request)
 }
 

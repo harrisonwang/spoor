@@ -13,7 +13,8 @@
 | ZIP 单条目解压大小 | 50 MiB | 单个 ZIP entry | 仍受更小的共享解析预算约束 |
 | ZIP 压缩比 | 200x | 单个 ZIP entry | 超出即拒绝 |
 | ZIP 声明总解压量 | 共享解析预算 | 整个 ZIP | 在真正解压前检查中央目录 |
-| core 进程内超时 | 无 | 所有原生/WASM 调用 | 调用方必须在 worker、容器、宿主 Runtime 或独立进程设置超时 |
+| 工作量预算 `max_work_units` | 默认无（可选） | 目前 PDF 内容流操作 | 合作式上限，约束字节预算管不到的 CPU；超限返回 `work_budget_exceeded`。不是可强制中断的超时 |
+| core 进程内超时 | 无 | 所有原生/WASM 调用 | 合作式 `max_work_units` 只能在循环边界中止；真正的 wall-clock 取消仍需调用方在 worker、容器或独立进程设置 |
 | 严格 RSS 上限 | 无 | 所有原生调用 | 数据量预算不等于操作系统内存上限；第三方解析器与跨语言传输可能产生额外副本 |
 
 解析复杂度不只由压缩文件大小决定。小型 PDF、XLSX 或高压缩比 Office 文件也可能
@@ -102,7 +103,7 @@ Cloudflare 官方当前还限制 Worker 压缩后体积为 Free 3 MB / Paid 10 M
 1. 在已落地的 PDF 布局中间模型与双栏阅读顺序之上，继续做页眉页脚分类、标题层级与断词修复；OCR 保持外置。
 2. 建立 DOCX/PPTX 表格 span 模型，把合并表格从“显式 warning”升级为 HTML 降级输出。
 3. 为 PPTX 按 shape 坐标恢复阅读顺序并保留 bullet 层级。
-4. 在解析器中增加工作量预算，并由批处理宿主提供可真实终止的超时、取消和隔离。
+4. 把工作量预算（`max_work_units`）从 PDF 扩展到 XML/表格等其余解析器，并由批处理宿主补上可真实终止的 wall-clock 超时、取消和进程/容器隔离。
 
 PDF 布局中间模型（基于字形几何收集 span）已落地，并已用于清晰双栏版面的阅读顺序
 重排（保守判定、失败回退原始顺序、返回 `pdf_multi_column_reading_order` warning）。

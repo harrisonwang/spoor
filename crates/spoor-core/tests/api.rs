@@ -91,6 +91,26 @@ fn pdf_stats_report_total_page_count_even_when_sliced() {
 }
 
 #[test]
+#[cfg(feature = "pdf")]
+fn work_budget_aborts_parse_with_stable_error() {
+    // A tiny work budget exhausts during PDF content-stream processing and
+    // surfaces a stable, branchable error rather than running unbounded.
+    let bytes = include_bytes!("../../spoor-cli/tests/fixtures/pdf/02_multipage.pdf");
+    let mut request = ParseRequest::new(bytes);
+    request.source_name = Some("doc.pdf");
+    request.limits.max_work_units = Some(1);
+
+    let error = parse(&request).unwrap_err();
+    assert_eq!(error.code, ErrorCode::WorkBudgetExceeded);
+
+    // The same input parses fine without a budget — the abort is the budget,
+    // not the document.
+    let mut ok = ParseRequest::new(bytes);
+    ok.source_name = Some("doc.pdf");
+    assert!(parse(&ok).is_ok());
+}
+
+#[test]
 fn non_paged_formats_report_no_page_count() {
     let mut request = ParseRequest::new(b"hello\n");
     request.source_name = Some("note.txt");
@@ -113,6 +133,7 @@ fn parse_budget_is_enforced_before_detection() {
     let mut request = ParseRequest::new(&[b'x'; 2048]);
     request.limits = ParseLimits {
         max_parse_bytes: 1024,
+        max_work_units: None,
     };
 
     let error = parse(&request).unwrap_err();

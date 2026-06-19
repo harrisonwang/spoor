@@ -212,6 +212,9 @@ fn map_pdf_error(error: super::pdf_engine::OutputError) -> anyhow::Error {
         super::pdf_engine::OutputError::PdfError(super::pdf_engine::Error::Decryption(_)) => {
             StructuredError::encrypted_pdf().into()
         }
+        super::pdf_engine::OutputError::WorkBudgetExceeded => {
+            StructuredError::work_budget_exceeded().into()
+        }
         error => anyhow!("pdf-extract failed: {error}"),
     }
 }

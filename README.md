@@ -137,6 +137,7 @@ WASM 包默认包含全部重点格式；
 | --- | --- |
 | `image_only_pdf` | PDF 无文本层，需要外部 OCR |
 | `parse_budget_exceeded` | 输入、解压或结果超过解析预算 |
+| `work_budget_exceeded` | 解析工作量（如 PDF 操作数）超过 `max_work_units` 上限 |
 | `unsupported_format` | 无法识别或不支持格式 |
 | `encrypted_pdf` | PDF 受密码保护 |
 | `legacy_or_encrypted_office` | 旧版或加密 Office 容器 |

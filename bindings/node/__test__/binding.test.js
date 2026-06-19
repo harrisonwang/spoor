@@ -67,6 +67,17 @@ test('pages filter limits PDF to requested pages', () => {
   );
 });
 
+test('work budget aborts with a stable error', () => {
+  const pdf = readFileSync(join(
+    __dirname,
+    '../../../crates/spoor-cli/tests/fixtures/pdf/02_multipage.pdf',
+  ));
+  assert.throws(
+    () => parseBytes(pdf, { sourceName: 'doc.pdf', maxWorkUnits: 1 }),
+    (error) => error.code === 'work_budget_exceeded',
+  );
+});
+
 test('extract_media returns safe docx resource bytes', () => {
   const docx = readFileSync(join(
     __dirname,

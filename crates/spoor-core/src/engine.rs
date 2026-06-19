@@ -13,12 +13,18 @@ pub type SpoorResult<T> = std::result::Result<T, SpoorError>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ParseLimits {
     pub max_parse_bytes: usize,
+    /// Cooperative cap on in-parser work units (e.g. PDF content-stream
+    /// operations). `None` disables it. Bounds CPU on pathological inputs that
+    /// the byte budget can't catch; true cancellation still needs host isolation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_work_units: Option<usize>,
 }
 
 impl Default for ParseLimits {
     fn default() -> Self {
         Self {
             max_parse_bytes: DEFAULT_MAX_PARSE_BYTES,
+            max_work_units: None,
         }
     }
 }
@@ -183,6 +189,7 @@ fn detect_format_inner(request: &ParseRequest<'_>) -> SpoorResult<Format> {
 }
 
 pub fn parse(request: &ParseRequest<'_>) -> SpoorResult<ParseResult> {
+    let _budget = limits::install_work_budget(request.limits.max_work_units);
     catch_boundary(ParseStage::Parse, || parse_inner(request))
 }
 
@@ -212,6 +219,7 @@ fn parse_inner(request: &ParseRequest<'_>) -> SpoorResult<ParseResult> {
 /// Agents should prefer this function or [`parse`] over [`parse_document`],
 /// because `parse_document` intentionally returns only the rendered document.
 pub fn parse_document_result(request: &ParseRequest<'_>) -> SpoorResult<ParseResult> {
+    let _budget = limits::install_work_budget(request.limits.max_work_units);
     catch_boundary(ParseStage::Parse, || {
         let format = detect_format(request)?;
         let (document, warnings, page_count) = parse_document_with_format(request, format)?;
@@ -239,6 +247,7 @@ pub fn parse_document(request: &ParseRequest<'_>) -> SpoorResult<DocumentResult>
 }
 
 pub fn parse_tables(request: &ParseRequest<'_>) -> SpoorResult<TableResult> {
+    let _budget = limits::install_work_budget(request.limits.max_work_units);
     catch_boundary(ParseStage::Parse, || {
         let format = detect_format(request)?;
         parse_tables_with_format(request, format)
@@ -252,6 +261,7 @@ pub fn parse_tables(request: &ParseRequest<'_>) -> SpoorResult<TableResult> {
 /// same archive and parse-budget checks used during parsing. Currently only
 /// safe `spoor-docx://word/media/*` resources are emitted and supported.
 pub fn extract_media(request: &ParseRequest<'_>, resource: &str) -> SpoorResult<Vec<u8>> {
+    let _budget = limits::install_work_budget(request.limits.max_work_units);
     catch_boundary(ParseStage::Parse, || {
         let format = detect_format(request)?;
         match format {
