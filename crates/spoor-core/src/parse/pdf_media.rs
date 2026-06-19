@@ -64,19 +64,33 @@ impl ImageExtractError {
 
 /// Image lists per page, indexed to match the text engine's page order
 /// (index 0 = page 1). A load failure yields all-empty lists.
+#[cfg(test)]
 pub(crate) fn discover_images(bytes: &[u8], page_count: usize) -> Vec<Vec<PageImage>> {
+    discover_images_for_page_range(bytes, page_count, None)
+}
+
+pub(crate) fn discover_images_for_page_range(
+    bytes: &[u8],
+    page_count: usize,
+    page_range: Option<(usize, usize)>,
+) -> Vec<Vec<PageImage>> {
     let mut per_page = vec![Vec::new(); page_count];
     let Ok(doc) = Document::load_mem(bytes) else {
         return per_page;
     };
+    let mut selected_index = 0usize;
     for (page_num, page_id) in doc.get_pages() {
-        let Some(index) = (page_num as usize).checked_sub(1) else {
-            continue;
-        };
-        let Some(slot) = per_page.get_mut(index) else {
-            continue;
+        let page_number = page_num as usize;
+        if let Some((first, last)) = page_range {
+            if page_number < first || page_number > last {
+                continue;
+            }
+        }
+        let Some(slot) = per_page.get_mut(selected_index) else {
+            break;
         };
         collect_page_images(&doc, page_id, slot);
+        selected_index += 1;
     }
     per_page
 }
@@ -335,14 +349,12 @@ fn walk_drawn_xobjects(
             continue;
         };
         match dict_name(doc, &stream.dict, b"Subtype") {
-            Some(subtype) if subtype == b"Image" => {
-                if seen.insert(id) {
-                    out.push(PageImage {
-                        id: id.0,
-                        generation: id.1,
-                        extractable: is_extractable_image(doc, &stream.dict),
-                    });
-                }
+            Some(subtype) if subtype == b"Image" && seen.insert(id) => {
+                out.push(PageImage {
+                    id: id.0,
+                    generation: id.1,
+                    extractable: is_extractable_image(doc, &stream.dict),
+                });
             }
             Some(subtype) if subtype == b"Form" => {
                 let form_content = stream

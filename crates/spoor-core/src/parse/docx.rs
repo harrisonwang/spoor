@@ -484,13 +484,12 @@ fn render_document(
                         }
                     }
                 }
-                b"Fallback" => {
+                b"Fallback"
                     if alternate_content
                         .last()
-                        .is_some_and(|state| state.choice_seen)
-                    {
-                        skipped_branch_depth = 1;
-                    }
+                        .is_some_and(|state| state.choice_seen) =>
+                {
+                    skipped_branch_depth = 1;
                 }
                 b"tbl" => {
                     table = Some(TableState::default());

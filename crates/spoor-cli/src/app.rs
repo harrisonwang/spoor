@@ -3,8 +3,8 @@ use crate::source::{ResolvedInput, is_url, resolve_input};
 use anyhow::{Context, Result, anyhow};
 use glob::{MatchOptions, glob_with};
 use spoor_core::{
-    Format, JsonOutput, OutputMode, ParseContent, ParseLimits, ParseRequest, SpoorError,
-    SpoorWarning, TableFilter, default_mode_for, detect_format, extract_media,
+    DocumentFilter, Format, JsonOutput, OutputMode, ParseContent, ParseLimits, ParseRequest,
+    SpoorError, SpoorWarning, TableFilter, default_mode_for, detect_format, extract_media,
     limit_markdown_output, parse_document_result, parse_tables, render_documents,
     render_json_limited,
 };
@@ -31,7 +31,13 @@ fn extract_resource(cli: &Cli, resource: &str) -> Result<Vec<u8>> {
         return Err(anyhow!("--extract 仅支持单个输入"));
     }
     let input = resolve_input(&inputs[0], cli.max_parse_bytes)?;
-    let request = request_for(&input, None, TableFilter::default(), cli.max_parse_bytes);
+    let request = request_for(
+        &input,
+        None,
+        TableFilter::default(),
+        DocumentFilter::default(),
+        cli.max_parse_bytes,
+    );
     extract_media(&request, resource).map_err(Into::into)
 }
 
@@ -51,8 +57,13 @@ fn run_parse(cli: Cli) -> Result<String> {
         let remaining = cli.max_parse_bytes.saturating_sub(source_bytes);
         match resolve_input(&input, remaining) {
             Ok(input_data) => {
-                let request =
-                    request_for(&input_data, format_hint, TableFilter::default(), remaining);
+                let request = request_for(
+                    &input_data,
+                    format_hint,
+                    TableFilter::default(),
+                    build_document_filter(&cli)?,
+                    remaining,
+                );
                 match detect_format(&request) {
                     Ok(format) => {
                         source_bytes += input_data.len();
@@ -86,6 +97,7 @@ fn run_parse(cli: Cli) -> Result<String> {
                     &resolved.input,
                     Some(resolved.format),
                     TableFilter::default(),
+                    build_document_filter(&cli)?,
                     resolved.max_parse_bytes,
                 );
                 match parse_document_result(&request) {
@@ -159,6 +171,7 @@ fn run_parse(cli: Cli) -> Result<String> {
                     &resolved.input,
                     Some(resolved.format),
                     filter.clone(),
+                    DocumentFilter::default(),
                     resolved.max_parse_bytes,
                 );
                 match parse_tables(&request) {
@@ -419,21 +432,37 @@ fn build_filter(cli: &Cli) -> Result<TableFilter> {
     .map_err(|error| anyhow!("{}", error.reason))
 }
 
-/// Parse the CLI `--rows <first>:<last>` string into a 1-based pair. Bound
-/// validation (>= 1, first <= last) and the rows/limit-offset exclusion live in
-/// the shared cross-host `TableFilter::build`, so they are not repeated here.
+/// Build a validated page filter from the CLI `--pages` flag. Like the row
+/// filter, the page-range bounds live in the shared cross-host
+/// `DocumentFilter::build`; a failure surfaces as a friendly CLI arg error
+/// rather than the structured JSON reserved for content/parse failures.
+fn build_document_filter(cli: &Cli) -> Result<DocumentFilter> {
+    let pages = match &cli.pages {
+        Some(s) => Some(parse_range_flag("--pages", s)?),
+        None => None,
+    };
+    DocumentFilter::build(pages).map_err(|error| anyhow!("{}", error.reason))
+}
+
+/// Parse a `<first>:<last>` range string into a 1-based pair. Bound validation
+/// (>= 1, first <= last) lives in the shared cross-host `TableFilter::build` /
+/// `DocumentFilter::build`, so it is not repeated here.
 fn parse_row_range(s: &str) -> Result<(usize, usize)> {
+    parse_range_flag("--rows", s)
+}
+
+fn parse_range_flag(flag: &str, s: &str) -> Result<(usize, usize)> {
     let (first, last) = s
         .split_once(':')
-        .ok_or_else(|| anyhow!("--rows expects <first>:<last>, got {s:?}"))?;
+        .ok_or_else(|| anyhow!("{flag} expects <first>:<last>, got {s:?}"))?;
     let first: usize = first
         .trim()
         .parse()
-        .map_err(|_| anyhow!("--rows: invalid first row {first:?}"))?;
+        .map_err(|_| anyhow!("{flag}: invalid first number {first:?}"))?;
     let last: usize = last
         .trim()
         .parse()
-        .map_err(|_| anyhow!("--rows: invalid last row {last:?}"))?;
+        .map_err(|_| anyhow!("{flag}: invalid last number {last:?}"))?;
     Ok((first, last))
 }
 
@@ -503,6 +532,7 @@ fn request_for<'a>(
     input: &'a ResolvedInput,
     format_hint: Option<Format>,
     table_filter: TableFilter,
+    document_filter: DocumentFilter,
     max_parse_bytes: usize,
 ) -> ParseRequest<'a> {
     ParseRequest {
@@ -511,6 +541,7 @@ fn request_for<'a>(
         content_type: input.content_type.as_deref(),
         format_hint,
         table_filter,
+        document_filter,
         limits: ParseLimits { max_parse_bytes },
     }
 }

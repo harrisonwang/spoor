@@ -65,6 +65,10 @@ For tables (CSV/XLSX), the recommended pattern is:
   spoor file.xlsx --sheet L1 --rows 5:104      # read a slice
   spoor file.xlsx --columns 分类,技能          # filter columns
 
+For PDFs, use --pages first when an agent only needs a slice:
+
+  spoor report.pdf --pages 1:3              # read selected PDF pages
+
 spoor bounds JSON previews by default (first 100 data rows per table) and
 caps total CLI output at 256 KiB. Use --limit/--rows to narrow tables or
 --max-output-bytes to raise the total output cap. Parsing uses a shared
@@ -72,6 +76,7 @@ caps total CLI output at 256 KiB. Use --limit/--rows to narrow tables or
 
 Examples:
   spoor report.pdf
+  spoor report.pdf --pages 1:3
   spoor data.xlsx
   spoor data.csv | jq '.tables[]'
   cat data.csv | spoor --format csv -
@@ -111,6 +116,10 @@ pub(crate) struct Cli {
         hide_default_value = true
     )]
     pub(crate) mode: Option<ModeArg>,
+
+    /// PDF 限定页码区间，例如 `1:3`（含两端）；用于按需读取大型 PDF。
+    #[arg(long, value_name = "first:last")]
+    pub(crate) pages: Option<String>,
 
     /// XLSX 限定 sheet；找不到时报错并列出可用 sheets。CSV 无此概念，自动忽略。
     #[arg(long, value_name = "name")]
@@ -155,6 +164,7 @@ pub(crate) struct Cli {
         conflicts_with_all = [
             "format",
             "mode",
+            "pages",
             "sheet",
             "rows",
             "columns",
@@ -186,6 +196,7 @@ mod tests {
         assert!(cli.mode.is_none());
         assert!(cli.format.is_none());
         assert!(cli.sheet.is_none());
+        assert!(cli.pages.is_none());
         assert!(cli.rows.is_none());
         assert!(cli.columns.is_empty());
         assert!(cli.limit.is_none());
@@ -218,6 +229,8 @@ mod tests {
             "data.xlsx",
             "--sheet",
             "L1",
+            "--pages",
+            "1:3",
             "--rows",
             "5:104",
             "--columns",
@@ -226,6 +239,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(cli.sheet, Some("L1".to_string()));
+        assert_eq!(cli.pages, Some("1:3".to_string()));
         assert_eq!(cli.rows, Some("5:104".to_string()));
         assert_eq!(cli.columns, vec!["分类".to_string(), "技能".to_string()]);
     }
@@ -284,6 +298,7 @@ mod tests {
         assert!(help.contains("--format <format>"));
         assert!(help.contains("--mode <mode>"));
         assert!(help.contains("--sheet <name>"));
+        assert!(help.contains("--pages <first:last>"));
         assert!(help.contains("--rows <first:last>"));
         assert!(help.contains("--columns <columns>"));
         assert!(help.contains("--limit <n>"));
@@ -293,6 +308,7 @@ mod tests {
         assert!(help.contains("--extract <uri>"));
         assert!(help.contains("spoor \"*.pdf\""));
         assert!(help.contains("Examples:"));
+        assert!(help.contains("spoor report.pdf --pages 1:3"));
         assert!(help.contains("spoor report.pdf | llm \"Summarize risks and action items\""));
         assert!(help.contains("--sheet L1 --rows 5:104"));
         assert!(help.contains("caps total CLI output at 256 KiB"));
@@ -316,6 +332,7 @@ mod tests {
         let not_narrowing = [
             "format",
             "mode",
+            "pages",
             "max-output-bytes",
             "max-parse-bytes",
             "extract",

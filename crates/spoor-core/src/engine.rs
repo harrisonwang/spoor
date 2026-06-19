@@ -32,6 +32,42 @@ pub struct TableFilter {
     pub offset: Option<usize>,
 }
 
+/// Validate a 1-based inclusive range shared by table row ranges and document
+/// page ranges. Centralizing the bounds contract keeps `--rows`, `--pages` and
+/// every binding rejecting the same inputs with one structured error.
+fn validated_inclusive_range(range: Option<(usize, usize)>) -> SpoorResult<Option<(usize, usize)>> {
+    if let Some((first, last)) = range {
+        if first == 0 || last == 0 {
+            return Err(SpoorError::parse_failed(
+                "区间端点必须 >= 1（含两端的 1-based 区间）",
+                ParseStage::Parse,
+            ));
+        }
+        if first > last {
+            return Err(SpoorError::parse_failed(
+                format!("区间起点 {first} 不能大于终点 {last}"),
+                ParseStage::Parse,
+            ));
+        }
+    }
+    Ok(range)
+}
+
+/// Convert a host-supplied slice (e.g. a JS array marshaled to `Vec<u32>`) into
+/// an inclusive range pair, validating it has exactly two elements. Lets the
+/// Node and WASM bindings forward `rows`/`pages` without each re-implementing
+/// the length check, so the "must be a pair" failure is one structured error.
+fn range_pair_from_slice(slice: Option<&[u32]>) -> SpoorResult<Option<(usize, usize)>> {
+    match slice {
+        None => Ok(None),
+        Some([first, last]) => Ok(Some((*first as usize, *last as usize))),
+        Some(_) => Err(SpoorError::parse_failed(
+            "区间需要恰好两个元素 [first, last]",
+            ParseStage::Parse,
+        )),
+    }
+}
+
 impl TableFilter {
     /// Assemble a validated table filter from host-agnostic narrowing inputs.
     ///
@@ -47,29 +83,16 @@ impl TableFilter {
         limit: Option<usize>,
         offset: Option<usize>,
     ) -> SpoorResult<Self> {
-        if let Some((first, last)) = rows {
-            if first == 0 || last == 0 {
-                return Err(SpoorError::parse_failed(
-                    "rows 行号必须 >= 1（含两端的 1-based 行号）",
-                    ParseStage::Parse,
-                ));
-            }
-            if first > last {
-                return Err(SpoorError::parse_failed(
-                    format!("rows 区间起点 {first} 不能大于终点 {last}"),
-                    ParseStage::Parse,
-                ));
-            }
-            if limit.is_some() || offset.is_some() {
-                return Err(SpoorError::parse_failed(
-                    "rows 与 limit/offset 互斥；请二选一",
-                    ParseStage::Parse,
-                ));
-            }
+        let row_range = validated_inclusive_range(rows)?;
+        if row_range.is_some() && (limit.is_some() || offset.is_some()) {
+            return Err(SpoorError::parse_failed(
+                "rows 与 limit/offset 互斥；请二选一",
+                ParseStage::Parse,
+            ));
         }
         Ok(Self {
             sheet,
-            row_range: rows,
+            row_range,
             columns,
             limit,
             offset,
@@ -77,10 +100,8 @@ impl TableFilter {
     }
 
     /// Like [`TableFilter::build`], but takes the row range as a host-supplied
-    /// slice (e.g. a JS array marshaled to `Vec<u32>`) and validates it is
-    /// exactly a `[first, last]` pair. Lets the Node and WASM bindings forward
-    /// their `rows` without each re-implementing the length check, so the
-    /// "must be a pair" failure is one structured `SpoorError` across hosts.
+    /// slice (e.g. a JS array marshaled to `Vec<u32>`). Lets the Node and WASM
+    /// bindings forward their `rows` without re-implementing the length check.
     pub fn build_from_row_slice(
         sheet: Option<String>,
         rows: Option<&[u32]>,
@@ -88,17 +109,33 @@ impl TableFilter {
         limit: Option<usize>,
         offset: Option<usize>,
     ) -> SpoorResult<Self> {
-        let pair = match rows {
-            None => None,
-            Some([first, last]) => Some((*first as usize, *last as usize)),
-            Some(_) => {
-                return Err(SpoorError::parse_failed(
-                    "rows 需要恰好两个元素 [first, last]",
-                    ParseStage::Parse,
-                ));
-            }
-        };
-        Self::build(sheet, pair, columns, limit, offset)
+        Self::build(sheet, range_pair_from_slice(rows)?, columns, limit, offset)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DocumentFilter {
+    /// Inclusive 1-based page range for page-oriented document formats.
+    /// Currently only PDF uses this to avoid extracting unrequested pages.
+    pub page_range: Option<(usize, usize)>,
+}
+
+impl DocumentFilter {
+    /// Assemble a validated document filter. `pages` is an inclusive, 1-based
+    /// page range and shares the row-range bounds contract via the same
+    /// validator, so the CLI's `--pages` and every binding reject the same
+    /// inputs with the same structured error.
+    pub fn build(pages: Option<(usize, usize)>) -> SpoorResult<Self> {
+        Ok(Self {
+            page_range: validated_inclusive_range(pages)?,
+        })
+    }
+
+    /// Like [`DocumentFilter::build`], but takes the page range as a
+    /// host-supplied slice (e.g. a JS array), validating it is a `[first, last]`
+    /// pair. Lets the Node and WASM bindings forward `pages` uniformly.
+    pub fn build_from_page_slice(pages: Option<&[u32]>) -> SpoorResult<Self> {
+        Self::build(range_pair_from_slice(pages)?)
     }
 }
 
@@ -109,6 +146,7 @@ pub struct ParseRequest<'a> {
     pub content_type: Option<&'a str>,
     pub format_hint: Option<Format>,
     pub table_filter: TableFilter,
+    pub document_filter: DocumentFilter,
     pub limits: ParseLimits,
 }
 
@@ -120,6 +158,7 @@ impl<'a> ParseRequest<'a> {
             content_type: None,
             format_hint: None,
             table_filter: TableFilter::default(),
+            document_filter: DocumentFilter::default(),
             limits: ParseLimits::default(),
         }
     }
@@ -321,8 +360,13 @@ fn parse_document_with_format(
     request: &ParseRequest<'_>,
     format: Format,
 ) -> SpoorResult<(DocumentResult, Vec<SpoorWarning>)> {
-    let extracted = parsers::extract(&source(request), format, request.limits.max_parse_bytes)
-        .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Parse))?;
+    let extracted = parsers::extract(
+        &source(request),
+        format,
+        &request.document_filter,
+        request.limits.max_parse_bytes,
+    )
+    .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Parse))?;
     ensure_parse_size(
         extracted.markdown.len(),
         request.limits.max_parse_bytes,
@@ -478,6 +522,41 @@ mod tests {
             let error = TableFilter::build_from_row_slice(None, Some(&bad), Vec::new(), None, None)
                 .expect_err("non-pair slice");
             assert_eq!(error.code, ErrorCode::ParseFailed);
+        }
+    }
+
+    #[test]
+    fn document_filter_build_validates_page_range_like_rows() {
+        use super::DocumentFilter;
+
+        assert_eq!(
+            DocumentFilter::build(Some((2, 5))).unwrap().page_range,
+            Some((2, 5))
+        );
+        assert_eq!(DocumentFilter::build(None).unwrap().page_range, None);
+
+        // Same 1-based inclusive bounds contract as table row ranges.
+        for bad in [(0, 5), (5, 3)] {
+            assert_eq!(
+                DocumentFilter::build(Some(bad)).unwrap_err().code,
+                ErrorCode::ParseFailed
+            );
+        }
+
+        // Slice variant enforces the [first, last] pair shape.
+        assert_eq!(
+            DocumentFilter::build_from_page_slice(Some(&[2, 5]))
+                .unwrap()
+                .page_range,
+            Some((2, 5))
+        );
+        for bad in [vec![], vec![1u32], vec![1, 2, 3]] {
+            assert_eq!(
+                DocumentFilter::build_from_page_slice(Some(&bad))
+                    .unwrap_err()
+                    .code,
+                ErrorCode::ParseFailed
+            );
         }
     }
 
