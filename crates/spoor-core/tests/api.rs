@@ -1,5 +1,6 @@
 use spoor_core::{
-    ErrorCode, Format, ParseContent, ParseLimits, ParseRequest, detect_format, extract_media, parse,
+    ErrorCode, Format, ParseContent, ParseLimits, ParseRequest, TableFilter, detect_format,
+    extract_media, parse,
 };
 #[cfg(feature = "pdf")]
 use spoor_core::{WarningCode, WarningLocation, parse_document_result};
@@ -36,6 +37,41 @@ fn bytes_only_table_api_returns_native_tables() {
         }
         ParseContent::Document(_) => panic!("expected table result"),
     }
+}
+
+#[test]
+#[cfg(feature = "tables")]
+fn table_filter_narrows_rows_and_columns_through_parse() {
+    // 01_basic.csv has 3 data rows: Alice(row 2), Bob(row 3), Carol(row 4),
+    // columns Name/Score/Note. The filter all bindings now set must flow
+    // through `parse()` and select the same slice the CLI's flags do.
+    let bytes = include_bytes!("../../spoor-cli/tests/fixtures/csv/01_basic.csv");
+
+    let mut request = ParseRequest::new(bytes);
+    request.source_name = Some("data.csv");
+    request.table_filter =
+        TableFilter::build(None, None, vec!["Name".to_string()], Some(1), Some(1)).unwrap();
+
+    let ParseContent::Tables(tables) = parse(&request).unwrap().content else {
+        panic!("expected table result");
+    };
+    let rows = &tables.tables[0].rows;
+    assert_eq!(rows.len(), 1, "offset 1 + limit 1 keeps a single row");
+    assert_eq!(rows[0]["Name"], "Bob");
+    assert!(
+        !rows[0].contains_key("Score"),
+        "column filter drops unselected fields"
+    );
+
+    // Excel-style row range selects the same row by its 1-based number.
+    let mut ranged = ParseRequest::new(bytes);
+    ranged.source_name = Some("data.csv");
+    ranged.table_filter = TableFilter::build(None, Some((3, 3)), Vec::new(), None, None).unwrap();
+    let ParseContent::Tables(tables) = parse(&ranged).unwrap().content else {
+        panic!("expected table result");
+    };
+    assert_eq!(tables.tables[0].rows.len(), 1);
+    assert_eq!(tables.tables[0].rows[0]["Name"], "Bob");
 }
 
 #[test]

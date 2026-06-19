@@ -19,3 +19,5 @@ module.exports.detectFormat = (...args) =>
   callWithStructuredErrors(native.detectFormat, args);
 module.exports.parseBytes = (...args) =>
   callWithStructuredErrors(native.parseBytes, args);
+module.exports.extractMedia = (...args) =>
+  callWithStructuredErrors(native.extractMedia, args);

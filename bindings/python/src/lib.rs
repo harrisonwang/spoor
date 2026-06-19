@@ -1,12 +1,13 @@
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString};
-use spoor_core::{Format, ParseLimits, ParseRequest};
+use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString};
+use spoor_core::{Format, ParseLimits, ParseRequest, TableFilter};
 use std::str::FromStr;
 
 pyo3::create_exception!(_native, SpoorError, PyException);
 
-#[pyfunction(signature = (data, source_name=None, content_type=None, format=None, max_parse_bytes=None))]
+#[allow(clippy::too_many_arguments)]
+#[pyfunction(signature = (data, source_name=None, content_type=None, format=None, max_parse_bytes=None, sheet=None, rows=None, columns=None, limit=None, offset=None))]
 fn parse_bytes(
     py: Python<'_>,
     data: &[u8],
@@ -14,14 +15,43 @@ fn parse_bytes(
     content_type: Option<&str>,
     format: Option<&str>,
     max_parse_bytes: Option<usize>,
+    sheet: Option<String>,
+    rows: Option<(usize, usize)>,
+    columns: Option<Vec<String>>,
+    limit: Option<usize>,
+    offset: Option<usize>,
 ) -> PyResult<Py<PyAny>> {
-    let request = request(data, source_name, content_type, format, max_parse_bytes)?;
+    let mut request = request(data, source_name, content_type, format, max_parse_bytes)?;
+    request.table_filter =
+        TableFilter::build(sheet, rows, columns.unwrap_or_default(), limit, offset)
+            .map_err(to_py_error)?;
     let result = py
         .detach(|| spoor_core::parse(&request))
         .map_err(to_py_error)?;
     let value =
         serde_json::to_value(result).map_err(|error| PyException::new_err(error.to_string()))?;
     value_to_python(py, &value)
+}
+
+/// Extract one safe embedded media resource referenced by a URI emitted in the
+/// parsed output (e.g. `spoor-docx://word/media/image1.png` or
+/// `spoor-pdf://obj/{id}/{gen}`). Returns the raw resource bytes; spoor does not
+/// decode or interpret them.
+#[pyfunction(signature = (data, resource, source_name=None, content_type=None, format=None, max_parse_bytes=None))]
+fn extract_media<'py>(
+    py: Python<'py>,
+    data: &[u8],
+    resource: &str,
+    source_name: Option<&str>,
+    content_type: Option<&str>,
+    format: Option<&str>,
+    max_parse_bytes: Option<usize>,
+) -> PyResult<Bound<'py, PyBytes>> {
+    let request = request(data, source_name, content_type, format, max_parse_bytes)?;
+    let bytes = py
+        .detach(|| spoor_core::extract_media(&request, resource))
+        .map_err(to_py_error)?;
+    Ok(PyBytes::new(py, &bytes))
 }
 
 #[pyfunction(signature = (data, source_name=None, content_type=None))]
@@ -100,6 +130,7 @@ fn value_to_python(py: Python<'_>, value: &serde_json::Value) -> PyResult<Py<PyA
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("SpoorError", module.py().get_type::<SpoorError>())?;
     module.add_function(wrap_pyfunction!(parse_bytes, module)?)?;
+    module.add_function(wrap_pyfunction!(extract_media, module)?)?;
     module.add_function(wrap_pyfunction!(detect_format, module)?)?;
     Ok(())
 }

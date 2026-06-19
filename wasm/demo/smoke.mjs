@@ -82,3 +82,26 @@ assert.throws(
   () => extract_media(imageDocx, 'spoor-docx://word/media/../evil.png', 'images.docx'),
   (error) => error.code === 'parse_failed' && error.stage === 'parse',
 );
+
+// Table narrowing reaches the WASM host too (csv/01_basic.csv: Alice/Bob/Carol).
+// serde_wasm_bindgen serializes row maps as JS Map, so normalize before compare.
+const csv = await readFile(new URL(
+  '../../crates/spoor-cli/tests/fixtures/csv/01_basic.csv',
+  import.meta.url,
+));
+const asObject = (row) => (row instanceof Map ? Object.fromEntries(row) : row);
+
+// columns=['Name'], limit=1, offset=1 -> just Bob, Name-only.
+const filtered = parse_bytes(csv, 'data.csv', undefined, undefined, undefined, undefined, undefined, ['Name'], 1, 1);
+assert.equal(filtered.content.value.tables[0].rows.length, 1);
+assert.deepEqual(asObject(filtered.content.value.tables[0].rows[0]), { Name: 'Bob' });
+
+// Inclusive 1-based row range selects the same row by its number.
+const ranged = parse_bytes(csv, 'data.csv', undefined, undefined, undefined, undefined, [3, 3]);
+assert.deepEqual(ranged.content.value.tables[0].rows.map((r) => asObject(r).Name), ['Bob']);
+
+// rows is mutually exclusive with limit/offset (shared TableFilter::build contract).
+assert.throws(
+  () => parse_bytes(csv, 'data.csv', undefined, undefined, undefined, undefined, [2, 4], undefined, 1),
+  (error) => error.code === 'parse_failed',
+);

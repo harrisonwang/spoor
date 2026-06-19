@@ -587,4 +587,5 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding
 module.exports.detectFormat = nativeBinding.detectFormat
+module.exports.extractMedia = nativeBinding.extractMedia
 module.exports.parseBytes = nativeBinding.parseBytes

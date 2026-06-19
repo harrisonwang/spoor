@@ -32,6 +32,51 @@ pub struct TableFilter {
     pub offset: Option<usize>,
 }
 
+impl TableFilter {
+    /// Assemble a validated table filter from host-agnostic narrowing inputs.
+    ///
+    /// Every adapter — CLI, Python, Node, WASM — funnels user-supplied table
+    /// narrowing through this one place, so pagination, column selection and the
+    /// row-range contract stay identical across hosts. `rows` is an inclusive,
+    /// 1-based row range (Excel rows for XLSX, line numbers for CSV) and is
+    /// mutually exclusive with `limit`/`offset`, mirroring the CLI's `--rows`.
+    pub fn build(
+        sheet: Option<String>,
+        rows: Option<(usize, usize)>,
+        columns: Vec<String>,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> SpoorResult<Self> {
+        if let Some((first, last)) = rows {
+            if first == 0 || last == 0 {
+                return Err(SpoorError::parse_failed(
+                    "rows 行号必须 >= 1（含两端的 1-based 行号）",
+                    ParseStage::Parse,
+                ));
+            }
+            if first > last {
+                return Err(SpoorError::parse_failed(
+                    format!("rows 区间起点 {first} 不能大于终点 {last}"),
+                    ParseStage::Parse,
+                ));
+            }
+            if limit.is_some() || offset.is_some() {
+                return Err(SpoorError::parse_failed(
+                    "rows 与 limit/offset 互斥；请二选一",
+                    ParseStage::Parse,
+                ));
+            }
+        }
+        Ok(Self {
+            sheet,
+            row_range: rows,
+            columns,
+            limit,
+            offset,
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ParseRequest<'a> {
     pub bytes: &'a [u8],
@@ -349,8 +394,46 @@ pub type ExtractedTables = TableResult;
 
 #[cfg(test)]
 mod tests {
-    use super::{ParseStage, catch_boundary, safe_docx_media_resource};
+    use super::{ParseStage, TableFilter, catch_boundary, safe_docx_media_resource};
     use crate::ErrorCode;
+
+    #[test]
+    fn table_filter_build_accepts_valid_narrowing() {
+        let filter = TableFilter::build(
+            Some("L1".to_string()),
+            Some((5, 104)),
+            vec!["分类".to_string()],
+            None,
+            None,
+        )
+        .expect("valid filter");
+        assert_eq!(filter.sheet.as_deref(), Some("L1"));
+        assert_eq!(filter.row_range, Some((5, 104)));
+        assert_eq!(filter.columns, vec!["分类".to_string()]);
+
+        let paged = TableFilter::build(None, None, Vec::new(), Some(10), Some(2)).expect("paged");
+        assert_eq!(paged.limit, Some(10));
+        assert_eq!(paged.offset, Some(2));
+    }
+
+    #[test]
+    fn table_filter_build_rejects_invalid_rows_and_conflicts() {
+        // Mirrors the CLI's `--rows`/`parse_row_range` contract so every host
+        // rejects the same inputs.
+        for rows in [(0, 5), (5, 3)] {
+            let error = TableFilter::build(None, Some(rows), Vec::new(), None, None)
+                .expect_err("invalid row range");
+            assert_eq!(error.code, ErrorCode::ParseFailed);
+        }
+
+        let error = TableFilter::build(None, Some((2, 4)), Vec::new(), Some(1), None)
+            .expect_err("rows excludes limit");
+        assert_eq!(error.code, ErrorCode::ParseFailed);
+
+        let error = TableFilter::build(None, Some((2, 4)), Vec::new(), None, Some(1))
+            .expect_err("rows excludes offset");
+        assert_eq!(error.code, ErrorCode::ParseFailed);
+    }
 
     #[test]
     fn public_boundary_normalizes_parser_panics() {

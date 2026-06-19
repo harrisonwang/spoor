@@ -15,3 +15,27 @@ Native addons are distributed as optional platform packages. Thrown spoor
 errors expose `code`, `reason`, `hint`, `recoverable`, and `stage`.
 Successful parses can still contain typed integrity warnings; agents must
 inspect `result.warnings`.
+
+## Tables: narrowing and pagination
+
+For CSV/XLSX, `parseBytes` accepts the same narrowing options as the CLI, so
+pipelines can page through full tables instead of the default 100-row preview:
+
+```js
+// A slice by inclusive 1-based [first, last] row range (mutually exclusive with limit/offset)
+parseBytes(data, { sourceName: 'data.xlsx', sheet: 'Sheet1', rows: [5, 104] });
+
+// Or paginate by limit/offset and keep only some columns
+parseBytes(data, { sourceName: 'data.xlsx', columns: ['分类', '金额'], limit: 100, offset: 200 });
+```
+
+## Extracting embedded media
+
+Resolve a safe media URI emitted in the output (DOCX images, extractable PDF
+images) to a `Buffer` for handing to an external vision model:
+
+```js
+const { extractMedia } = require('@harrisonwang/spoor');
+
+const image = extractMedia(data, 'spoor-docx://word/media/image1.png', { sourceName: 'report.docx' });
+```

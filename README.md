@@ -86,14 +86,16 @@ let result = spoor_core::parse(&request)?;
 ```
 
 需要按解析结果中的安全 URI 提取单个内嵌媒体时，使用格式无关的
-`spoor_core::extract_media(&request, uri)`；当前仅支持 `spoor-docx://`。
+`spoor_core::extract_media(&request, uri)`；当前支持 `spoor-docx://` 与 `spoor-pdf://`。
 
 Agent 应优先调用 `parse` 并处理 `warnings[]`。只需要 Markdown 的兼容场景可调用
 `parse_document`；需要强制文档输出并保留 warnings 时使用 `parse_document_result`。
 
 Python 使用 `pyspoor` 的 `parse_bytes` / `parse_path`；Node.js 使用
 `@harrisonwang/spoor`；浏览器与 Edge Runtime 使用
-`@harrisonwang/spoor-wasm`。从 `v0.8.3` 起，发布的 WASM 包默认包含全部重点格式；
+`@harrisonwang/spoor-wasm`。表格筛选（`sheet`/`rows`/`columns`/`limit`/`offset`）
+与内嵌媒体提取（`extract_media`）在 CLI、Python、Node、WASM 行为等价，RAG 管道可直接
+分页摄取整张表。从 `v0.8.3` 起，发布的 WASM 包默认包含全部重点格式；
 需要更小体积时可自行构建 `core-formats`。
 
 主示例：

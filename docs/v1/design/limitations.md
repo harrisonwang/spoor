@@ -38,8 +38,9 @@
 - Markdown、纯文本、常见代码与配置文件：做字符集解码后保留文本；不是语法分析器。
 - 不支持旧版二进制 Office `.doc` / `.xls` / `.ppt`、密码保护 Office、OCR、
   宏执行、公式执行、notebook 执行、脚本执行或通用内嵌二进制提取。
-- DOCX 图片占位符仅暴露经过校验的 `word/media/*` ZIP entry；具备文件能力的
-  Agent 可以使用 CLI `--extract` 提取单个资源；浏览器/WASM 入口不提供图片字节提取 API。
+- 内嵌媒体提取（DOCX 图片占位符、可直出的 PDF 图片）通过格式无关的 `extract_media`
+  入口按安全 URI 取单个资源，CLI（`--extract`）、Python / Node（`extract_media`）与
+  浏览器/WASM（`extract_media`）行为一致；spoor 只暴露经校验的安全 URI，不解码或理解字节。
 
 ## 格式检测限制
 
@@ -102,7 +103,11 @@ Cloudflare 官方当前还限制 Worker 压缩后体积为 Free 3 MB / Paid 10 M
 1. 建立 PDF 布局中间模型，再改善多栏顺序、页眉页脚分类、标题层级与断词；OCR 保持外置。
 2. 建立 DOCX/PPTX 表格 span 模型，把合并表格从“显式 warning”升级为 HTML 降级输出。
 3. 为 PPTX 按 shape 坐标恢复阅读顺序并保留 bullet 层级。
-4. 为 Python/Node 暴露表格分页筛选能力，避免 RAG 管道只能摄取默认预览。
-5. 在解析器中增加工作量预算，并由批处理宿主提供可真实终止的超时、取消和隔离。
+4. 在解析器中增加工作量预算，并由批处理宿主提供可真实终止的超时、取消和隔离。
+
+表格分页筛选（`sheet`/`rows`/`columns`/`limit`/`offset`）与内嵌媒体提取
+（`extract_media`）现已在 CLI、Python、Node、WASM 全部贯通，四个宿主共用
+`TableFilter::build` 校验与 `parse` 契约，行为等价；RAG 管道可直接分页摄取整张表，
+不再被默认 100 行预览或 CLI 子进程限制。
 
 完整能力决策与先后顺序见 [docs/capabilities.md](../../capabilities.md)。

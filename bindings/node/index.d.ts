@@ -4,9 +4,16 @@ export declare function detectFormat(data: Buffer, sourceName?: string | undefin
 
 export declare function parseBytes(data: Buffer, options?: ParseOptions | undefined | null): any
 
+export declare function extractMedia(data: Buffer, resource: string, options?: ParseOptions | undefined | null): Buffer
+
 export interface ParseOptions {
   sourceName?: string
   contentType?: string
   format?: string
   maxParseBytes?: number
+  sheet?: string
+  rows?: Array<number>
+  columns?: Array<string>
+  limit?: number
+  offset?: number
 }

@@ -104,9 +104,10 @@ CLI 行为约定：
 
 当前采用 Cargo workspace。`spoor-core` 的正式 API（以 `crates/spoor-core/src/lib.rs` 的 re-export 为准）：
 
-- 请求与限制：`ParseRequest`、`ParseLimits`、`TableFilter`
+- 请求与限制：`ParseRequest`、`ParseLimits`、`TableFilter`（`TableFilter::build` 是
+  跨宿主共用的筛选校验与组装入口）
 - 检测与解析：`detect_format`、`parse`、`parse_document_result`、`parse_document`、`parse_tables`
-- 内嵌媒体：`extract_media`；格式无关入口，当前仅支持安全 `spoor-docx://` URI
+- 内嵌媒体：`extract_media`；格式无关入口，当前支持安全 `spoor-docx://` 与 `spoor-pdf://` URI
 - 类型化结果：`ParseResult`、`ParseContent`、`DocumentResult`、`TableResult`、`ParseStats`、`SpoorWarning`、`WarningCode`、`WarningLocation`
 - 类型化错误：`SpoorError`、`ErrorCode`、`ParseStage`
 - format / mode：`Format`、`OutputMode`、`default_mode_for`
@@ -115,6 +116,12 @@ CLI 行为约定：
 解析器细节保持在 `parse/` 内部，不作为公共 API。文件、URL、stdin、glob
 和进程退出仅存在于 `spoor-cli`；Python 的 `parse_path` 也是绑定层的便捷函数。
 公共边界不暴露 `anyhow::Result`。
+
+Python、Node 与 WASM 绑定都通过 `TableFilter::build` 暴露表格筛选
+（`sheet`/`rows`/`columns`/`limit`/`offset`，`rows` 为含两端的 1-based 行号且与
+`limit`/`offset` 互斥），并都提供 `extract_media`。表格筛选与媒体提取的校验、
+分页与错误码在 CLI、Python、Node、WASM 四个宿主等价——这是 spoor「同一引擎、
+跨宿主等价信号」契约的一部分。
 
 `parse` 和 `parse_document_result` 保留结构化完整性 warnings，供 Agent 按稳定
 code 与 `location.kind=page/slide` 分支。`parse_document` 仅用于明确不需要诊断的

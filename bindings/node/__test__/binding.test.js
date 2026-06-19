@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const test = require('node:test');
-const { detectFormat, parseBytes } = require('..');
+const { detectFormat, parseBytes, extractMedia } = require('..');
 
 test('detects and parses text bytes', () => {
   const input = Buffer.from('hello spoor\n');
@@ -24,6 +24,45 @@ test('exposes stable warning code and location', () => {
 
   assert.equal(result.warnings[0].code, 'pdf_page_no_text_layer');
   assert.deepEqual(result.warnings[0].location, { kind: 'page', number: 2 });
+});
+
+test('table filter paginates and selects columns', () => {
+  const csv = readFileSync(join(
+    __dirname,
+    '../../../crates/spoor-cli/tests/fixtures/csv/01_basic.csv',
+  ));
+  // Alice(row 2), Bob(row 3), Carol(row 4); columns Name/Score/Note.
+  const result = parseBytes(csv, { sourceName: 'data.csv', columns: ['Name'], limit: 1, offset: 1 });
+  assert.equal(result.content.kind, 'tables');
+  assert.deepEqual(result.content.value.tables[0].rows, [{ Name: 'Bob' }]);
+
+  const ranged = parseBytes(csv, { sourceName: 'data.csv', rows: [3, 3] });
+  assert.deepEqual(ranged.content.value.tables[0].rows.map((r) => r.Name), ['Bob']);
+});
+
+test('table filter rejects rows combined with limit', () => {
+  const csv = readFileSync(join(
+    __dirname,
+    '../../../crates/spoor-cli/tests/fixtures/csv/01_basic.csv',
+  ));
+  assert.throws(
+    () => parseBytes(csv, { sourceName: 'data.csv', rows: [2, 4], limit: 1 }),
+    (error) => error.code === 'parse_failed',
+  );
+});
+
+test('extract_media returns safe docx resource bytes', () => {
+  const docx = readFileSync(join(
+    __dirname,
+    '../../../crates/spoor-cli/tests/fixtures/docx/16_image_placeholders.docx',
+  ));
+  const image = extractMedia(docx, 'spoor-docx://word/media/image1.png', { sourceName: 'images.docx' });
+  assert.equal(Buffer.from(image).toString(), 'first-image');
+
+  assert.throws(
+    () => extractMedia(docx, 'word/media/image1.png', { sourceName: 'images.docx' }),
+    (error) => error.code === 'parse_failed',
+  );
 });
 
 test('exposes stable structured error fields', () => {

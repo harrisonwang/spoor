@@ -40,7 +40,8 @@ spoor-index/
 默认按已知扩展名发现文件并跳过隐藏文件；`--all-files` 会把其他文件也交给
 spoor 检测。每个文件默认使用 64 MiB 解析预算。XLSX/CSV 只摄取默认的前
 100 条数据行，并在 manifest 中记录 `table_preview_truncated`；需要完整表格时，
-应使用 CLI 的 `--rows` / `--limit` / `--offset` 做分页摄取。
+直接给 `pyspoor` 的 `parse_bytes` / `parse_path` 传 `rows` / `limit` / `offset` /
+`columns` / `sheet` 做分页摄取，无需再 shell 调用 CLI。
 
 ```bash
 python test_ingest.py

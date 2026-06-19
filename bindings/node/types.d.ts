@@ -3,6 +3,19 @@ export interface ParseOptions {
   contentType?: string;
   format?: string;
   maxParseBytes?: number;
+  /** XLSX only: restrict output to one sheet by name. */
+  sheet?: string;
+  /**
+   * Inclusive 1-based `[first, last]` row range (Excel rows for XLSX, line
+   * numbers for CSV). Mutually exclusive with `limit`/`offset`.
+   */
+  rows?: [number, number];
+  /** Keep only these columns, by header name. */
+  columns?: string[];
+  /** Max data rows per table (default 100). */
+  limit?: number;
+  /** Skip this many data rows before applying `limit`. */
+  offset?: number;
 }
 
 export interface DocumentResult {
@@ -57,3 +70,4 @@ export interface SpoorError extends Error {
 
 export function detectFormat(data: Buffer, sourceName?: string | null): string;
 export function parseBytes(data: Buffer, options?: ParseOptions | null): ParseResult;
+export function extractMedia(data: Buffer, resource: string, options?: ParseOptions | null): Buffer;
