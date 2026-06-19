@@ -1,6 +1,6 @@
 use napi::bindgen_prelude::{Buffer, Error, Result, Status};
 use napi_derive::napi;
-use spoor_core::{Format, ParseLimits, ParseRequest, TableFilter};
+use spoor_core::{DocumentFilter, Format, ParseLimits, ParseRequest, TableFilter};
 use std::str::FromStr;
 
 #[derive(Default)]
@@ -21,6 +21,8 @@ pub struct ParseOptions {
     pub limit: Option<u32>,
     /// Skip this many data rows before applying `limit`.
     pub offset: Option<u32>,
+    /// PDF only: inclusive 1-based `[first, last]` page range to parse.
+    pub pages: Option<Vec<u32>>,
 }
 
 #[napi]
@@ -28,6 +30,8 @@ pub fn parse_bytes(data: Buffer, options: Option<ParseOptions>) -> Result<serde_
     let options = options.unwrap_or_default();
     let mut request = build_request(&data, &options)?;
     request.table_filter = table_filter(&options)?;
+    request.document_filter =
+        DocumentFilter::build_from_page_slice(options.pages.as_deref()).map_err(to_node_error)?;
     let result = spoor_core::parse(&request).map_err(to_node_error)?;
     serde_json::to_value(result)
         .map_err(|error| Error::new(Status::GenericFailure, error.to_string()))

@@ -31,6 +31,15 @@ parse_bytes(data, source_name="data.xlsx", sheet="Sheet1", rows=(5, 104))
 parse_bytes(data, source_name="data.xlsx", columns=["分类", "金额"], limit=100, offset=200)
 ```
 
+## PDFs: page ranges
+
+For page-oriented PDFs, pass `pages` (inclusive 1-based) to parse only a slice
+and avoid reading a large document end to end:
+
+```python
+parse_path("report.pdf", pages=(1, 3))  # only pages 1–3
+```
+
 ## Extracting embedded media
 
 Resolve a safe media URI emitted in the output (DOCX images, extractable PDF

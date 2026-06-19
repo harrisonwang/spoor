@@ -105,9 +105,10 @@ Cloudflare 官方当前还限制 Worker 压缩后体积为 Free 3 MB / Paid 10 M
 3. 为 PPTX 按 shape 坐标恢复阅读顺序并保留 bullet 层级。
 4. 在解析器中增加工作量预算，并由批处理宿主提供可真实终止的超时、取消和隔离。
 
-表格分页筛选（`sheet`/`rows`/`columns`/`limit`/`offset`）与内嵌媒体提取
-（`extract_media`）现已在 CLI、Python、Node、WASM 全部贯通，四个宿主共用
-`TableFilter::build` 校验与 `parse` 契约，行为等价；RAG 管道可直接分页摄取整张表，
-不再被默认 100 行预览或 CLI 子进程限制。
+表格分页筛选（`sheet`/`rows`/`columns`/`limit`/`offset`）、PDF 页码筛选（`pages`）
+与内嵌媒体提取（`extract_media`）现已在 CLI、Python、Node、WASM 全部贯通，四个宿主
+共用 `TableFilter::build` / `DocumentFilter::build` 校验与 `parse` 契约，行为等价；
+RAG 管道可直接分页摄取整张表、或只解析 PDF 的指定页，不再被默认 100 行预览、整份
+PDF 解析或 CLI 子进程限制。
 
 完整能力决策与先后顺序见 [docs/capabilities.md](../../capabilities.md)。

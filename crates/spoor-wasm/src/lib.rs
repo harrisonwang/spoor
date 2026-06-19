@@ -1,4 +1,4 @@
-use spoor_core::{Format, ParseLimits, ParseRequest, TableFilter};
+use spoor_core::{DocumentFilter, Format, ParseLimits, ParseRequest, TableFilter};
 use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 
@@ -25,8 +25,10 @@ pub fn detect_format(
 /// For table formats (CSV/XLSX) the trailing options mirror the CLI and the
 /// other bindings: `sheet` (XLSX only), `rows` as an inclusive 1-based
 /// `[first, last]` pair (mutually exclusive with `limit`/`offset`), `columns`
-/// to keep, and `limit`/`offset` for pagination. They are ignored for document
-/// formats. All are optional, so existing 5-argument calls keep working.
+/// to keep, and `limit`/`offset` for pagination. For page-oriented formats
+/// (PDF), `pages` is an inclusive 1-based `[first, last]` range. Each is ignored
+/// by formats it does not apply to, and all are optional, so existing
+/// 5-argument calls keep working.
 #[wasm_bindgen]
 #[allow(clippy::too_many_arguments)]
 pub fn parse_bytes(
@@ -40,6 +42,7 @@ pub fn parse_bytes(
     columns: Option<Vec<String>>,
     limit: Option<usize>,
     offset: Option<usize>,
+    pages: Option<Vec<u32>>,
 ) -> Result<JsValue, JsValue> {
     let mut request = request(
         bytes,
@@ -56,6 +59,8 @@ pub fn parse_bytes(
         offset,
     )
     .map_err(error_value)?;
+    request.document_filter =
+        DocumentFilter::build_from_page_slice(pages.as_deref()).map_err(error_value)?;
     let result = spoor_core::parse(&request).map_err(error_value)?;
     serde_wasm_bindgen::to_value(&result).map_err(|error| JsValue::from_str(&error.to_string()))
 }

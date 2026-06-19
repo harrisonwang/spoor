@@ -32,13 +32,16 @@ def parse_bytes(
     columns: list[str] | None = None,
     limit: int | None = None,
     offset: int | None = None,
+    pages: tuple[int, int] | None = None,
 ) -> ParseResult:
     """Parse document/table bytes into a typed result.
 
     For table formats (CSV/XLSX) the narrowing options mirror the CLI: ``sheet``
     (XLSX only), ``rows`` as an inclusive 1-based ``(first, last)`` pair (mutually
     exclusive with ``limit``/``offset``), ``columns`` to keep, and
-    ``limit``/``offset`` for pagination. They are ignored for document formats.
+    ``limit``/``offset`` for pagination. For page-oriented formats (PDF), ``pages``
+    is an inclusive 1-based ``(first, last)`` range that limits which pages are
+    parsed. Each option is ignored by formats it does not apply to.
     """
     try:
         raw: dict[str, Any] = _native.parse_bytes(
@@ -52,6 +55,7 @@ def parse_bytes(
             columns,
             limit,
             offset,
+            pages,
         )
     except _native.SpoorError as error:
         raise SpoorError.from_native(error) from None
@@ -68,6 +72,7 @@ def parse_path(
     columns: list[str] | None = None,
     limit: int | None = None,
     offset: int | None = None,
+    pages: tuple[int, int] | None = None,
 ) -> ParseResult:
     path = Path(path)
     return parse_bytes(
@@ -80,6 +85,7 @@ def parse_path(
         columns=columns,
         limit=limit,
         offset=offset,
+        pages=pages,
     )
 
 

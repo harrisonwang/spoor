@@ -105,3 +105,18 @@ assert.throws(
   () => parse_bytes(csv, 'data.csv', undefined, undefined, undefined, undefined, [2, 4], undefined, 1),
   (error) => error.code === 'parse_failed',
 );
+
+// Page filter reaches the WASM host too (02_multipage.pdf has 3 pages). The
+// 11th positional arg is `pages`.
+const multipagePdf = await readFile(new URL(
+  '../../crates/spoor-cli/tests/fixtures/pdf/02_multipage.pdf',
+  import.meta.url,
+));
+const pageFiltered = parse_bytes(
+  multipagePdf, 'doc.pdf', undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, [2, 2],
+);
+const pageMd = pageFiltered.content.value.markdown;
+assert.ok(
+  pageMd.includes('## Page 2') && !pageMd.includes('## Page 1') && !pageMd.includes('## Page 3'),
+  pageMd,
+);

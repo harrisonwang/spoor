@@ -51,6 +51,22 @@ test('table filter rejects rows combined with limit', () => {
   );
 });
 
+test('pages filter limits PDF to requested pages', () => {
+  const pdf = readFileSync(join(
+    __dirname,
+    '../../../crates/spoor-cli/tests/fixtures/pdf/02_multipage.pdf',
+  ));
+  const md = parseBytes(pdf, { sourceName: 'doc.pdf', pages: [2, 2] }).content.value.markdown;
+  assert.ok(md.includes('## Page 2'), md);
+  assert.ok(!md.includes('## Page 1'), md);
+  assert.ok(!md.includes('## Page 3'), md);
+
+  assert.throws(
+    () => parseBytes(pdf, { sourceName: 'doc.pdf', pages: [3, 1] }),
+    (error) => error.code === 'parse_failed',
+  );
+});
+
 test('extract_media returns safe docx resource bytes', () => {
   const docx = readFileSync(join(
     __dirname,

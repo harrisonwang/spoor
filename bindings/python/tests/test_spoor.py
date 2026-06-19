@@ -83,6 +83,20 @@ def test_extract_media_rejects_unsafe_uri() -> None:
         )
 
 
+def test_pages_filter_limits_pdf_to_requested_pages() -> None:
+    # 02_multipage.pdf has 3 pages; --pages 2:2 keeps only page 2.
+    result = parse_path(FIXTURES / "pdf/02_multipage.pdf", pages=(2, 2))
+    markdown = result.content.value.markdown
+    assert "## Page 2" in markdown
+    assert "## Page 1" not in markdown
+    assert "## Page 3" not in markdown
+
+
+def test_pages_filter_rejects_invalid_range() -> None:
+    with pytest.raises(SpoorError):
+        parse_path(FIXTURES / "pdf/02_multipage.pdf", pages=(3, 1))
+
+
 def test_error_fields_are_stable() -> None:
     try:
         parse_bytes(b"\x00\x01", source_name="unknown.bin")

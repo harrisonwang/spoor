@@ -1,13 +1,13 @@
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString};
-use spoor_core::{Format, ParseLimits, ParseRequest, TableFilter};
+use spoor_core::{DocumentFilter, Format, ParseLimits, ParseRequest, TableFilter};
 use std::str::FromStr;
 
 pyo3::create_exception!(_native, SpoorError, PyException);
 
 #[allow(clippy::too_many_arguments)]
-#[pyfunction(signature = (data, source_name=None, content_type=None, format=None, max_parse_bytes=None, sheet=None, rows=None, columns=None, limit=None, offset=None))]
+#[pyfunction(signature = (data, source_name=None, content_type=None, format=None, max_parse_bytes=None, sheet=None, rows=None, columns=None, limit=None, offset=None, pages=None))]
 fn parse_bytes(
     py: Python<'_>,
     data: &[u8],
@@ -20,11 +20,13 @@ fn parse_bytes(
     columns: Option<Vec<String>>,
     limit: Option<usize>,
     offset: Option<usize>,
+    pages: Option<(usize, usize)>,
 ) -> PyResult<Py<PyAny>> {
     let mut request = request(data, source_name, content_type, format, max_parse_bytes)?;
     request.table_filter =
         TableFilter::build(sheet, rows, columns.unwrap_or_default(), limit, offset)
             .map_err(to_py_error)?;
+    request.document_filter = DocumentFilter::build(pages).map_err(to_py_error)?;
     let result = py
         .detach(|| spoor_core::parse(&request))
         .map_err(to_py_error)?;

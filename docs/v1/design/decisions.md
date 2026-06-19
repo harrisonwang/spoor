@@ -119,9 +119,10 @@ CLI 行为约定：
 
 Python、Node 与 WASM 绑定都通过 `TableFilter::build` 暴露表格筛选
 （`sheet`/`rows`/`columns`/`limit`/`offset`，`rows` 为含两端的 1-based 行号且与
-`limit`/`offset` 互斥），并都提供 `extract_media`。表格筛选与媒体提取的校验、
-分页与错误码在 CLI、Python、Node、WASM 四个宿主等价——这是 spoor「同一引擎、
-跨宿主等价信号」契约的一部分。
+`limit`/`offset` 互斥），通过 `DocumentFilter::build` 暴露 PDF 页码筛选（`pages`，
+含两端的 1-based 页码区间），并都提供 `extract_media`。行号与页码区间共用一套
+`validated_inclusive_range` 校验，CLI 的 `--rows`/`--pages` 与各绑定行为、错误码
+等价——这是 spoor「同一引擎、跨宿主等价信号」契约的一部分。
 
 `parse` 和 `parse_document_result` 保留结构化完整性 warnings，供 Agent 按稳定
 code 与 `location.kind=page/slide` 分支。`parse_document` 仅用于明确不需要诊断的

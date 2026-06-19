@@ -16,4 +16,5 @@ export interface ParseOptions {
   columns?: Array<string>
   limit?: number
   offset?: number
+  pages?: Array<number>
 }

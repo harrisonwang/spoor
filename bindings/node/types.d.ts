@@ -16,6 +16,8 @@ export interface ParseOptions {
   limit?: number;
   /** Skip this many data rows before applying `limit`. */
   offset?: number;
+  /** PDF only: inclusive 1-based `[first, last]` page range to parse. */
+  pages?: [number, number];
 }
 
 export interface DocumentResult {
