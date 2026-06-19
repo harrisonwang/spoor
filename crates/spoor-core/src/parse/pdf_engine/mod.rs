@@ -2230,6 +2230,16 @@ impl OutputDev for LayoutCollector {
     fn end_line(&mut self) -> Result<(), OutputError> { Ok(()) }
 }
 
+/// Total page count, computed from the page tree without extracting any text.
+/// Returns the whole document's page count regardless of any page-range slice,
+/// so a caller can learn the full size from a cheap one-page peek. `None` if the
+/// bytes do not load as a PDF.
+pub fn pdf_total_pages(buffer: &[u8]) -> Option<usize> {
+    let mut doc = Document::load_mem(buffer).ok()?;
+    let _ = maybe_decrypt(&mut doc);
+    Some(doc.get_pages().len())
+}
+
 /// Extract positioned text spans per page (1-based page numbers), honoring the
 /// same optional page range as the flat-text path. Lets callers reconstruct
 /// reading order without changing the existing text extraction.

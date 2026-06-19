@@ -75,7 +75,13 @@ pub fn extract(
         ));
     }
 
-    Ok(ExtractedMarkdown { markdown, warnings })
+    Ok(ExtractedMarkdown {
+        markdown,
+        warnings,
+        // Total pages regardless of any --pages slice, so a cheap one-page peek
+        // still tells the caller how big the document is.
+        page_count: super::pdf_engine::pdf_total_pages(source.bytes()),
+    })
 }
 
 #[cfg(test)]

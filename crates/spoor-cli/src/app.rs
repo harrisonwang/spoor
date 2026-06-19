@@ -92,6 +92,7 @@ fn run_parse(cli: Cli) -> Result<String> {
             let mut documents = Vec::with_capacity(resolved.len());
             let mut parse_warnings = Vec::new();
             let mut extracted_bytes = 0usize;
+            let mut total_pdf_pages = 0usize;
             for resolved in &resolved {
                 let request = request_for(
                     &resolved.input,
@@ -102,6 +103,7 @@ fn run_parse(cli: Cli) -> Result<String> {
                 );
                 match parse_document_result(&request) {
                     Ok(result) => {
+                        let page_count = result.stats.page_count;
                         let ParseContent::Document(document) = result.content else {
                             failures.push(InputFailure::from_error(
                                 resolved.input.label.clone(),
@@ -126,6 +128,7 @@ fn run_parse(cli: Cli) -> Result<String> {
                                     warning,
                                 }
                             }));
+                            total_pdf_pages += page_count.unwrap_or(0);
                             documents.push(document);
                         }
                     }
@@ -157,6 +160,15 @@ fn run_parse(cli: Cli) -> Result<String> {
                 .saturating_sub(limited_diagnostics.content.len());
             let limited = limit_markdown_output(markdown, budget);
             report_output_truncation(limited.warning.as_deref());
+            // When a PDF gets truncated by the output cap, tell the user the
+            // page coverage so they can fetch a later slice with --pages instead
+            // of silently losing the tail.
+            if limited.warning.is_some() && total_pdf_pages > 0 {
+                let shown = limited.content.matches("## Page ").count();
+                eprintln!(
+                    "warning: PDF 共 {total_pdf_pages} 页，截断后本次输出约含 {shown} 页；用 --pages <first:last> 取更靠后的页。"
+                );
+            }
             let mut content = limited.content;
             content.push_str(&limited_diagnostics.content);
             Ok(content)

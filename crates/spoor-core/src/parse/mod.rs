@@ -39,6 +39,10 @@ mod xml;
 pub(crate) struct ExtractedMarkdown {
     pub markdown: String,
     pub warnings: Vec<SpoorWarning>,
+    /// Total document unit count for page-oriented formats (currently PDF pages),
+    /// computed independently of any page-range slice so callers learn the whole
+    /// size even from a one-page peek. `None` for formats without a page model.
+    pub page_count: Option<usize>,
 }
 
 impl ExtractedMarkdown {
@@ -46,6 +50,15 @@ impl ExtractedMarkdown {
         Self {
             markdown,
             warnings: Vec::new(),
+            page_count: None,
+        }
+    }
+
+    fn with_warnings(markdown: String, warnings: Vec<SpoorWarning>) -> Self {
+        Self {
+            markdown,
+            warnings,
+            page_count: None,
         }
     }
 }

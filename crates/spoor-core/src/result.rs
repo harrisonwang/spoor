@@ -105,14 +105,26 @@ pub struct ParseStats {
     pub input_bytes: usize,
     pub output_bytes: usize,
     pub format: Format,
+    /// Total page count for page-oriented formats (currently PDF), regardless of
+    /// any page-range slice. Lets a caller learn the whole document size from a
+    /// cheap one-page read, then decide whether to request a wider range.
+    /// `None` for formats without a page model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_count: Option<usize>,
 }
 
 impl ParseStats {
-    pub(crate) fn new(input_bytes: usize, output_bytes: usize, format: Format) -> Self {
+    pub(crate) fn new(
+        input_bytes: usize,
+        output_bytes: usize,
+        format: Format,
+        page_count: Option<usize>,
+    ) -> Self {
         Self {
             input_bytes,
             output_bytes,
             format,
+            page_count,
         }
     }
 }

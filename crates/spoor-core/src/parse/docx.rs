@@ -50,10 +50,10 @@ pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<ExtractedM
         &mut md,
     )?;
     let markdown = md.build()?;
-    Ok(ExtractedMarkdown {
+    Ok(ExtractedMarkdown::with_warnings(
         markdown,
-        warnings: feature_warnings(scan_document_features(&document_xml)?),
-    })
+        feature_warnings(scan_document_features(&document_xml)?),
+    ))
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]

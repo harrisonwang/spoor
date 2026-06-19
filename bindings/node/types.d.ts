@@ -59,6 +59,8 @@ export interface ParseResult {
     input_bytes: number;
     output_bytes: number;
     format: string;
+    /** Total pages for page-oriented formats (PDF); absent otherwise. */
+    page_count?: number;
   };
 }
 

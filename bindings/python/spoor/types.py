@@ -50,6 +50,7 @@ class ParseStats:
     input_bytes: int
     output_bytes: int
     format: str
+    page_count: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

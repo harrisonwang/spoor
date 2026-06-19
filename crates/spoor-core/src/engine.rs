@@ -194,15 +194,15 @@ fn parse_inner(request: &ParseRequest<'_>) -> SpoorResult<ParseResult> {
         Ok(ParseResult {
             content: ParseContent::Tables(tables),
             warnings: Vec::new(),
-            stats: ParseStats::new(request.bytes.len(), output_bytes, format),
+            stats: ParseStats::new(request.bytes.len(), output_bytes, format, None),
         })
     } else {
-        let (document, warnings) = parse_document_with_format(request, format)?;
+        let (document, warnings, page_count) = parse_document_with_format(request, format)?;
         let output_bytes = document.markdown.len();
         Ok(ParseResult {
             content: ParseContent::Document(document),
             warnings,
-            stats: ParseStats::new(request.bytes.len(), output_bytes, format),
+            stats: ParseStats::new(request.bytes.len(), output_bytes, format, page_count),
         })
     }
 }
@@ -214,12 +214,12 @@ fn parse_inner(request: &ParseRequest<'_>) -> SpoorResult<ParseResult> {
 pub fn parse_document_result(request: &ParseRequest<'_>) -> SpoorResult<ParseResult> {
     catch_boundary(ParseStage::Parse, || {
         let format = detect_format(request)?;
-        let (document, warnings) = parse_document_with_format(request, format)?;
+        let (document, warnings, page_count) = parse_document_with_format(request, format)?;
         let output_bytes = document.markdown.len();
         Ok(ParseResult {
             content: ParseContent::Document(document),
             warnings,
-            stats: ParseStats::new(request.bytes.len(), output_bytes, format),
+            stats: ParseStats::new(request.bytes.len(), output_bytes, format, page_count),
         })
     })
 }
@@ -359,7 +359,7 @@ fn is_safe_media_component(component: &str) -> bool {
 fn parse_document_with_format(
     request: &ParseRequest<'_>,
     format: Format,
-) -> SpoorResult<(DocumentResult, Vec<SpoorWarning>)> {
+) -> SpoorResult<(DocumentResult, Vec<SpoorWarning>, Option<usize>)> {
     let extracted = parsers::extract(
         &source(request),
         format,
@@ -381,6 +381,7 @@ fn parse_document_with_format(
             markdown: extracted.markdown,
         },
         extracted.warnings,
+        extracted.page_count,
     ))
 }
 

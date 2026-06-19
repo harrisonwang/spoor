@@ -1,6 +1,6 @@
 use spoor_core::{
-    ErrorCode, Format, ParseContent, ParseLimits, ParseRequest, TableFilter, detect_format,
-    extract_media, parse,
+    DocumentFilter, ErrorCode, Format, ParseContent, ParseLimits, ParseRequest, TableFilter,
+    detect_format, extract_media, parse,
 };
 #[cfg(feature = "pdf")]
 use spoor_core::{WarningCode, WarningLocation, parse_document_result};
@@ -72,6 +72,29 @@ fn table_filter_narrows_rows_and_columns_through_parse() {
     };
     assert_eq!(tables.tables[0].rows.len(), 1);
     assert_eq!(tables.tables[0].rows[0]["Name"], "Bob");
+}
+
+#[test]
+#[cfg(feature = "pdf")]
+fn pdf_stats_report_total_page_count_even_when_sliced() {
+    // 02_multipage.pdf has 3 pages. A one-page peek must still report the full
+    // count, so a caller can learn the document size cheaply, then widen --pages.
+    let bytes = include_bytes!("../../spoor-cli/tests/fixtures/pdf/02_multipage.pdf");
+    let mut request = ParseRequest::new(bytes);
+    request.source_name = Some("doc.pdf");
+    request.document_filter = DocumentFilter {
+        page_range: Some((1, 1)),
+    };
+
+    let result = parse(&request).unwrap();
+    assert_eq!(result.stats.page_count, Some(3));
+}
+
+#[test]
+fn non_paged_formats_report_no_page_count() {
+    let mut request = ParseRequest::new(b"hello\n");
+    request.source_name = Some("note.txt");
+    assert_eq!(parse(&request).unwrap().stats.page_count, None);
 }
 
 #[test]
