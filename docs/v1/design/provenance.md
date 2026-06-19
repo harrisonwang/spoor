@@ -1,0 +1,139 @@
+# 来源定位（Provenance）设计草案
+
+状态：**草案 / 待评审**。本文描述一个还未实现的能力，用来和现有代码对齐方向，不是已落地行为。
+
+## 一句话
+
+让 spoor 输出的每一段文本，都能反查"它来自原文哪里"——PDF 给到页码（可选再给页面坐标），纯文本类给到输入字节区间。这样下游 Agent 引用某段内容时，能机械地核对出处，而不是靠模型自己说。
+
+## 为什么做这个
+
+- 2025–2026 最强的需求是**可核查引用 / source grounding**：Anthropic Citations API 已经把"字符级来源定位"做成 API 原语；调研里 deep-research Agent 的引用"链接有效 >94%、但事实支持率只有 39–77%"，说明引用看着对、其实常常不支持论点。
+- 价值因此迁移到**上游**：谁产出可信、带位置的文本，谁就握住这条契约的关键一半。spoor 产出逐页/逐段、可定位的文本，正是这一半。
+- 契合 spoor 定位：这是解析输出的**一个属性**，确定性、无 ML、不联网。**它不是 RAG**——不做切块、不做向量、不做检索，只回答"这段输出对应原文哪个位置"。
+
+## 一个具体场景
+
+1. Agent 拿 spoor 输出的 markdown 喂给模型，模型答："据第 3 段，营收同比 +12%"。
+2. Agent 把模型引用的那段文字在 markdown 里的位置（字节区间）拿出来。
+3. 在 `provenance.spans` 里二分查找包含该区间的条目，得到 `Page { number: 3, bbox: ... }`。
+4. Agent 就能在原始 PDF 第 3 页那个矩形里高亮、或让校验模型只读那一页核对真假。
+
+## 数据模型（core 对外契约）
+
+在 `ParseResult` 增加一个**可选**字段，默认不产出，旧调用方完全不受影响：
+
+```rust
+pub struct ParseResult {
+    pub content: ParseContent,
+    pub warnings: Vec<SpoorWarning>,
+    pub stats: ParseStats,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<Provenance>,   // 新增
+}
+
+pub struct Provenance {
+    pub spans: Vec<ProvenanceSpan>,       // 按 output.start 升序、互不重叠
+}
+
+pub struct ProvenanceSpan {
+    pub output: TextRange,                 // 在本次返回的 markdown 里的位置
+    pub source: SourceAnchor,              // 原文里的位置
+}
+
+pub struct TextRange { pub start: usize, pub end: usize }  // UTF-8 字节区间
+
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SourceAnchor {
+    /// 页式格式（当前 PDF）：页码，born-digital 时可附页面坐标矩形。
+    Page { number: usize, #[serde(skip_serializing_if = "Option::is_none")] bbox: Option<Rect> },
+    /// 线性输入（纯文本 / Markdown）：原文 UTF-8 字节区间。
+    Input { start: usize, end: usize },
+}
+
+pub struct Rect { pub x0: f32, pub y0: f32, pub x1: f32, pub y1: f32 }  // PDF 用户坐标
+```
+
+风格上对齐现有的 `WarningLocation`（同样是 `tag = "kind"` 的 tagged enum），调用方处理方式一致。
+
+## 偏移语义（关键，跨语言别踩坑）
+
+- `output.start/end` 是 **UTF-8 字节偏移**，针对**本次 `ParseResult` 返回的那串 markdown**（不是原文）。理由：spoor 字节进字节出，字节偏移无歧义、和 `stats.output_bytes` 同一把尺子、和"内容寻址 / 确定性"一致。
+- 各宿主取子串的方式（文档要写清楚）：
+  - Rust：`&markdown[start..end]`
+  - Python：`markdown.encode("utf-8")[start:end].decode("utf-8")`
+  - Node/WASM：`Buffer.from(md, "utf8").subarray(start, end)`（JS 字符串是 UTF-16，不能直接用这个 index 切）
+- `SourceAnchor::Input` 的 `start/end` 是**原文输入**的 UTF-8 字节区间。
+- `Rect` 是 PDF 用户坐标（坐标原点、Y 轴方向按 PDF 内容流约定，在实现里固定并写进文档）；只在 born-digital、能从内容流确定性得到时才给，**扫描件不给坐标**（OCR 仍外置）。
+
+## 各格式能给到什么
+
+| 格式 | 锚点 | 说明 |
+| --- | --- | --- |
+| PDF | `Page { number, bbox? }` | 页码现在就有；bbox 来自字形几何，仅 born-digital |
+| 纯文本 / Markdown | `Input { start, end }` | 输入即线性 UTF-8，输出≈输入，区间直接可给 |
+| CSV / XLSX | 暂不做（行列本身已是寻址）| 表格已能用 `sheet`/`rows`/`columns` 定位，后续可加 `Cell` 锚点 |
+| DOCX / PPTX / HTML / EPUB | 暂不做 | 需要解析器保留段落/slide/元素序号，成本较高，放后面 |
+
+## 开关与分级
+
+在 `ParseRequest` 增加一个等级开关，**默认关闭**：
+
+```rust
+pub enum ProvenanceLevel { Off, Page, Block }   // 默认 Off
+
+pub struct ParseRequest<'a> {
+    // ...现有字段
+    pub provenance: ProvenanceLevel,            // 新增，默认 Off
+}
+```
+
+- `Off`：不产出 `provenance`（与今天完全一致）。
+- `Page`：PDF 每页一条 span，`bbox = None`。粒度粗、条目少。
+- `Block`：PDF 每个段落/块一条 span，带 `bbox`。粒度细、条目多。
+
+**为什么默认关闭、还要分级**：调研里一条硬约束是"边界税"——纯 Rust 引擎如果默认跨 WASM/PyO3/napi 边界吐一大堆 span，序列化开销会把自己的速度优势吃光。所以来源定位必须是**按需、可控量**的：要的人开，开多细自己定。这跟现有的页/表筛选是同一套"只返回被要的那部分"的设计原则。
+
+## 分阶段落地
+
+**M1 · 页级（最小可用，先做这个）**
+- 仅 PDF，`ProvenanceLevel::Page`。
+- 在 `render_layout`（`pdf.rs`）拼 markdown 时，记录每个 `## Page N` 区块的起止字节，产出 `Page { number, bbox: None }`。
+- 几乎零新增逻辑：每页 offset 在拼接时本就可知。
+- 四宿主贯通 + 测试：构造引用落点 → 命中正确页码。
+- 产出即可用：Agent 能把"输出某段"映射到"第几页"。
+
+**M2 · 块级 + 坐标**
+- `ProvenanceLevel::Block`，PDF born-digital。
+- 给 `EngineSpan` 补垂直范围（现在只有 baseline `y` 和 `font_size`，缺上下边界），打通 `span → line → block` 并算每块 `bbox`（内部 `PdfRect` 已存在，复用）。
+- 多栏重排页：markdown 与区间都按**重排后**的文本生成，所以 `output` 区间与 `bbox` 仍一一对应。
+- 输出每段 `Page { number, bbox }`。
+
+**M3 · 线性格式与表格**
+- 纯文本 / Markdown 给 `Input { start, end }`。
+- 表格加 `Cell { sheet, row, column }` 锚点（可选）。
+
+## 确定性与边界
+
+- **确定性**：同输入字节 + 同 `ProvenanceLevel` → 同 `provenance`（可哈希、可缓存，呼应"内容寻址"方向）。
+- **无 ML**：页码与 bbox 全部来自内容流几何；判不准就少给（不给 bbox / 退回页级），不猜。
+- **born-digital 限定**：扫描件不给坐标；无文本层的页沿用现有 `pdf_page_no_text_layer` warning。
+- **向后兼容**：`Off` 时输出与今天逐字节一致，不动现有快照。
+
+## 跨宿主暴露
+
+- core：`ParseResult.provenance` + `ParseRequest.provenance`。
+- CLI：`--provenance page|block`（默认 off）；JSON 形式输出 provenance（具体落点见"待定决策"）。
+- Python / Node / WASM：`parse_*` 增加 `provenance` 选项，返回结构带 `provenance`；只有开启时才序列化，规避边界税。
+
+## 待定决策（请拍板）
+
+1. **偏移单位**：UTF-8 字节（推荐，无歧义、与 `output_bytes` 一致）还是 Unicode code point（对 Python 直观，但 Rust/JS 要额外换算）。
+2. **CLI 怎么给 provenance**：单独的 JSON sidecar / stderr，还是并入一种 JSON 输出模式？（Markdown 主输出不该被结构化数据污染。）
+3. **M1 的 output 区间**：覆盖"整个 `## Page N` 区块（含标题）"（最简单），还是只覆盖该页正文文本？
+
+## 明确不做
+
+- 不做 RAG：不切块、不向量化、不检索、不重排相关性。
+- 不内置 OCR/VLM：扫描件不产坐标。
+- 不做"猜"的版面理解：判不准就降级，不输出低置信结果。
