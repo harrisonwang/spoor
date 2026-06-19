@@ -48,18 +48,14 @@ pub fn parse_bytes(
         format.as_deref(),
         max_parse_bytes,
     )?;
-    let rows = match rows {
-        Some(pair) => {
-            let [first, last] = pair.as_slice() else {
-                return Err(JsValue::from_str("rows must be a [first, last] pair"));
-            };
-            Some((*first as usize, *last as usize))
-        }
-        None => None,
-    };
-    request.table_filter =
-        TableFilter::build(sheet, rows, columns.unwrap_or_default(), limit, offset)
-            .map_err(error_value)?;
+    request.table_filter = TableFilter::build_from_row_slice(
+        sheet,
+        rows.as_deref(),
+        columns.unwrap_or_default(),
+        limit,
+        offset,
+    )
+    .map_err(error_value)?;
     let result = spoor_core::parse(&request).map_err(error_value)?;
     serde_wasm_bindgen::to_value(&result).map_err(|error| JsValue::from_str(&error.to_string()))
 }

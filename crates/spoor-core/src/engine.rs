@@ -75,6 +75,31 @@ impl TableFilter {
             offset,
         })
     }
+
+    /// Like [`TableFilter::build`], but takes the row range as a host-supplied
+    /// slice (e.g. a JS array marshaled to `Vec<u32>`) and validates it is
+    /// exactly a `[first, last]` pair. Lets the Node and WASM bindings forward
+    /// their `rows` without each re-implementing the length check, so the
+    /// "must be a pair" failure is one structured `SpoorError` across hosts.
+    pub fn build_from_row_slice(
+        sheet: Option<String>,
+        rows: Option<&[u32]>,
+        columns: Vec<String>,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> SpoorResult<Self> {
+        let pair = match rows {
+            None => None,
+            Some([first, last]) => Some((*first as usize, *last as usize)),
+            Some(_) => {
+                return Err(SpoorError::parse_failed(
+                    "rows 需要恰好两个元素 [first, last]",
+                    ParseStage::Parse,
+                ));
+            }
+        };
+        Self::build(sheet, pair, columns, limit, offset)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -433,6 +458,27 @@ mod tests {
         let error = TableFilter::build(None, Some((2, 4)), Vec::new(), None, Some(1))
             .expect_err("rows excludes offset");
         assert_eq!(error.code, ErrorCode::ParseFailed);
+    }
+
+    #[test]
+    fn table_filter_build_from_row_slice_requires_pair() {
+        let filter =
+            TableFilter::build_from_row_slice(None, Some(&[5, 104]), Vec::new(), None, None)
+                .expect("valid pair");
+        assert_eq!(filter.row_range, Some((5, 104)));
+
+        assert_eq!(
+            TableFilter::build_from_row_slice(None, None, Vec::new(), None, None)
+                .expect("no range")
+                .row_range,
+            None
+        );
+
+        for bad in [vec![], vec![1u32], vec![1, 2, 3]] {
+            let error = TableFilter::build_from_row_slice(None, Some(&bad), Vec::new(), None, None)
+                .expect_err("non-pair slice");
+            assert_eq!(error.code, ErrorCode::ParseFailed);
+        }
     }
 
     #[test]

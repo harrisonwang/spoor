@@ -399,20 +399,27 @@ fn all_failed_error(failures: &[InputFailure]) -> anyhow::Error {
 }
 
 fn build_filter(cli: &Cli) -> Result<TableFilter> {
-    let row_range = match &cli.rows {
+    let rows = match &cli.rows {
         Some(s) => Some(parse_row_range(s)?),
         None => None,
     };
-
-    Ok(TableFilter {
-        sheet: cli.sheet.clone(),
-        row_range,
-        columns: cli.columns.clone(),
-        limit: cli.limit,
-        offset: cli.offset,
-    })
+    // Funnel through the same validator the language bindings use, so the
+    // row-range bounds (>= 1, first <= last) and the rows/limit-offset
+    // exclusion are enforced in one place (clap also rejects the conflict at
+    // flag-parse time for a friendlier CLI error).
+    TableFilter::build(
+        cli.sheet.clone(),
+        rows,
+        cli.columns.clone(),
+        cli.limit,
+        cli.offset,
+    )
+    .map_err(Into::into)
 }
 
+/// Parse the CLI `--rows <first>:<last>` string into a 1-based pair. Bound
+/// validation (>= 1, first <= last) and the rows/limit-offset exclusion live in
+/// the shared cross-host `TableFilter::build`, so they are not repeated here.
 fn parse_row_range(s: &str) -> Result<(usize, usize)> {
     let (first, last) = s
         .split_once(':')
@@ -425,12 +432,6 @@ fn parse_row_range(s: &str) -> Result<(usize, usize)> {
         .trim()
         .parse()
         .map_err(|_| anyhow!("--rows: invalid last row {last:?}"))?;
-    if first == 0 || last == 0 {
-        return Err(anyhow!("--rows: row numbers must be >= 1, got {s:?}"));
-    }
-    if first > last {
-        return Err(anyhow!("--rows: first ({first}) > last ({last})"));
-    }
     Ok((first, last))
 }
 
@@ -587,11 +588,14 @@ mod tests {
     }
 
     #[test]
-    fn parse_row_range_rejects_invalid_input() {
+    fn parse_row_range_rejects_malformed_input() {
+        // parse_row_range only validates the string shape; out-of-bound values
+        // (e.g. 0:10, 104:5) are rejected later by TableFilter::build, covered
+        // in spoor-core's engine tests.
         assert!(parse_row_range("5").is_err());
         assert!(parse_row_range("a:b").is_err());
-        assert!(parse_row_range("104:5").is_err());
-        assert!(parse_row_range("0:10").is_err());
+        assert!(parse_row_range(":5").is_err());
+        assert!(parse_row_range("5:").is_err());
     }
 
     #[test]

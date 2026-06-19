@@ -78,21 +78,9 @@ fn build_request<'a>(data: &'a Buffer, options: &'a ParseOptions) -> Result<Pars
 }
 
 fn table_filter(options: &ParseOptions) -> Result<TableFilter> {
-    let rows = match &options.rows {
-        Some(pair) => {
-            let [first, last] = pair.as_slice() else {
-                return Err(Error::new(
-                    Status::InvalidArg,
-                    "rows must be a [first, last] pair",
-                ));
-            };
-            Some((*first as usize, *last as usize))
-        }
-        None => None,
-    };
-    TableFilter::build(
+    TableFilter::build_from_row_slice(
         options.sheet.clone(),
-        rows,
+        options.rows.as_deref(),
         options.columns.clone().unwrap_or_default(),
         options.limit.map(|n| n as usize),
         options.offset.map(|n| n as usize),
