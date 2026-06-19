@@ -2,7 +2,9 @@ use crate::engine::DocumentFilter;
 use crate::error::StructuredError;
 use crate::limits;
 use crate::parse::ExtractedMarkdown;
-use crate::parse::pdf_layout::{PdfImageObject, PdfLayoutDocument, PdfLayoutPage};
+use crate::parse::pdf_layout::{
+    PdfImageObject, PdfLayoutDocument, PdfLayoutPage, reading_order_text,
+};
 use crate::parse::pdf_media;
 #[cfg(test)]
 use crate::parse::pdf_media::PageImage;
@@ -18,6 +20,33 @@ pub fn extract(
     let page_range = document_filter.page_range;
     let pages = super::pdf_engine::extract_text_from_mem_by_page_range(source.bytes(), page_range)
         .map_err(map_pdf_error)?;
+
+    // Best-effort: positioned spans let us rebuild reading order for multi-column
+    // pages. A discovery failure just leaves the content-stream-ordered text as
+    // is, so this never regresses the flat-text path.
+    let span_pages: std::collections::HashMap<usize, super::pdf_engine::EnginePage> =
+        super::pdf_engine::extract_spans_from_mem_by_page_range(source.bytes(), page_range)
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
+
+    // Replace only confidently multi-column pages with column-ordered text;
+    // single-column pages keep their existing output verbatim. Remember which
+    // pages were reordered so the agent can be told (and can fall back).
+    let mut reordered_pages: Vec<usize> = Vec::new();
+    let pages: Vec<(usize, String)> = pages
+        .into_iter()
+        .map(|(number, flat)| match span_pages.get(&number) {
+            Some(page) => match reading_order_text(page) {
+                Some((ordered, true)) => {
+                    reordered_pages.push(number);
+                    (number, ordered)
+                }
+                _ => (number, flat),
+            },
+            None => (number, flat),
+        })
+        .collect();
 
     // Best-effort: locate image XObjects so the renderer can mark their page
     // position and warn. A discovery failure just yields no image markers.
@@ -35,10 +64,18 @@ pub fn extract(
     let markdown = render_layout(&layout);
     limits::ensure_parse_size(markdown.len(), max_parse_bytes, "PDF Markdown rendering")?;
 
-    Ok(ExtractedMarkdown {
-        markdown,
-        warnings: layout_warnings(&layout),
-    })
+    let mut warnings = layout_warnings(&layout);
+    for number in reordered_pages {
+        warnings.push(SpoorWarning::at_page(
+            WarningCode::PdfMultiColumnReadingOrder,
+            format!(
+                "第 {number} 页检测到多栏版面，已按列重排阅读顺序；若顺序异常可回退原始 PDF 文本顺序。"
+            ),
+            number,
+        ));
+    }
+
+    Ok(ExtractedMarkdown { markdown, warnings })
 }
 
 #[cfg(test)]

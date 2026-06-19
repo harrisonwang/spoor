@@ -42,6 +42,7 @@ export type WarningLocation =
 export type WarningCode =
   | 'pdf_page_no_text_layer'
   | 'pdf_page_suspicious_text_layer'
+  | 'pdf_multi_column_reading_order'
   | 'merged_table_structure_not_preserved'
   | 'embedded_visuals_omitted';
 

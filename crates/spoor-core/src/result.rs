@@ -62,14 +62,16 @@ impl SpoorWarning {
 pub enum WarningCode {
     PdfPageNoTextLayer,
     PdfPageSuspiciousTextLayer,
+    PdfMultiColumnReadingOrder,
     MergedTableStructureNotPreserved,
     EmbeddedVisualsOmitted,
 }
 
 impl WarningCode {
-    pub const ALL: [WarningCode; 4] = [
+    pub const ALL: [WarningCode; 5] = [
         WarningCode::PdfPageNoTextLayer,
         WarningCode::PdfPageSuspiciousTextLayer,
+        WarningCode::PdfMultiColumnReadingOrder,
         WarningCode::MergedTableStructureNotPreserved,
         WarningCode::EmbeddedVisualsOmitted,
     ];
@@ -78,6 +80,7 @@ impl WarningCode {
         match self {
             Self::PdfPageNoTextLayer => "pdf_page_no_text_layer",
             Self::PdfPageSuspiciousTextLayer => "pdf_page_suspicious_text_layer",
+            Self::PdfMultiColumnReadingOrder => "pdf_multi_column_reading_order",
             Self::MergedTableStructureNotPreserved => "merged_table_structure_not_preserved",
             Self::EmbeddedVisualsOmitted => "embedded_visuals_omitted",
         }

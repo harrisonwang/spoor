@@ -2109,6 +2109,151 @@ impl<W: ConvertToFmt> OutputDev for PlainTextOutput<W> {
 }
 
 
+/// A positioned text run captured for layout reconstruction. `y` is the
+/// baseline in top-down page coordinates (origin top-left), matching
+/// `PlainTextOutput`'s flip, so a larger `y` is further down the page.
+#[derive(Debug, Clone)]
+pub struct EngineSpan {
+    pub text: String,
+    pub x0: f64,
+    pub x1: f64,
+    pub y: f64,
+    pub font_size: f64,
+}
+
+/// Page geometry: dimensions plus the positioned spans drawn on it.
+#[derive(Debug, Clone, Default)]
+pub struct EnginePage {
+    pub width: f64,
+    pub height: f64,
+    pub spans: Vec<EngineSpan>,
+}
+
+/// An `OutputDev` that records positioned text spans instead of emitting flat,
+/// content-stream-ordered text. This is the raw material (text + bbox + font
+/// size) the PlainTextOutput path computes and discards; callers reconstruct
+/// reading order (multi-column, etc.) from it. One instance collects one page.
+pub struct LayoutCollector {
+    page: EnginePage,
+    flip_ctm: Transform,
+    cur: Option<EngineSpan>,
+    last_end: f64,
+    last_y: f64,
+}
+
+impl Default for LayoutCollector {
+    fn default() -> Self {
+        LayoutCollector {
+            page: EnginePage::default(),
+            flip_ctm: Transform2D::identity(),
+            cur: None,
+            last_end: 0.,
+            last_y: 0.,
+        }
+    }
+}
+
+impl LayoutCollector {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn flush(&mut self) {
+        if let Some(span) = self.cur.take() {
+            if !span.text.trim().is_empty() {
+                self.page.spans.push(span);
+            }
+        }
+    }
+
+    pub fn into_page(mut self) -> EnginePage {
+        self.flush();
+        self.page
+    }
+}
+
+impl OutputDev for LayoutCollector {
+    fn begin_page(&mut self, _page_num: u32, media_box: &MediaBox, _: Option<ArtBox>) -> Result<(), OutputError> {
+        self.flip_ctm = Transform2D::row_major(1., 0., 0., -1., 0., media_box.ury - media_box.lly);
+        self.page.width = media_box.urx - media_box.llx;
+        self.page.height = media_box.ury - media_box.lly;
+        Ok(())
+    }
+    fn end_page(&mut self) -> Result<(), OutputError> {
+        self.flush();
+        Ok(())
+    }
+    fn output_character(&mut self, trm: &Transform, width: f64, _spacing: f64, font_size: f64, char: &str) -> Result<(), OutputError> {
+        let position = trm.post_transform(&self.flip_ctm);
+        let tfs_vec = trm.transform_vector(vec2(font_size, font_size));
+        let tfs = (tfs_vec.x * tfs_vec.y).sqrt();
+        let (x, y) = (position.m31, position.m32);
+        let end_x = x + width * tfs;
+
+        // Segment runs geometrically (begin_word hints are unreliable): break on
+        // a new line, a leftward jump, or a large horizontal gap.
+        if let Some(span) = &self.cur {
+            let new_line = (y - self.last_y).abs() > tfs.max(span.font_size) * 0.5;
+            let moved_left = x < self.last_end - tfs * 0.1;
+            let big_gap = x > self.last_end + tfs * 0.5;
+            if new_line || moved_left || big_gap {
+                self.flush();
+            }
+        }
+
+        match self.cur.as_mut() {
+            Some(span) => {
+                if x > self.last_end + tfs * 0.1 {
+                    span.text.push(' ');
+                }
+                span.text.push_str(char);
+                if end_x > span.x1 {
+                    span.x1 = end_x;
+                }
+            }
+            None => {
+                self.cur = Some(EngineSpan {
+                    text: char.to_string(),
+                    x0: x,
+                    x1: end_x,
+                    y,
+                    font_size: tfs,
+                });
+            }
+        }
+        self.last_end = end_x;
+        self.last_y = y;
+        Ok(())
+    }
+    fn begin_word(&mut self) -> Result<(), OutputError> { Ok(()) }
+    fn end_word(&mut self) -> Result<(), OutputError> { Ok(()) }
+    fn end_line(&mut self) -> Result<(), OutputError> { Ok(()) }
+}
+
+/// Extract positioned text spans per page (1-based page numbers), honoring the
+/// same optional page range as the flat-text path. Lets callers reconstruct
+/// reading order without changing the existing text extraction.
+pub fn extract_spans_from_mem_by_page_range(buffer: &[u8], page_range: Option<(usize, usize)>) -> Result<Vec<(usize, EnginePage)>, OutputError> {
+    let mut doc = Document::load_mem(buffer)?;
+    maybe_decrypt(&mut doc)?;
+    let empty_resources = Dictionary::new();
+    let mut processor = Processor::new();
+    let mut pages = Vec::new();
+    for (page_num, object_id) in doc.get_pages() {
+        let page_number = page_num as usize;
+        if let Some((first, last)) = page_range {
+            if page_number < first || page_number > last {
+                continue;
+            }
+        }
+        let mut collector = LayoutCollector::new();
+        output_doc_inner(page_num, object_id, &doc, &mut processor, &mut collector, &empty_resources)?;
+        pages.push((page_number, collector.into_page()));
+    }
+    Ok(pages)
+}
+
+
 pub fn print_metadata(doc: &Document) {
     dlog!("Version: {}", doc.version);
     if let Some(ref info) = get_info(&doc) {

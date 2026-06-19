@@ -148,6 +148,7 @@ WASM 包默认包含全部重点格式；
 | --- | --- |
 | `pdf_page_no_text_layer` | 混合 PDF 的某页没有可提取文本层 |
 | `pdf_page_suspicious_text_layer` | 某页文本层包含明显可疑字符或 glyph 占位符 |
+| `pdf_multi_column_reading_order` | 某页检测到多栏版面，已按列重排阅读顺序（几何推断，可能不完美） |
 | `merged_table_structure_not_preserved` | DOCX/PPTX 合并单元格未被 GFM 表格完整保留 |
 | `embedded_visuals_omitted` | DOCX/PPTX 中存在尚未被理解或未进入文本输出的视觉对象；DOCX 内嵌栅格图片可能已有 `spoor-docx://` 占位符 |
 

@@ -5,7 +5,8 @@ use common::{extract_fixture, extract_fixture_err, parse_fixture};
 use insta::assert_snapshot;
 use serde_json::json;
 use spoor_core::{
-    DocumentFilter, Format, ParseRequest, WarningCode, WarningLocation, parse_document,
+    DocumentFilter, Format, ParseContent, ParseRequest, WarningCode, WarningLocation,
+    parse_document, parse_document_result,
 };
 
 #[test]
@@ -101,4 +102,43 @@ fn page_filter_limits_pdf_output_to_requested_pages() {
         markdown.contains("Page 2 content begins here."),
         "{markdown}"
     );
+}
+
+#[test]
+fn two_column_pdf_is_read_left_column_then_right_with_warning() {
+    // 07_two_column.pdf draws the two columns interleaved row-by-row in the
+    // content stream, so flat extraction interleaves them. Geometric
+    // reconstruction must emit the whole left column, then the whole right.
+    let path = std::path::Path::new("tests/fixtures/pdf/07_two_column.pdf");
+    let bytes = std::fs::read(path).expect("read fixture");
+    let mut request = ParseRequest::new(&bytes);
+    request.source_name = path.to_str();
+    request.format_hint = Some(Format::Pdf);
+
+    let result = parse_document_result(&request).expect("parse two-column PDF");
+    let ParseContent::Document(document) = result.content else {
+        panic!("expected document result");
+    };
+    let markdown = document.markdown;
+
+    // The entire left column precedes the entire right column.
+    let last_left = markdown
+        .find("Left line four")
+        .expect("left column present");
+    let first_right = markdown
+        .find("Right line one")
+        .expect("right column present");
+    assert!(
+        last_left < first_right,
+        "left column must be read before right column:\n{markdown}"
+    );
+
+    // The agent is told the page was reordered, located on page 1, so it can
+    // fall back to raw order if needed.
+    let warning = result
+        .warnings
+        .iter()
+        .find(|w| w.code == WarningCode::PdfMultiColumnReadingOrder)
+        .expect("multi-column warning");
+    assert_eq!(warning.location, Some(WarningLocation::Page { number: 1 }));
 }
