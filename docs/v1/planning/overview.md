@@ -23,7 +23,7 @@
 | --- | --- | --- |
 | **CLI**（单二进制 `spoor`） | Shell 脚本、CI/CD、本地开发机、个人 Agent（Claude Code / Cursor 直接调用） | 开箱即用，pipe 友好 |
 | **Rust crate**（`spoor-core`） | Tauri / Rust 桌面客户端、嵌入式服务——本地 AI 客户端的文本提取底座 | 零进程开销，直接函数调用 |
-| **Python / Node 原生绑定** | RAG 数据管道（Airflow / Dagster）、后端服务、Electron 桌面应用 | 免去子进程频繁启停，拿到的是结构化结果和异常，而不是字符串 |
+| **Python / Node 原生绑定** | 批量文档预处理（Airflow / Dagster 等）、后端服务、Electron 桌面应用 | 免去子进程频繁启停，拿到的是结构化结果和异常，而不是字符串 |
 | **WASM** | 浏览器插件、纯前端离线应用（"本地文件对话"无后端）、Cloudflare Workers / Lambda 的处理请求时清洗文档 | 文档 100% 不出端；冷启动 ≈ 0；WASM 本身就是沙箱 |
 
 **防御层不是第五种交付形态，而是四种形态共享的安全基座**：限制单次解析的数据量、ZIP 炸弹防御（入口大小 / 解压比 / 总上限三重限制）、输出封顶、结构化错误。有了这层防御，四种交付形态都可以部署到不可信环境中处理恶意文档——无论是多租户容器、Wasmtime / Wasmer 沙箱，还是受限的 Lambda 函数。
@@ -102,7 +102,6 @@ spoor/
 └── examples/
     ├── serverless-lambda/        # AWS Lambda（spoor-cli 二进制或 WASM）
     ├── local-corpus-explorer/    # 纯前端混合文档语料库与 JSONL 导出
-    ├── rag-ingestion/            # Python binding 驱动的确定性索引摄取流水线
     ├── electron-desktop/         # 完整 Electron + Node binding 桌面应用
     ├── tauri-desktop/            # 完整 Tauri 2 + spoor-core 桌面应用
     ├── cloudflare-pages/         # Pages 本地 WASM + Pages Functions 边缘解析
@@ -127,6 +126,6 @@ spoor/
 2. ✅ **行为等价拆分 + 更名**：解析模块位于 `spoor-core`，CLI 只负责 adapter；原测试与快照全量通过。
 3. ✅ **PyO3 MVP**：`pyspoor` 提供 `parse_bytes` / `parse_path` / `detect_format` 与 dataclass/exception 封装。
 4. ✅ **napi-rs 与 WASM 入口**：两套 WASM 特性均通过 wasm32 编译并完成体积实测；Node 使用平台子包发布模式。
-5. ✅ **场景 demo 验收**：浏览器拖拽、CF Worker / Pages、Tauri、Electron、Lambda、本地混合语料库与 RAG / 搜索索引摄取示例均已落地。
+5. ✅ **场景 demo 验收**：浏览器拖拽、CF Worker / Pages、Tauri、Electron、Lambda、本地混合语料库示例均已落地。
 
 每一步的验收标准（与 CLI 输出一致、跨入口结果等价、先跑基准测试）沿用 [架构设计](../design/architecture.md)，此处不赘述。

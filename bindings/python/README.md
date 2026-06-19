@@ -18,7 +18,7 @@ visuals.
 ## Tables: narrowing and pagination
 
 For CSV/XLSX, `parse_bytes` / `parse_path` accept the same narrowing options as
-the CLI, so RAG pipelines can page through full tables instead of the default
+the CLI, so callers can page through full tables instead of the default
 100-row preview:
 
 ```python

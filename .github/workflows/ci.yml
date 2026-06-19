@@ -109,13 +109,6 @@ jobs:
           cd bindings/python
           VIRTUAL_ENV="$GITHUB_WORKSPACE/.venv" "$GITHUB_WORKSPACE/.venv/bin/maturin" develop
           "$GITHUB_WORKSPACE/.venv/bin/pytest"
-          "$GITHUB_WORKSPACE/.venv/bin/python" "$GITHUB_WORKSPACE/examples/rag-ingestion/test_ingest.py"
-          "$GITHUB_WORKSPACE/.venv/bin/python" "$GITHUB_WORKSPACE/examples/rag-ingestion/ingest.py" \
-            "$GITHUB_WORKSPACE/crates/spoor-cli/tests/fixtures/plain/01_ascii.txt" \
-            "$GITHUB_WORKSPACE/crates/spoor-cli/tests/fixtures/csv/01_basic.csv" \
-            --output-dir "$RUNNER_TEMP/spoor-index"
-          test -s "$RUNNER_TEMP/spoor-index/chunks.jsonl"
-          test -s "$RUNNER_TEMP/spoor-index/manifest.json"
       - name: Node binding
         run: |
           cd bindings/node

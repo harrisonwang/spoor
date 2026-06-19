@@ -95,7 +95,7 @@ Python 使用 `pyspoor` 的 `parse_bytes` / `parse_path`；Node.js 使用
 `@harrisonwang/spoor`；浏览器与 Edge Runtime 使用
 `@harrisonwang/spoor-wasm`。表格筛选（`sheet`/`rows`/`columns`/`limit`/`offset`）、
 PDF 页码筛选（`pages`）与内嵌媒体提取（`extract_media`）在 CLI、Python、Node、WASM
-行为等价，RAG 管道可直接分页摄取整张表或只取 PDF 指定页。从 `v0.8.3` 起，发布的
+行为等价，嵌入式调用可直接分页拉取整张表或只取 PDF 指定页。从 `v0.8.3` 起，发布的
 WASM 包默认包含全部重点格式；
 需要更小体积时可自行构建 `core-formats`。
 
@@ -105,7 +105,6 @@ WASM 包默认包含全部重点格式；
 | --- | --- | --- |
 | [`examples/cloudflare-pages`](examples/cloudflare-pages/) | Cloudflare Pages 本地 WASM 演示 + Pages Functions 边缘 API | [`spoor-pages-demo.pages.dev`](https://spoor-pages-demo.pages.dev) |
 | [`examples/local-corpus-explorer`](examples/local-corpus-explorer/) | 浏览器内混合文档批处理、跨文件检索与 JSONL 导出 | [`spoor-corpus-demo.pages.dev`](https://spoor-corpus-demo.pages.dev) |
-| [`examples/rag-ingestion`](examples/rag-ingestion/) | Python 原生绑定驱动的确定性 RAG / 搜索索引摄取流水线 | - |
 
 集成形态：
 
