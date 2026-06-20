@@ -98,7 +98,7 @@ CLI 行为约定：
 - `--format` 只覆盖文件/URL 内容格式，不定义 URL 抓取策略。
 - stdin/pipe 已实现：输入 `-` 读取标准输入；无路径无扩展名，format 走 magic-byte 检测或 `--format` override（表格型从 stdin 需显式 `--format csv`）。`-` 不参与 glob，可与文件混用。
 - 表格筛选参数已实现：`--sheet`（仅 XLSX；CSV 无 sheet 概念，自动忽略）、`--rows <first:last>`（Excel 行号，含两端）、`--columns <a,b,c>`、`--limit <n>`、`--offset <n>`。`--rows` 与 `--limit`/`--offset` 互斥（clap conflicts_with）。找不到的 sheet/columns 直接报错并列出可用列表。
-- `--extract <uri>` 是格式无关的单资源二进制输出入口；资源 URI scheme 标识格式并由 core 分派。当前仅支持正文中实际输出的安全 `spoor-docx://word/media/*` URI，后续格式不新增专属 CLI flag。
+- `--extract <uri>` 是格式无关的单资源二进制输出入口；统一形如 `spoor://<fmt>/<model>/<native-locator>`：`<fmt>` 段(pdf/docx/pptx/xlsx) 直接对应 core 的 `match format` 分派，`<model>` 段(`obj`/`part`)为同一格式预留新定位法。当前支持正文中实际输出的 `spoor://docx/part/word/media/*`、`spoor://pptx/part/ppt/media/*`、`spoor://pdf/obj/{id}/{gen}` 三类安全 URI，后续格式不新增专属 CLI flag。
 
 ## 库契约
 
@@ -107,7 +107,7 @@ CLI 行为约定：
 - 请求与限制：`ParseRequest`、`ParseLimits`、`TableFilter`（`TableFilter::build` 是
   跨宿主共用的筛选校验与组装入口）
 - 检测与解析：`detect_format`、`parse`、`parse_document_result`、`parse_document`、`parse_tables`
-- 内嵌媒体：`extract_media`；格式无关入口，当前支持安全 `spoor-docx://` 与 `spoor-pdf://` URI
+- 内嵌媒体：`extract_media`；格式无关入口，当前支持安全 `spoor://docx/part/`、`spoor://pptx/part/` 与 `spoor://pdf/obj/` URI
 - 类型化结果：`ParseResult`、`ParseContent`、`DocumentResult`、`TableResult`、`ParseStats`、`SpoorWarning`、`WarningCode`、`WarningLocation`
 - 类型化错误：`SpoorError`、`ErrorCode`、`ParseStage`
 - format / mode：`Format`、`OutputMode`、`default_mode_for`
@@ -230,7 +230,7 @@ JSON 不从 Markdown 反解析，也不承诺 DOCX/PDF/PPTX/IPYNB 的通用 bloc
 - 脚注：`[^N]` 和文末定义
 - Unicode、smart quotes、RTL 文本
 - tracked changes 的插入内容
-- 内嵌栅格图片在正文中的安全 `spoor-docx://word/media/*` 占位符
+- 内嵌栅格图片在正文中的安全 `spoor://docx/part/word/media/*` 占位符
 
 默认丢弃：
 

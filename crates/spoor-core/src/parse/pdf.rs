@@ -145,7 +145,7 @@ fn render_image_marker(
     if image.extractable {
         // A real handle: `--extract` returns the JPEG/JPEG2000 bytes.
         markdown.push_str(&format!(
-            "![PDF image {image_number} (p{page_number})](spoor-pdf://obj/{}/{})",
+            "![PDF image {image_number} (p{page_number})](spoor://pdf/obj/{}/{})",
             image.id, image.generation
         ));
     } else {
@@ -190,7 +190,7 @@ fn layout_warnings(layout: &PdfLayoutDocument) -> Vec<SpoorWarning> {
             let extractable = page.images.iter().filter(|image| image.extractable).count();
             let message = if extractable == total {
                 format!(
-                    "第 {number} 页含 {total} 张图片，未进入文本；已用 spoor-pdf:// 标注，Agent 可用 --extract 取出交给视觉模型。"
+                    "第 {number} 页含 {total} 张图片，未进入文本；已用 spoor://pdf/obj/ 标注，Agent 可用 --extract 取出交给视觉模型。"
                 )
             } else if extractable == 0 {
                 format!(
@@ -198,7 +198,7 @@ fn layout_warnings(layout: &PdfLayoutDocument) -> Vec<SpoorWarning> {
                 )
             } else {
                 format!(
-                    "第 {number} 页含 {total} 张图片，未进入文本；其中 {extractable} 张可用 --extract 取出（已标 spoor-pdf://），其余需外部渲染。"
+                    "第 {number} 页含 {total} 张图片，未进入文本；其中 {extractable} 张可用 --extract 取出（已标 spoor://pdf/obj/），其余需外部渲染。"
                 )
             };
             warnings.push(SpoorWarning::at_page(
@@ -272,7 +272,7 @@ mod tests {
         ]];
 
         let markdown = render_pages(&pages, &images);
-        assert!(markdown.contains("![PDF image 1 (p1)](spoor-pdf://obj/7/0)"));
+        assert!(markdown.contains("![PDF image 1 (p1)](spoor://pdf/obj/7/0)"));
         assert!(markdown.contains("[PDF image 2 (p1)：内嵌图，编码需外部渲染]"));
     }
 

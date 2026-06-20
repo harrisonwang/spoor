@@ -11,6 +11,7 @@ PPTX 测试重点是 slide 级边界、文本内容、表格和 speaker notes。
 | `pptx/05_ordering.pptx` | `slide_ordering_handles_double_digits` | `slide11.xml` 排在 `slide2.xml` 之后 | 防止字典序导致 slide 顺序错误 | passed | 按 presentation rels 顺序，而不只是文件名数字 |
 | `pptx/06_merged_table.pptx` | `merged_table_and_visual_omissions_are_located_by_slide` | 合并表格返回 `merged_table_structure_not_preserved` 与 slide 位置 | Agent 不把降级 GFM 当原始结构 | passed | span 模型与 HTML 降级 |
 | `pptx/07_embedded_visual.pptx` | `merged_table_and_visual_omissions_are_located_by_slide` | 图片省略返回 `embedded_visuals_omitted` 与 slide 位置 | Agent 可精确路由受影响 slide 到外部 VLM | passed | 稳定 visual id、alt/caption |
+| `pptx/08_image_placeholders.pptx` | `image_placeholders_follow_slide_order_and_only_reference_safe_entries`、`slide_with_images_carries_extract_wording_in_warning`、`extract_outputs_the_referenced_pptx_media_bytes`、`extract_rejects_paths_that_were_not_emitted_as_safe_pptx_uris` | 内嵌图片按 slide 顺序输出安全 `spoor://pptx/part/ppt/media/*` 占位符；image 编号跨 slide 自增；OPC 校验拒绝跨容器/路径穿越；CLI `--extract` 原样输出单个安全资源 | Agent 可按需选择单张 slide 图片并取出交给 VLM，无需系统 unzip | passed | alt/caption、非 CLI 宿主提取接口 |
 
 ## 下一批优先用例
 

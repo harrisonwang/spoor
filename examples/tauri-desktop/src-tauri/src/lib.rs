@@ -22,7 +22,7 @@ fn parse_document(
         .map_err(|error| error.to_json())
 }
 
-// 把解析输出里的 spoor-docx:// 占位符还原成内嵌图片字节。
+// 把解析输出里的 spoor://docx/part/ 占位符还原成内嵌图片字节。
 // 拆出纯逻辑便于单测；command 包装层用 tauri::ipc::Response 直接回二进制，
 // 避免把 Vec<u8> 序列化成 JSON 数字数组（前端拿到 ArrayBuffer）。
 fn extract_media_bytes(
@@ -71,7 +71,7 @@ mod tests {
         let image = extract_media_bytes(
             docx,
             "images.docx",
-            "spoor-docx://word/media/image1.png",
+            "spoor://docx/part/word/media/image1.png",
             None,
         )
         .expect("extract");

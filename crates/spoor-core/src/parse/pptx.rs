@@ -7,6 +7,7 @@ use crate::source::Source;
 use anyhow::{Result, anyhow};
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
+use std::collections::HashMap;
 use std::path::{Component, Path};
 
 pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<ExtractedMarkdown> {
@@ -23,17 +24,41 @@ pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<ExtractedM
 
     let mut md = MarkdownBuilder::with_max_bytes(max_parse_bytes);
     let mut warnings = Vec::new();
+    let mut image_number: usize = 0;
     for (n, name) in &slides {
         md.heading(2, &format!("Slide {n}"));
         let xml = limits::read_zip_text(&mut zip, name, max_parse_bytes)?;
-        warnings.extend(feature_warnings(*n as usize, scan_slide_features(&xml)?));
-        render_slide(&xml, &mut md)?;
+        let rels = slide_rel_targets(&mut zip, name, max_parse_bytes)?;
+        let slide_no = *n as usize;
+        let mut emitted = SlideImageEmission::default();
+        render_slide(
+            &xml,
+            slide_no,
+            &rels,
+            &mut image_number,
+            &mut emitted,
+            &mut md,
+        )?;
+        warnings.extend(feature_warnings(
+            slide_no,
+            scan_slide_features(&xml)?,
+            emitted,
+        ));
         if let Some(notes_name) = notes_slide_for(&mut zip, name, max_parse_bytes)? {
             let notes_xml = limits::read_zip_text(&mut zip, &notes_name, max_parse_bytes)?;
             render_notes(&notes_xml, &mut md)?;
         }
     }
     Ok(ExtractedMarkdown::with_warnings(md.build()?, warnings))
+}
+
+/// Per-slide tally of `<a:blip>` references the renderer saw and what it could
+/// resolve to a safe `ppt/media/*` part name. Feeds the warning so the agent
+/// knows whether every visual was marked, only some were, or none.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct SlideImageEmission {
+    total_blips: usize,
+    emitted_handles: usize,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -73,7 +98,11 @@ fn scan_slide_features(xml: &str) -> Result<SlideFeatures> {
     Ok(features)
 }
 
-fn feature_warnings(slide: usize, features: SlideFeatures) -> Vec<SpoorWarning> {
+fn feature_warnings(
+    slide: usize,
+    features: SlideFeatures,
+    emission: SlideImageEmission,
+) -> Vec<SpoorWarning> {
     let mut warnings = Vec::new();
     if features.merged_table {
         warnings.push(SpoorWarning::at_slide(
@@ -85,11 +114,34 @@ fn feature_warnings(slide: usize, features: SlideFeatures) -> Vec<SpoorWarning> 
         ));
     }
     if features.embedded_visuals {
+        // Mirror pdf.rs's three-branch wording: did every visual get a handle,
+        // none, or only some? Agents key off the wording to decide whether the
+        // slide is fully recoverable via `--extract` or still needs external
+        // VLM rendering for the un-handled charts/OLE objects.
+        let message = if emission.total_blips == 0 {
+            format!(
+                "第 {slide} 张幻灯片包含图表或嵌入对象（无栅格图片）；spoor 当前仅提取文本，Agent 应把该页视为不完整并按需调用外部视觉解析。"
+            )
+        } else if emission.emitted_handles == emission.total_blips {
+            format!(
+                "第 {slide} 张幻灯片含 {n} 张内嵌图片；已用 spoor://pptx/part/ 标注，Agent 可用 --extract 取出交给视觉模型。",
+                n = emission.emitted_handles,
+            )
+        } else if emission.emitted_handles == 0 {
+            format!(
+                "第 {slide} 张幻灯片含 {n} 张内嵌图片，但 spoor 未能解析其引用；请视该页为不完整并按需调用外部视觉解析。",
+                n = emission.total_blips,
+            )
+        } else {
+            format!(
+                "第 {slide} 张幻灯片含 {total} 张内嵌图片；其中 {ok} 张已用 spoor://pptx/part/ 标注可 --extract 取出，其余未解析。",
+                total = emission.total_blips,
+                ok = emission.emitted_handles,
+            )
+        };
         warnings.push(SpoorWarning::at_slide(
             WarningCode::EmbeddedVisualsOmitted,
-            format!(
-                "第 {slide} 张幻灯片包含图片、图表或嵌入对象；spoor 当前仅提取文本，Agent 应把该页视为不完整并按需调用外部视觉解析。"
-            ),
+            message,
             slide,
         ));
     }
@@ -103,7 +155,14 @@ fn slide_number(name: &str) -> Option<u32> {
         .ok()
 }
 
-fn render_slide(xml: &str, md: &mut MarkdownBuilder) -> Result<()> {
+fn render_slide(
+    xml: &str,
+    slide_number: usize,
+    rels: &HashMap<String, String>,
+    image_number: &mut usize,
+    emission: &mut SlideImageEmission,
+    md: &mut MarkdownBuilder,
+) -> Result<()> {
     let mut reader = Reader::from_str(xml);
     let mut buf = Vec::new();
     let mut paragraph = String::new();
@@ -125,8 +184,32 @@ fn render_slide(xml: &str, md: &mut MarkdownBuilder) -> Result<()> {
                     in_table_cell = true;
                     current_cell.clear();
                 }
+                b"blip" => emit_blip_placeholder(
+                    &e,
+                    slide_number,
+                    rels,
+                    image_number,
+                    emission,
+                    if in_table_cell {
+                        &mut current_cell
+                    } else {
+                        &mut paragraph
+                    },
+                ),
                 _ => {}
             },
+            Ok(Event::Empty(e)) if e.local_name().as_ref() == b"blip" => emit_blip_placeholder(
+                &e,
+                slide_number,
+                rels,
+                image_number,
+                emission,
+                if in_table_cell {
+                    &mut current_cell
+                } else {
+                    &mut paragraph
+                },
+            ),
             Ok(Event::Text(t)) => {
                 let s = t.unescape().map(|c| c.into_owned()).unwrap_or_default();
                 if in_table {
@@ -178,6 +261,89 @@ fn render_slide(xml: &str, md: &mut MarkdownBuilder) -> Result<()> {
         buf.clear();
     }
     Ok(())
+}
+
+/// Emit a `![PPTX image N (slide S)](spoor://pptx/part/ppt/media/...)`
+/// placeholder for an `<a:blip>` element, resolving its `r:embed` rId through
+/// the slide's rels. A blip without a matching image target stays uncounted on
+/// `emitted_handles` so the warning surfaces the gap. The caller picks the
+/// active text sink (`paragraph` or `current_cell`) so this helper stays
+/// independent of the renderer's in_table_cell branching.
+fn emit_blip_placeholder(
+    e: &quick_xml::events::BytesStart<'_>,
+    slide_number: usize,
+    rels: &HashMap<String, String>,
+    image_number: &mut usize,
+    emission: &mut SlideImageEmission,
+    sink: &mut String,
+) {
+    emission.total_blips += 1;
+    let Some(rid) = attr(e, b"embed") else {
+        return;
+    };
+    let Some(target) = rels.get(&rid) else {
+        return;
+    };
+    *image_number += 1;
+    emission.emitted_handles += 1;
+    let placeholder =
+        format!("![PPTX image {image_number} (slide {slide_number})](spoor://pptx/part/{target})");
+    sink.push_str(&placeholder);
+}
+
+/// Build a `rId → ppt/media/imageN.ext` map for `slide_name`'s rels file.
+/// Targets are normalized through `normalize_zip_path` so `../media/foo.png`
+/// (the form OOXML writes) becomes `ppt/media/foo.png`. Non-image rels (notes,
+/// hyperlinks, …) are filtered by relationship type.
+fn slide_rel_targets<R: std::io::Read + std::io::Seek>(
+    zip: &mut zip::ZipArchive<R>,
+    slide_name: &str,
+    max_parse_bytes: usize,
+) -> Result<HashMap<String, String>> {
+    let Some(file_name) = Path::new(slide_name).file_name().and_then(|s| s.to_str()) else {
+        return Ok(HashMap::new());
+    };
+    let rels_name = format!("ppt/slides/_rels/{file_name}.rels");
+    let Some(rels_xml) = limits::read_zip_text_optional(zip, &rels_name, max_parse_bytes)? else {
+        return Ok(HashMap::new());
+    };
+    let base = Path::new(slide_name)
+        .parent()
+        .unwrap_or_else(|| Path::new(""));
+    Ok(parse_image_rel_targets(&rels_xml, base))
+}
+
+fn parse_image_rel_targets(xml: &str, base: &Path) -> HashMap<String, String> {
+    let mut reader = Reader::from_str(xml);
+    let mut buf = Vec::new();
+    let mut map = HashMap::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e))
+                if e.local_name().as_ref() == b"Relationship" =>
+            {
+                let rel_type = attr(&e, b"Type").unwrap_or_default();
+                if !rel_type.ends_with("/image") {
+                    buf.clear();
+                    continue;
+                }
+                let Some(id) = attr(&e, b"Id") else {
+                    buf.clear();
+                    continue;
+                };
+                let Some(target) = attr(&e, b"Target") else {
+                    buf.clear();
+                    continue;
+                };
+                let normalized = normalize_zip_path(base.join(target));
+                map.insert(id, normalized);
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    map
 }
 
 fn render_notes(xml: &str, md: &mut MarkdownBuilder) -> Result<()> {
@@ -280,8 +446,12 @@ fn normalize_zip_path(path: impl AsRef<Path>) -> String {
 
 #[cfg(test)]
 mod feature_warning_tests {
-    use super::{SlideFeatures, feature_warnings, scan_slide_features};
+    use super::{
+        SlideFeatures, SlideImageEmission, feature_warnings, parse_image_rel_targets,
+        scan_slide_features,
+    };
     use crate::result::WarningLocation;
+    use std::path::Path;
 
     #[test]
     fn detects_merged_cells_and_visuals() {
@@ -297,11 +467,74 @@ mod feature_warning_tests {
                 embedded_visuals: true,
             }
         );
-        let warnings = feature_warnings(3, features);
+        // No blips actually rendered: emission stays zero, surfacing the
+        // "chart/OLE-only" wording rather than the false "spoor 未解析" one.
+        let warnings = feature_warnings(3, features, SlideImageEmission::default());
         assert_eq!(warnings.len(), 2);
         assert_eq!(
             warnings[0].location,
             Some(WarningLocation::Slide { number: 3 })
         );
+        assert!(
+            warnings[1].message.contains("无栅格图片"),
+            "expected chart/OLE wording, got {:?}",
+            warnings[1].message
+        );
+    }
+
+    #[test]
+    fn fully_marked_visuals_get_extract_wording() {
+        let features = SlideFeatures {
+            merged_table: false,
+            embedded_visuals: true,
+        };
+        let emission = SlideImageEmission {
+            total_blips: 2,
+            emitted_handles: 2,
+        };
+        let warnings = feature_warnings(1, features, emission);
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].message.contains("spoor://pptx/part/"));
+        assert!(warnings[0].message.contains("--extract"));
+    }
+
+    #[test]
+    fn partially_marked_visuals_surface_gap() {
+        let features = SlideFeatures {
+            merged_table: false,
+            embedded_visuals: true,
+        };
+        let emission = SlideImageEmission {
+            total_blips: 3,
+            emitted_handles: 1,
+        };
+        let warnings = feature_warnings(2, features, emission);
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].message.contains("其中 1"));
+        assert!(warnings[0].message.contains("其余未解析"));
+    }
+
+    #[test]
+    fn parses_image_rels_and_normalizes_relative_paths() {
+        // Real PPTX rels: image targets are written as `../media/imageN.png`
+        // relative to `ppt/slides/`. `parse_image_rel_targets` must resolve
+        // them to a canonical `ppt/media/imageN.png` ZIP entry, drop
+        // non-image rels, and key on rId.
+        let xml = r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+            <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>
+            <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide1.xml"/>
+            <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image2.jpeg"/>
+        </Relationships>"#;
+        let map = parse_image_rel_targets(xml, Path::new("ppt/slides"));
+        assert_eq!(map.len(), 2);
+        assert_eq!(
+            map.get("rId1").map(String::as_str),
+            Some("ppt/media/image1.png")
+        );
+        assert_eq!(
+            map.get("rId3").map(String::as_str),
+            Some("ppt/media/image2.jpeg")
+        );
+        assert!(!map.contains_key("rId2"), "non-image rel must be skipped");
     }
 }

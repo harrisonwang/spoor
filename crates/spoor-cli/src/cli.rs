@@ -96,7 +96,7 @@ Examples:
   cat data.csv | spoor --format csv -
   spoor https://example.com/article
   spoor \"*.pdf\"
-  spoor document.docx --extract spoor-docx://word/media/image1.png > image.png
+  spoor document.docx --extract spoor://docx/part/word/media/image1.png > image.png
   spoor report.pdf | llm \"Summarize risks and action items\"
 ";
 
@@ -181,7 +181,7 @@ pub(crate) struct Cli {
     #[arg(long, value_enum, value_name = "level", conflicts_with = "mode")]
     pub(crate) provenance: Option<ProvenanceArg>,
 
-    /// 将 spoor 输出的单个内嵌媒体资源原样输出到 stdout；当前支持 spoor-docx://。
+    /// 将 spoor 输出的单个内嵌媒体资源原样输出到 stdout；接受 spoor://{pdf,docx,pptx}/...。
     #[arg(
         long,
         value_name = "uri",
@@ -289,19 +289,19 @@ mod tests {
             "spoor",
             "document.docx",
             "--extract",
-            "spoor-docx://word/media/image1.png",
+            "spoor://docx/part/word/media/image1.png",
         ])
         .unwrap();
         assert_eq!(
             cli.extract.as_deref(),
-            Some("spoor-docx://word/media/image1.png")
+            Some("spoor://docx/part/word/media/image1.png")
         );
 
         let err = Cli::try_parse_from([
             "spoor",
             "document.docx",
             "--extract",
-            "spoor-docx://word/media/image1.png",
+            "spoor://docx/part/word/media/image1.png",
             "--mode",
             "md",
         ])

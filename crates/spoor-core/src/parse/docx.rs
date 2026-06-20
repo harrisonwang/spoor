@@ -100,7 +100,7 @@ fn feature_warnings(features: DocumentFeatures) -> Vec<SpoorWarning> {
     if features.embedded_visuals {
         warnings.push(SpoorWarning::new(
             WarningCode::EmbeddedVisualsOmitted,
-            "DOCX 包含图片、图表、绘图或嵌入对象；内嵌栅格图片会以 spoor-docx URI 标出位置但尚未被理解，其他视觉内容可能省略。Agent 应按需提取相关图片并调用外部视觉解析。",
+            "DOCX 包含图片、图表、绘图或嵌入对象；内嵌栅格图片会以 spoor://docx/part/ URI 标出位置但尚未被理解，其他视觉内容可能省略。Agent 应按需提取相关图片并调用外部视觉解析。",
         ));
     }
     warnings
@@ -661,7 +661,7 @@ fn push_image_placeholder(
 
     *image_number += 1;
     paragraph.text.push_str(&format!(
-        "![DOCX image {image_number}](spoor-docx://{path})"
+        "![DOCX image {image_number}](spoor://docx/part/{path})"
     ));
 }
 

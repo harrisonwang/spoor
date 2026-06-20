@@ -3,8 +3,8 @@ import './styles.css';
 
 const $ = (selector) => document.querySelector(selector);
 
-// 占位符正则：![DOCX image N](spoor-docx://word/media/imageN.png)
-const PLACEHOLDER = /spoor-docx:\/\/[^\s)"']+/g;
+// 占位符正则：![DOCX image N](spoor://docx/part/word/media/imageN.png)
+const PLACEHOLDER = /spoor:\/\/docx\/part\/[^\s)"']+/g;
 const state = {
   records: [],
   selectedId: null,
@@ -266,7 +266,7 @@ function renderViewer() {
     : JSON.stringify(record.error, null, 2);
 }
 
-// 选中文件若含 spoor-docx:// 占位符，渲染缩略图条；点击才提取该图字节（懒取、单资源）
+// 选中文件若含 spoor://docx/part/ 占位符，渲染缩略图条；点击才提取该图字节（懒取、单资源）
 function renderViewerMedia(record) {
   const uris = record?.status === 'ready'
     ? [...new Set(record.text.match(PLACEHOLDER) ?? [])]
@@ -295,7 +295,7 @@ function mediaCard(record, uri) {
   slot.textContent = '点击提取';
   const label = document.createElement('span');
   label.className = 'media-uri';
-  label.textContent = uri.replace('spoor-docx://word/media/', '');
+  label.textContent = uri.replace('spoor://docx/part/word/media/', '');
   card.append(slot, label);
   card.addEventListener('click', async () => {
     if (card.dataset.done === '1') return;

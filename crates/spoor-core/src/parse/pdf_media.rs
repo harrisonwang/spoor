@@ -5,7 +5,7 @@
 //!      position and warn (the agent learns an image is there), and
 //!   2. hands back the raw bytes of an image whose stream is already a usable
 //!      file (JPEG via `DCTDecode`, JPEG 2000 via `JPXDecode`) when an agent
-//!      asks via `spoor-pdf://obj/{id}/{gen}`.
+//!      asks via `spoor://pdf/obj/{id}/{gen}`.
 //!
 //! Images in other encodings (`FlateDecode` raster, `CCITTFax`, `JBIG2`, …)
 //! need real pixel decoding plus a PNG re-encode, which is out of scope; they
@@ -32,7 +32,7 @@ pub(crate) struct PageImage {
     pub(crate) extractable: bool,
 }
 
-/// Why a `spoor-pdf://` image could not be returned as bytes.
+/// Why a `spoor://pdf/obj/` image could not be returned as bytes.
 #[derive(Debug)]
 pub(crate) enum ImageExtractError {
     Unreadable,
@@ -50,8 +50,8 @@ impl ImageExtractError {
     pub(crate) fn message(&self) -> String {
         match self {
             Self::Unreadable => "无法解析该 PDF".to_string(),
-            Self::NotFound => "spoor-pdf:// 指向的对象不存在".to_string(),
-            Self::NotAnImage => "spoor-pdf:// 指向的对象不是内嵌图片".to_string(),
+            Self::NotFound => "spoor://pdf/obj/ 指向的对象不存在".to_string(),
+            Self::NotAnImage => "spoor://pdf/obj/ 指向的对象不是内嵌图片".to_string(),
             Self::UnsupportedEncoding(detail) => format!(
                 "该内嵌图片（{detail}）的编码/色彩空间 spoor 暂不能直出；请在外部渲染该页后交给视觉模型。"
             ),

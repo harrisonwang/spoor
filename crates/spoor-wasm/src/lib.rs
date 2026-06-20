@@ -74,7 +74,8 @@ pub fn parse_bytes(
 }
 
 /// Extract one safe embedded media resource referenced by a URI emitted in the
-/// parsed output (`spoor-docx://word/media/*` or `spoor-pdf://obj/{id}/{gen}`).
+/// parsed output (`spoor://docx/part/word/media/*`,
+/// `spoor://pptx/part/ppt/media/*`, or `spoor://pdf/obj/{id}/{gen}`).
 /// Returns the raw resource bytes as a `Uint8Array`. Lets browser and edge
 /// callers resolve image placeholders without filesystem access. spoor does not
 /// decode or interpret the bytes.

@@ -68,7 +68,7 @@ def test_table_filter_rejects_rows_with_limit() -> None:
 def test_extract_media_returns_safe_docx_resource() -> None:
     image = extract_media(
         DOCX_IMAGES.read_bytes(),
-        "spoor-docx://word/media/image1.png",
+        "spoor://docx/part/word/media/image1.png",
         source_name="images.docx",
     )
     assert image == b"first-image"

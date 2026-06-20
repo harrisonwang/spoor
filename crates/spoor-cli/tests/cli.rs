@@ -143,7 +143,11 @@ fn provenance_rejects_multiple_inputs() {
 fn extract_outputs_the_referenced_docx_media_bytes() {
     let source = fixture_path("docx/16_image_placeholders.docx");
     let output = spoor_bin()
-        .args([&source, "--extract", "spoor-docx://word/media/image1.png"])
+        .args([
+            &source,
+            "--extract",
+            "spoor://docx/part/word/media/image1.png",
+        ])
         .output()
         .expect("run spoor");
 
@@ -161,31 +165,97 @@ fn extract_outputs_the_referenced_docx_media_bytes() {
 }
 
 #[test]
+fn extract_outputs_the_referenced_pptx_media_bytes() {
+    let source = fixture_path("pptx/08_image_placeholders.pptx");
+    let output = spoor_bin()
+        .args([
+            &source,
+            "--extract",
+            "spoor://pptx/part/ppt/media/image1.png",
+        ])
+        .output()
+        .expect("run spoor");
+
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+
+    let mut archive = ZipArchive::new(File::open(source).unwrap()).unwrap();
+    let mut expected = Vec::new();
+    archive
+        .by_name("ppt/media/image1.png")
+        .unwrap()
+        .read_to_end(&mut expected)
+        .unwrap();
+    assert_eq!(output.stdout, expected);
+}
+
+#[test]
 fn extract_rejects_paths_that_were_not_emitted_as_safe_docx_uris() {
     let source = fixture_path("docx/16_image_placeholders.docx");
     for resource in [
+        // No scheme at all.
         "word/media/image1.png",
-        "spoor-docx://word/media/../evil.png",
-        "spoor-docx://ppt/media/image1.png",
+        // Retired per-format scheme.
+        "spoor-docx://word/media/image1.png",
+        // Path traversal inside the media filename.
+        "spoor://docx/part/word/media/../evil.png",
+        // Cross-container forgery: docx URI must not use a `ppt/` root.
+        "spoor://docx/part/ppt/media/image1.png",
+        // Format mismatch: PPTX-shaped URI fed to a DOCX input.
+        "spoor://pptx/part/ppt/media/image1.png",
     ] {
         let output = spoor_bin()
             .args([&source, "--extract", resource])
             .output()
             .expect("run spoor");
 
-        assert!(!output.status.success());
-        assert!(output.stdout.is_empty());
+        assert!(
+            !output.status.success(),
+            "unexpected success for {resource}"
+        );
+        assert!(output.stdout.is_empty(), "non-empty stdout for {resource}");
         let value: serde_json::Value =
             serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
-        assert_eq!(value["code"], "parse_failed");
+        assert_eq!(value["code"], "parse_failed", "for {resource}");
     }
 }
 
 #[test]
-fn extract_rejects_non_docx_and_multiple_inputs() {
+fn extract_rejects_paths_that_were_not_emitted_as_safe_pptx_uris() {
+    let source = fixture_path("pptx/08_image_placeholders.pptx");
+    for resource in [
+        // Cross-container forgery: pptx URI must not use a `word/` root.
+        "spoor://pptx/part/word/media/image1.png",
+        // Format mismatch: DOCX-shaped URI fed to a PPTX input.
+        "spoor://docx/part/word/media/image1.png",
+        // Path traversal.
+        "spoor://pptx/part/ppt/media/../evil.png",
+    ] {
+        let output = spoor_bin()
+            .args([&source, "--extract", resource])
+            .output()
+            .expect("run spoor");
+
+        assert!(
+            !output.status.success(),
+            "unexpected success for {resource}"
+        );
+        assert!(output.stdout.is_empty(), "non-empty stdout for {resource}");
+        let value: serde_json::Value =
+            serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
+        assert_eq!(value["code"], "parse_failed", "for {resource}");
+    }
+}
+
+#[test]
+fn extract_rejects_non_opc_and_multiple_inputs() {
     let text = fixture_path("plain/01_ascii.txt");
     let output = spoor_bin()
-        .args([&text, "--extract", "spoor-docx://word/media/image1.png"])
+        .args([
+            &text,
+            "--extract",
+            "spoor://docx/part/word/media/image1.png",
+        ])
         .output()
         .expect("run spoor");
     assert!(!output.status.success());
@@ -196,7 +266,9 @@ fn extract_rejects_non_docx_and_multiple_inputs() {
         value["reason"]
             .as_str()
             .unwrap()
-            .contains("当前仅支持 DOCX")
+            .contains("PDF、DOCX 与 PPTX"),
+        "got: {}",
+        value["reason"]
     );
 
     let docx = fixture_path("docx/16_image_placeholders.docx");
@@ -205,7 +277,7 @@ fn extract_rejects_non_docx_and_multiple_inputs() {
             &docx,
             &docx,
             "--extract",
-            "spoor-docx://word/media/image1.png",
+            "spoor://docx/part/word/media/image1.png",
         ])
         .output()
         .expect("run spoor");

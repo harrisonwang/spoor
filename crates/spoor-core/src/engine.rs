@@ -297,32 +297,34 @@ pub fn parse_tables(request: &ParseRequest<'_>) -> SpoorResult<TableResult> {
 ///
 /// This is intentionally narrower than a general archive extraction API.
 /// Supported resource schemes are dispatched by document format and apply the
-/// same archive and parse-budget checks used during parsing. Currently only
-/// safe `spoor-docx://word/media/*` resources are emitted and supported.
+/// same archive and parse-budget checks used during parsing. Currently emitted
+/// shapes are `spoor://pdf/obj/{id}/{gen}` and
+/// `spoor://{docx|pptx}/part/{opc-root}/media/{file}`.
 pub fn extract_media(request: &ParseRequest<'_>, resource: &str) -> SpoorResult<Vec<u8>> {
     let _budget = limits::install_work_budget(request.limits.max_work_units);
     catch_boundary(ParseStage::Parse, || {
         let format = detect_format(request)?;
         match format {
-            Format::Docx => extract_media_from_docx(request, resource),
+            Format::Docx => extract_media_from_opc(request, Format::Docx, resource),
+            Format::Pptx => extract_media_from_opc(request, Format::Pptx, resource),
             Format::Pdf => extract_media_from_pdf(request, resource),
             _ => Err(SpoorError::parse_failed(
-                format!("--extract 当前仅支持 DOCX 与 PDF 内嵌媒体；当前格式为 {format}"),
+                format!("--extract 当前仅支持 PDF、DOCX 与 PPTX 内嵌媒体；当前格式为 {format}"),
                 ParseStage::Parse,
             )),
         }
     })
 }
 
-/// Resolve a `spoor-pdf://obj/{id}/{gen}` image handle to its raw JPEG/JPEG2000
-/// bytes. Unlike DOCX media (already standalone files), only images whose PDF
+/// Resolve a `spoor://pdf/obj/{id}/{gen}` image handle to its raw JPEG/JPEG2000
+/// bytes. Unlike OPC media (already standalone files), only images whose PDF
 /// stream is itself a usable file are returned; other encodings degrade to a
 /// structured error and stay marked-only in the rendered text.
 #[cfg(feature = "pdf")]
 fn extract_media_from_pdf(request: &ParseRequest<'_>, resource: &str) -> SpoorResult<Vec<u8>> {
     let (id, generation) = safe_pdf_image_resource(resource).ok_or_else(|| {
         SpoorError::parse_failed(
-            "--extract 仅接受 spoor 输出的安全内嵌媒体 URI；PDF 使用 spoor-pdf://obj/{id}/{gen}",
+            "--extract 仅接受 spoor 输出的安全内嵌媒体 URI；PDF 使用 spoor://pdf/obj/{id}/{gen}",
             ParseStage::Parse,
         )
     })?;
@@ -350,14 +352,11 @@ fn extract_media_from_pdf(_request: &ParseRequest<'_>, _resource: &str) -> Spoor
     ))
 }
 
-/// Parse and validate a `spoor-pdf://obj/{id}/{gen}` handle into `(id, gen)`.
-/// Mirrors `safe_docx_media_resource`: never trust the URI shape blindly.
+/// Parse and validate a `spoor://pdf/obj/{id}/{gen}` handle into `(id, gen)`.
+/// Mirrors `safe_opc_media_resource`: never trust the URI shape blindly.
 #[cfg(feature = "pdf")]
 fn safe_pdf_image_resource(resource: &str) -> Option<(u32, u16)> {
-    let mut parts = resource.strip_prefix("spoor-pdf://")?.split('/');
-    if parts.next()? != "obj" {
-        return None;
-    }
+    let mut parts = resource.strip_prefix("spoor://pdf/obj/")?.split('/');
     let id = parts.next()?.parse::<u32>().ok()?;
     let generation = parts.next()?.parse::<u16>().ok()?;
     if parts.next().is_some() {
@@ -366,23 +365,62 @@ fn safe_pdf_image_resource(resource: &str) -> Option<(u32, u16)> {
     Some((id, generation))
 }
 
-fn extract_media_from_docx(request: &ParseRequest<'_>, resource: &str) -> SpoorResult<Vec<u8>> {
-    let path = safe_docx_media_resource(resource).ok_or_else(|| {
+/// Resolve a `spoor://{fmt}/part/{opc-root}/media/{file}` handle for an OPC
+/// container (DOCX/PPTX/XLSX) into raw bytes. The validator below ensures the
+/// `opc-root` segment matches the detected format, preventing cross-container
+/// forgery (e.g. a `spoor://docx/part/ppt/media/...` handle is rejected).
+fn extract_media_from_opc(
+    request: &ParseRequest<'_>,
+    fmt: Format,
+    resource: &str,
+) -> SpoorResult<Vec<u8>> {
+    let path = safe_opc_media_resource(fmt, resource).ok_or_else(|| {
         SpoorError::parse_failed(
-            "--extract 仅接受 spoor 输出的安全内嵌媒体 URI；DOCX 使用 spoor-docx://word/media/*",
+            format!(
+                "--extract 仅接受 spoor 输出的安全内嵌媒体 URI；{fmt} 使用 spoor://{fmt}/part/{root}/media/*",
+                root = opc_root_for(fmt).unwrap_or("?"),
+            ),
             ParseStage::Parse,
         )
     })?;
-    let mut zip = limits::open_zip_archive(request.bytes, "docx", request.limits.max_parse_bytes)
-        .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Parse))?;
+    let archive_label = match fmt {
+        Format::Docx => "docx",
+        Format::Pptx => "pptx",
+        Format::Xlsx => "xlsx",
+        _ => "opc",
+    };
+    let mut zip =
+        limits::open_zip_archive(request.bytes, archive_label, request.limits.max_parse_bytes)
+            .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Parse))?;
     limits::read_zip_bytes(&mut zip, path, request.limits.max_parse_bytes)
         .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Parse))
 }
 
-fn safe_docx_media_resource(resource: &str) -> Option<&str> {
-    let path = resource.strip_prefix("spoor-docx://")?;
+/// The OPC root directory for an OOXML container format, or `None` when the
+/// format does not use OPC part addressing.
+fn opc_root_for(fmt: Format) -> Option<&'static str> {
+    match fmt {
+        Format::Docx => Some("word"),
+        Format::Pptx => Some("ppt"),
+        Format::Xlsx => Some("xl"),
+        _ => None,
+    }
+}
+
+/// Parse and validate a `spoor://{fmt}/part/{opc-root}/media/{file}` URI into
+/// the underlying ZIP entry path. Rejects cross-container forgery: the
+/// `opc-root` segment must equal `opc_root_for(fmt)`.
+fn safe_opc_media_resource(fmt: Format, resource: &str) -> Option<&str> {
+    let expected_root = opc_root_for(fmt)?;
+    let prefix = match fmt {
+        Format::Docx => "spoor://docx/part/",
+        Format::Pptx => "spoor://pptx/part/",
+        Format::Xlsx => "spoor://xlsx/part/",
+        _ => return None,
+    };
+    let path = resource.strip_prefix(prefix)?;
     let mut components = path.split('/');
-    if components.next()? != "word" || components.next()? != "media" {
+    if components.next()? != expected_root || components.next()? != "media" {
         return None;
     }
     let remaining = components.collect::<Vec<_>>();
@@ -533,7 +571,7 @@ pub type ExtractedTables = TableResult;
 
 #[cfg(test)]
 mod tests {
-    use super::{ParseStage, TableFilter, catch_boundary, safe_docx_media_resource};
+    use super::{Format, ParseStage, TableFilter, catch_boundary, safe_opc_media_resource};
     use crate::ErrorCode;
 
     #[test]
@@ -643,18 +681,59 @@ mod tests {
     }
 
     #[test]
-    fn docx_media_resources_require_safe_spoor_uri() {
+    fn opc_media_resources_require_unified_spoor_uri() {
+        // DOCX: prefix + root must both match.
         assert_eq!(
-            safe_docx_media_resource("spoor-docx://word/media/image1.png"),
+            safe_opc_media_resource(Format::Docx, "spoor://docx/part/word/media/image1.png"),
             Some("word/media/image1.png")
         );
-        assert_eq!(safe_docx_media_resource("word/media/image1.png"), None);
+        // Missing scheme entirely.
         assert_eq!(
-            safe_docx_media_resource("spoor-docx://word/media/../evil.png"),
+            safe_opc_media_resource(Format::Docx, "word/media/image1.png"),
             None
         );
+        // Path traversal inside the media filename is rejected by the sandbox.
         assert_eq!(
-            safe_docx_media_resource("spoor-docx://ppt/media/image1.png"),
+            safe_opc_media_resource(Format::Docx, "spoor://docx/part/word/media/../evil.png"),
+            None
+        );
+        // Old per-format scheme is no longer accepted.
+        assert_eq!(
+            safe_opc_media_resource(Format::Docx, "spoor-docx://word/media/image1.png"),
+            None
+        );
+        // Cross-container forgery: a `docx` URI must not address a `ppt/` root.
+        assert_eq!(
+            safe_opc_media_resource(Format::Docx, "spoor://docx/part/ppt/media/image1.png"),
+            None
+        );
+        // A `pptx` validator must not accept a `word/` root.
+        assert_eq!(
+            safe_opc_media_resource(Format::Pptx, "spoor://pptx/part/word/media/image1.png"),
+            None
+        );
+        // PPTX happy path.
+        assert_eq!(
+            safe_opc_media_resource(Format::Pptx, "spoor://pptx/part/ppt/media/image3.png"),
+            Some("ppt/media/image3.png")
+        );
+        // Format mismatch: a DOCX-shaped URI is rejected by the PPTX validator.
+        assert_eq!(
+            safe_opc_media_resource(Format::Pptx, "spoor://docx/part/word/media/image1.png"),
+            None
+        );
+        // XLSX validator is wired (no emitter yet) but accepts only `xl/`.
+        assert_eq!(
+            safe_opc_media_resource(Format::Xlsx, "spoor://xlsx/part/xl/media/image2.png"),
+            Some("xl/media/image2.png")
+        );
+        assert_eq!(
+            safe_opc_media_resource(Format::Xlsx, "spoor://xlsx/part/word/media/image2.png"),
+            None
+        );
+        // Non-OPC format never validates.
+        assert_eq!(
+            safe_opc_media_resource(Format::Pdf, "spoor://pdf/part/word/media/image1.png"),
             None
         );
     }
@@ -664,14 +743,17 @@ mod tests {
     fn pdf_image_resources_require_obj_id_gen_uri() {
         use super::safe_pdf_image_resource;
         assert_eq!(
-            safe_pdf_image_resource("spoor-pdf://obj/12/0"),
+            safe_pdf_image_resource("spoor://pdf/obj/12/0"),
             Some((12, 0))
         );
-        // Wrong scheme, missing/extra segments, and non-numeric ids are rejected.
-        assert_eq!(safe_pdf_image_resource("spoor-docx://obj/12/0"), None);
-        assert_eq!(safe_pdf_image_resource("spoor-pdf://12/0"), None);
-        assert_eq!(safe_pdf_image_resource("spoor-pdf://obj/12"), None);
-        assert_eq!(safe_pdf_image_resource("spoor-pdf://obj/12/0/extra"), None);
-        assert_eq!(safe_pdf_image_resource("spoor-pdf://obj/x/0"), None);
+        // Old per-format scheme is rejected.
+        assert_eq!(safe_pdf_image_resource("spoor-pdf://obj/12/0"), None);
+        // Wrong format segment in the unified scheme.
+        assert_eq!(safe_pdf_image_resource("spoor://docx/obj/12/0"), None);
+        // Missing or mis-shaped path segments.
+        assert_eq!(safe_pdf_image_resource("spoor://pdf/12/0"), None);
+        assert_eq!(safe_pdf_image_resource("spoor://pdf/obj/12"), None);
+        assert_eq!(safe_pdf_image_resource("spoor://pdf/obj/12/0/extra"), None);
+        assert_eq!(safe_pdf_image_resource("spoor://pdf/obj/x/0"), None);
     }
 }

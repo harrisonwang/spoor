@@ -74,12 +74,12 @@ const imageDocx = await readFile(new URL(
   '../../crates/spoor-cli/tests/fixtures/docx/16_image_placeholders.docx',
   import.meta.url,
 ));
-const media = extract_media(imageDocx, 'spoor-docx://word/media/image1.png', 'images.docx');
+const media = extract_media(imageDocx, 'spoor://docx/part/word/media/image1.png', 'images.docx');
 assert.ok(media instanceof Uint8Array, 'extract_media returns raw bytes');
 assert.equal(new TextDecoder().decode(media), 'first-image');
 
 assert.throws(
-  () => extract_media(imageDocx, 'spoor-docx://word/media/../evil.png', 'images.docx'),
+  () => extract_media(imageDocx, 'spoor://docx/part/word/media/../evil.png', 'images.docx'),
   (error) => error.code === 'parse_failed' && error.stage === 'parse',
 );
 

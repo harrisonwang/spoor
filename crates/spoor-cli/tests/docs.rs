@@ -75,7 +75,12 @@ fn skill_teaches_stable_truncation_signals() {
 fn skill_teaches_docx_image_placeholder_protocol() {
     let skill = read_doc("skills/spoor/SKILL.md");
 
-    assert!(skill.contains("spoor-docx://word/media/"));
-    assert!(skill.contains("spoor document.docx --extract spoor-docx://word/media/image1.png"));
+    // SKILL must use the unified `spoor://<fmt>/<model>/...` shape, not the
+    // retired per-format scheme, so a fresh agent learns the current protocol.
+    assert!(skill.contains("spoor://docx/part/word/media/"));
+    assert!(
+        skill.contains("spoor document.docx --extract spoor://docx/part/word/media/image1.png")
+    );
+    assert!(!skill.contains("spoor-docx://"));
     assert!(!skill.contains("unzip -p"));
 }

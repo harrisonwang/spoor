@@ -96,6 +96,35 @@ def build_07_embedded_visual():
     prs.save(OUT / "07_embedded_visual.pptx")
 
 
+# ---------- 08: multi-slide image placeholders ----------
+# Drives the `spoor://pptx/part/ppt/media/*` emission path: covers per-slide
+# image numbering, multiple images on a single slide, and an image-free slide
+# that should produce no handles.
+def build_08_image_placeholders():
+    # Two distinct 1x1 PNGs so python-pptx writes two separate media parts
+    # instead of deduplicating by content hash.
+    red_png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+    )
+    blue_png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNgYPj/HwADAgH/eL5gtgAAAABJRU5ErkJggg=="
+    )
+    prs = Presentation()
+    # Slide 1: one image.
+    s = prs.slides.add_slide(prs.slide_layouts[5])
+    s.shapes.title.text = "Slide one"
+    s.shapes.add_picture(BytesIO(red_png), Inches(1), Inches(2), Inches(2), Inches(2))
+    # Slide 2: two images, distinct bytes so they land in distinct media parts.
+    s = prs.slides.add_slide(prs.slide_layouts[5])
+    s.shapes.title.text = "Slide two"
+    s.shapes.add_picture(BytesIO(red_png), Inches(1), Inches(2), Inches(2), Inches(2))
+    s.shapes.add_picture(BytesIO(blue_png), Inches(4), Inches(2), Inches(2), Inches(2))
+    # Slide 3: title only — must produce no handle.
+    s = prs.slides.add_slide(prs.slide_layouts[5])
+    s.shapes.title.text = "Slide three (no images)"
+    prs.save(OUT / "08_image_placeholders.pptx")
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("build_") and callable(fn):

@@ -48,9 +48,9 @@ fn parse_bytes(
 }
 
 /// Extract one safe embedded media resource referenced by a URI emitted in the
-/// parsed output (e.g. `spoor-docx://word/media/image1.png` or
-/// `spoor-pdf://obj/{id}/{gen}`). Returns the raw resource bytes; spoor does not
-/// decode or interpret them.
+/// parsed output (e.g. `spoor://docx/part/word/media/image1.png`,
+/// `spoor://pptx/part/ppt/media/imageN.png`, or `spoor://pdf/obj/{id}/{gen}`).
+/// Returns the raw resource bytes; spoor does not decode or interpret them.
 #[pyfunction(signature = (data, resource, source_name=None, content_type=None, format=None, max_parse_bytes=None))]
 fn extract_media<'py>(
     py: Python<'py>,

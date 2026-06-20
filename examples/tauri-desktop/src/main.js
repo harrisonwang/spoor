@@ -15,8 +15,8 @@ const mediaPanel = document.querySelector('#media-panel');
 const mediaGrid = document.querySelector('#media-grid');
 const mediaHint = document.querySelector('#media-hint');
 
-// 占位符正则：![DOCX image N](spoor-docx://word/media/imageN.png)
-const PLACEHOLDER = /spoor-docx:\/\/[^\s)"']+/g;
+// 占位符正则：![DOCX image N](spoor://docx/part/word/media/imageN.png)
+const PLACEHOLDER = /spoor:\/\/docx\/part\/[^\s)"']+/g;
 
 let parsedText = '';
 let paragraphs = [];
@@ -116,7 +116,7 @@ function resetMedia() {
   mediaHint.textContent = '';
 }
 
-// 扫出 spoor-docx:// 占位符，去重后列成缩略图；点击才 invoke 提取该图字节——
+// 扫出 spoor://docx/part/ 占位符，去重后列成缩略图；点击才 invoke 提取该图字节——
 // 懒取、单资源，与 Agent 只取相关图的用法一致。
 function renderMedia(markdown) {
   const uris = [...new Set(markdown.match(PLACEHOLDER) ?? [])];
@@ -138,7 +138,7 @@ function createMediaCard(uri) {
   slot.textContent = '点击提取';
   const label = document.createElement('span');
   label.className = 'media-uri';
-  label.textContent = uri.replace('spoor-docx://word/media/', '');
+  label.textContent = uri.replace('spoor://docx/part/word/media/', '');
   card.append(slot, label);
   card.addEventListener('click', () => extractAndShow(uri, card, slot));
   return card;

@@ -71,3 +71,56 @@ fn merged_table_and_visual_omissions_are_located_by_slide() {
         Some(WarningLocation::Slide { number: 1 })
     );
 }
+
+#[test]
+fn image_placeholders_follow_slide_order_and_only_reference_safe_entries() {
+    let out = extract_fixture("pptx/08_image_placeholders.pptx", Format::Pptx);
+    assert_snapshot!(out);
+
+    // image_number runs across slides: 1 on slide 1, 2 + 3 on slide 2, none
+    // on slide 3. python-pptx dedups by content hash, so slide 1 and slide 2's
+    // first image share `ppt/media/image1.png` — verifies that the same OPC
+    // part referenced from two slides still gets distinct image numbers.
+    assert_eq!(
+        out.matches("![PPTX image 1 (slide 1)](spoor://pptx/part/ppt/media/image1.png)")
+            .count(),
+        1
+    );
+    assert_eq!(
+        out.matches("![PPTX image 2 (slide 2)](spoor://pptx/part/ppt/media/image1.png)")
+            .count(),
+        1
+    );
+    assert_eq!(
+        out.matches("![PPTX image 3 (slide 2)](spoor://pptx/part/ppt/media/image2.png)")
+            .count(),
+        1
+    );
+    // Slide 3 has no images: no `PPTX image 4` placeholder is emitted.
+    assert!(!out.contains("PPTX image 4"));
+
+    // Every emitted handle uses the unified scheme; nothing escapes the
+    // `spoor://pptx/part/ppt/media/` sandbox.
+    let total = out.matches("spoor://pptx/part/ppt/media/").count();
+    assert_eq!(total, 3);
+    assert!(!out.contains("spoor-pptx://"));
+}
+
+#[test]
+fn slide_with_images_carries_extract_wording_in_warning() {
+    let parsed = parse_fixture("pptx/08_image_placeholders.pptx", Format::Pptx);
+    // Slide 1 and 2 carry visuals; slide 3 does not.
+    let visual_warnings: Vec<_> = parsed
+        .warnings
+        .iter()
+        .filter(|w| w.code == WarningCode::EmbeddedVisualsOmitted)
+        .collect();
+    assert_eq!(visual_warnings.len(), 2);
+    for warning in visual_warnings {
+        assert!(
+            warning.message.contains("spoor://pptx/part/") && warning.message.contains("--extract"),
+            "expected extract wording, got: {}",
+            warning.message,
+        );
+    }
+}

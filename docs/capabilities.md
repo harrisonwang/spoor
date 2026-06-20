@@ -78,8 +78,8 @@ ParseContent + stats
 | PDF 混合文档中的无文本页诊断 | `pdf_page_no_text_layer` | 只把对应页转交外部 OCR/VLM，不必拒绝整份文档 |
 | PDF 可疑文本层保守诊断 | `pdf_page_suspicious_text_layer` | 不直接信任包含替换字符、控制字符或重复 glyph 占位符的页面 |
 | DOCX/PPTX 合并表格降级诊断 | `merged_table_structure_not_preserved` | 不把 GFM 空白/重复单元格当作原始 rowspan/colspan |
-| DOCX/PPTX 视觉对象省略诊断 | `embedded_visuals_omitted` | 知道文本输出是残缺视图；DOCX 可按安全图片占位符提取相关图片，其他对象按需调用外部视觉解析 |
-| DOCX 内嵌图片位置与安全路径 | `spoor-docx://word/media/*` | Agent 可按正文顺序选择图片，通过 CLI 安全提取后交给外部 VLM |
+| DOCX/PPTX 视觉对象省略诊断 | `embedded_visuals_omitted` | 知道文本输出是残缺视图；DOCX/PPTX 可按安全图片占位符提取相关图片，其他对象按需调用外部视觉解析 |
+| DOCX/PPTX 内嵌图片位置与安全路径 | `spoor://docx/part/word/media/*` 与 `spoor://pptx/part/ppt/media/*` | Agent 可按正文/幻灯片顺序选择图片，通过 CLI 安全提取后交给外部 VLM |
 | 单资源内嵌媒体提取 | `--extract <uri>` / `extract_media` | 使用格式无关入口按安全 URI 原样输出；当前仅支持 DOCX，后续格式沿用同一入口 |
 | warning 结构化位置 | `location.kind = page/slide` | 精确路由受影响页或幻灯片 |
 | CLI in-band warning | stdout + stderr | 只读取 stdout 的 Agent 也不会错过完整性警告 |

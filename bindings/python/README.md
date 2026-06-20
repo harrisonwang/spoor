@@ -48,7 +48,7 @@ images) to raw bytes for handing to an external vision model:
 ```python
 from spoor import extract_media
 
-image = extract_media(data, "spoor-docx://word/media/image1.png", source_name="report.docx")
+image = extract_media(data, "spoor://docx/part/word/media/image1.png", source_name="report.docx")
 ```
 
 Build locally with `maturin develop`.
