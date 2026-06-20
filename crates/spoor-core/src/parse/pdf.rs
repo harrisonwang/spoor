@@ -1,78 +1,173 @@
+use crate::engine::DocumentFilter;
 use crate::error::StructuredError;
 use crate::limits;
 use crate::parse::ExtractedMarkdown;
-use crate::parse::pdf_media::{self, PageImage};
-use crate::result::{SpoorWarning, WarningCode};
+use crate::parse::pdf_layout::{
+    PdfImageObject, PdfLayoutDocument, PdfLayoutPage, reading_order_text,
+};
+use crate::parse::pdf_media;
+#[cfg(test)]
+use crate::parse::pdf_media::PageImage;
+use crate::result::{ProvenanceSpan, SourceAnchor, SpoorWarning, TextRange, WarningCode};
 use crate::source::Source;
 use anyhow::{Result, anyhow};
 
-pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<ExtractedMarkdown> {
-    let pages =
-        super::pdf_engine::extract_text_from_mem_by_pages(source.bytes()).map_err(map_pdf_error)?;
+pub fn extract(
+    source: &Source<'_>,
+    document_filter: &DocumentFilter,
+    max_parse_bytes: usize,
+) -> Result<ExtractedMarkdown> {
+    let page_range = document_filter.page_range;
+    let pages = super::pdf_engine::extract_text_from_mem_by_page_range(source.bytes(), page_range)
+        .map_err(map_pdf_error)?;
+
+    // Best-effort: positioned spans let us rebuild reading order for multi-column
+    // pages. A discovery failure just leaves the content-stream-ordered text as
+    // is, so this never regresses the flat-text path.
+    let span_pages: std::collections::HashMap<usize, super::pdf_engine::EnginePage> =
+        super::pdf_engine::extract_spans_from_mem_by_page_range(source.bytes(), page_range)
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
+
+    // Replace only confidently multi-column pages with column-ordered text;
+    // single-column pages keep their existing output verbatim. Remember which
+    // pages were reordered so the agent can be told (and can fall back).
+    let mut reordered_pages: Vec<usize> = Vec::new();
+    let pages: Vec<(usize, String)> = pages
+        .into_iter()
+        .map(|(number, flat)| match span_pages.get(&number) {
+            Some(page) => match reading_order_text(page) {
+                Some((ordered, true)) => {
+                    reordered_pages.push(number);
+                    (number, ordered)
+                }
+                _ => (number, flat),
+            },
+            None => (number, flat),
+        })
+        .collect();
 
     // Best-effort: locate image XObjects so the renderer can mark their page
     // position and warn. A discovery failure just yields no image markers.
-    let images = pdf_media::discover_images(source.bytes(), pages.len());
+    let images = pdf_media::discover_images_for_page_range(source.bytes(), pages.len(), page_range);
+    let layout = PdfLayoutDocument::from_numbered_page_text_and_images(pages, images);
 
     // A PDF with no text layer is only a dead end when it also has no images to
     // hand off. When it *does* (a scan or an exported diagram), surface the page
     // skeleton plus image markers/handles and let the agent read them with a
     // vision model — hard-failing here would block exactly that handoff.
-    let has_text = pages.iter().any(|page| !page.trim().is_empty());
-    let has_images = images.iter().any(|page| !page.is_empty());
-    if !has_text && !has_images {
+    if !layout.has_text() && !layout.has_images() {
         return Err(StructuredError::image_only_pdf().into());
     }
 
-    let markdown = render_pages(&pages, &images);
+    let (markdown, provenance) = render_layout(&layout);
     limits::ensure_parse_size(markdown.len(), max_parse_bytes, "PDF Markdown rendering")?;
+
+    let mut warnings = layout_warnings(&layout);
+    for number in reordered_pages {
+        warnings.push(SpoorWarning::at_page(
+            WarningCode::PdfMultiColumnReadingOrder,
+            format!(
+                "第 {number} 页检测到多栏版面，已按列重排阅读顺序；若顺序异常可回退原始 PDF 文本顺序。"
+            ),
+            number,
+        ));
+    }
 
     Ok(ExtractedMarkdown {
         markdown,
-        warnings: page_warnings(&pages, &images),
+        warnings,
+        // Total pages regardless of any --pages slice, so a cheap one-page peek
+        // still tells the caller how big the document is.
+        page_count: super::pdf_engine::pdf_total_pages(source.bytes()),
+        provenance,
     })
 }
 
+#[cfg(test)]
 fn render_pages(pages: &[String], images: &[Vec<PageImage>]) -> String {
+    let layout = PdfLayoutDocument::from_page_text_and_images(pages.to_vec(), images.to_vec());
+    render_layout(&layout).0
+}
+
+/// Render the page-oriented Markdown and, alongside it, a page-level provenance
+/// span per page: the half-open byte range its `## Page N` block occupies in the
+/// returned Markdown, mapped to that source page. Computing it here is free —
+/// each page's start/end offset is already known while concatenating.
+fn render_layout(layout: &PdfLayoutDocument) -> (String, Vec<ProvenanceSpan>) {
     let mut markdown = String::new();
     let mut image_number = 0usize;
+    let mut spans = Vec::with_capacity(layout.pages.len());
 
-    for (index, page) in pages.iter().enumerate() {
+    for (index, page) in layout.pages.iter().enumerate() {
         if index > 0 {
             markdown.push_str("\n\n");
         }
 
-        let number = index + 1;
-        markdown.push_str(&format!("## Page {number}\n\n"));
-        markdown.push_str(page.trim());
-
-        for image in images.get(index).map(Vec::as_slice).unwrap_or_default() {
-            image_number += 1;
-            markdown.push_str("\n\n");
-            if image.extractable {
-                // A real handle: `--extract` returns the JPEG/JPEG2000 bytes.
-                markdown.push_str(&format!(
-                    "![PDF image {image_number} (p{number})](spoor-pdf://obj/{}/{})",
-                    image.id, image.generation
-                ));
-            } else {
-                // Present but not directly extractable; mark position only so
-                // the agent knows the page is more than its text.
-                markdown.push_str(&format!(
-                    "[PDF image {image_number} (p{number})：内嵌图，编码需外部渲染]"
-                ));
-            }
-        }
+        // The block spans from here (after any inter-page separator) to the end
+        // of this page's rendered text, so a quote landing anywhere in it maps
+        // back to this page; the 2-byte gap between blocks belongs to no page.
+        let start = markdown.len();
+        render_page(page, &mut markdown, &mut image_number);
+        spans.push(ProvenanceSpan {
+            output: TextRange {
+                start,
+                end: markdown.len(),
+            },
+            source: SourceAnchor::Page {
+                number: page.number,
+            },
+        });
     }
 
-    markdown
+    (markdown, spans)
 }
 
+fn render_page(page: &PdfLayoutPage, markdown: &mut String, image_number: &mut usize) {
+    let number = page.number;
+    markdown.push_str(&format!("## Page {number}\n\n"));
+    markdown.push_str(page.text().trim());
+
+    for image in &page.images {
+        *image_number += 1;
+        markdown.push_str("\n\n");
+        render_image_marker(number, *image_number, image, markdown);
+    }
+}
+
+fn render_image_marker(
+    page_number: usize,
+    image_number: usize,
+    image: &PdfImageObject,
+    markdown: &mut String,
+) {
+    if image.extractable {
+        // A real handle: `--extract` returns the JPEG/JPEG2000 bytes.
+        markdown.push_str(&format!(
+            "![PDF image {image_number} (p{page_number})](spoor-pdf://obj/{}/{})",
+            image.id, image.generation
+        ));
+    } else {
+        // Present but not directly extractable; mark position only so
+        // the agent knows the page is more than its text.
+        markdown.push_str(&format!(
+            "[PDF image {image_number} (p{page_number})：内嵌图，编码需外部渲染]"
+        ));
+    }
+}
+
+#[cfg(test)]
 fn page_warnings(pages: &[String], images: &[Vec<PageImage>]) -> Vec<SpoorWarning> {
+    let layout = PdfLayoutDocument::from_page_text_and_images(pages.to_vec(), images.to_vec());
+    layout_warnings(&layout)
+}
+
+fn layout_warnings(layout: &PdfLayoutDocument) -> Vec<SpoorWarning> {
     let mut warnings = Vec::new();
-    for (index, page) in pages.iter().enumerate() {
-        let number = index + 1;
-        if page.trim().is_empty() {
+    for page in &layout.pages {
+        let number = page.number;
+        if page.text().trim().is_empty() {
             warnings.push(SpoorWarning::at_page(
                 WarningCode::PdfPageNoTextLayer,
                 format!(
@@ -80,7 +175,7 @@ fn page_warnings(pages: &[String], images: &[Vec<PageImage>]) -> Vec<SpoorWarnin
                 ),
                 number,
             ));
-        } else if suspicious_text_layer(page) {
+        } else if suspicious_text_layer(page.text()) {
             warnings.push(SpoorWarning::at_page(
                 WarningCode::PdfPageSuspiciousTextLayer,
                 format!(
@@ -90,10 +185,9 @@ fn page_warnings(pages: &[String], images: &[Vec<PageImage>]) -> Vec<SpoorWarnin
             ));
         }
 
-        let page_images = images.get(index).map(Vec::as_slice).unwrap_or_default();
-        if !page_images.is_empty() {
-            let total = page_images.len();
-            let extractable = page_images.iter().filter(|image| image.extractable).count();
+        if !page.images.is_empty() {
+            let total = page.images.len();
+            let extractable = page.images.iter().filter(|image| image.extractable).count();
             let message = if extractable == total {
                 format!(
                     "第 {number} 页含 {total} 张图片，未进入文本；已用 spoor-pdf:// 标注，Agent 可用 --extract 取出交给视觉模型。"
@@ -136,6 +230,9 @@ fn map_pdf_error(error: super::pdf_engine::OutputError) -> anyhow::Error {
     match error {
         super::pdf_engine::OutputError::PdfError(super::pdf_engine::Error::Decryption(_)) => {
             StructuredError::encrypted_pdf().into()
+        }
+        super::pdf_engine::OutputError::WorkBudgetExceeded => {
+            StructuredError::work_budget_exceeded().into()
         }
         error => anyhow!("pdf-extract failed: {error}"),
     }

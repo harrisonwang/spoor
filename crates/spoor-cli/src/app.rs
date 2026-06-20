@@ -3,9 +3,9 @@ use crate::source::{ResolvedInput, is_url, resolve_input};
 use anyhow::{Context, Result, anyhow};
 use glob::{MatchOptions, glob_with};
 use spoor_core::{
-    Format, JsonOutput, OutputMode, ParseContent, ParseLimits, ParseRequest, SpoorError,
-    SpoorWarning, TableFilter, default_mode_for, detect_format, extract_media,
-    limit_markdown_output, parse_document_result, parse_tables, render_documents,
+    DocumentFilter, Format, JsonOutput, OutputMode, ParseContent, ParseLimits, ParseRequest,
+    ProvenanceLevel, SpoorError, SpoorWarning, TableFilter, default_mode_for, detect_format,
+    extract_media, limit_markdown_output, parse_document_result, parse_tables, render_documents,
     render_json_limited,
 };
 
@@ -22,7 +22,58 @@ pub(crate) fn run(cli: Cli) -> Result<CommandOutput> {
         return extract_resource(&cli, &resource).map(CommandOutput::Binary);
     }
     validate_max_output_bytes(cli.max_output_bytes)?;
+    if cli.provenance.is_some() {
+        return run_provenance(cli).map(CommandOutput::Text);
+    }
     run_parse(cli).map(CommandOutput::Text)
+}
+
+/// Single-input path for `--provenance`: parse one document and emit the whole
+/// `ParseResult` as JSON (Markdown plus the output→source mapping). Provenance
+/// is structured data, so it goes to stdout as JSON rather than polluting the
+/// Markdown; offsets index one document's Markdown, so this takes a single
+/// input rather than a concatenated batch.
+fn run_provenance(cli: Cli) -> Result<String> {
+    let level: ProvenanceLevel = cli
+        .provenance
+        .expect("run_provenance requires --provenance")
+        .into();
+
+    let inputs = expand_inputs(&cli.inputs)?;
+    if inputs.len() != 1 {
+        return Err(anyhow!("--provenance 目前仅支持单个输入"));
+    }
+    let input = resolve_input(&inputs[0], cli.max_parse_bytes)?;
+    let mut request = request_for(
+        &input,
+        cli.format.map(Into::into),
+        TableFilter::default(),
+        build_document_filter(&cli)?,
+        cli.max_parse_bytes,
+        cli.max_work_units,
+    );
+    request.provenance = level;
+
+    let format = detect_format(&request)?;
+    if matches!(format, Format::Csv | Format::Xlsx) {
+        return Err(anyhow!(
+            "--provenance 暂不支持表格型（{format}）；当前用于文档型（如 PDF）"
+        ));
+    }
+
+    let result = parse_document_result(&request)?;
+    let json = serde_json::to_string_pretty(&result)
+        .map_err(|error| anyhow!("序列化 provenance 结果失败：{error}"))?;
+    // Keep the stdout byte cap a hard contract; truncating JSON would make it
+    // invalid, so over-budget output is an error pointing at the way to shrink.
+    if json.len() > cli.max_output_bytes {
+        return Err(anyhow!(
+            "provenance JSON 约 {} 字节，超过 --max-output-bytes={}；用 --pages 缩小范围或调大上限",
+            json.len(),
+            cli.max_output_bytes
+        ));
+    }
+    Ok(json)
 }
 
 fn extract_resource(cli: &Cli, resource: &str) -> Result<Vec<u8>> {
@@ -31,7 +82,14 @@ fn extract_resource(cli: &Cli, resource: &str) -> Result<Vec<u8>> {
         return Err(anyhow!("--extract 仅支持单个输入"));
     }
     let input = resolve_input(&inputs[0], cli.max_parse_bytes)?;
-    let request = request_for(&input, None, TableFilter::default(), cli.max_parse_bytes);
+    let request = request_for(
+        &input,
+        None,
+        TableFilter::default(),
+        DocumentFilter::default(),
+        cli.max_parse_bytes,
+        cli.max_work_units,
+    );
     extract_media(&request, resource).map_err(Into::into)
 }
 
@@ -51,8 +109,14 @@ fn run_parse(cli: Cli) -> Result<String> {
         let remaining = cli.max_parse_bytes.saturating_sub(source_bytes);
         match resolve_input(&input, remaining) {
             Ok(input_data) => {
-                let request =
-                    request_for(&input_data, format_hint, TableFilter::default(), remaining);
+                let request = request_for(
+                    &input_data,
+                    format_hint,
+                    TableFilter::default(),
+                    build_document_filter(&cli)?,
+                    remaining,
+                    cli.max_work_units,
+                );
                 match detect_format(&request) {
                     Ok(format) => {
                         source_bytes += input_data.len();
@@ -81,15 +145,19 @@ fn run_parse(cli: Cli) -> Result<String> {
             let mut documents = Vec::with_capacity(resolved.len());
             let mut parse_warnings = Vec::new();
             let mut extracted_bytes = 0usize;
+            let mut total_pdf_pages = 0usize;
             for resolved in &resolved {
                 let request = request_for(
                     &resolved.input,
                     Some(resolved.format),
                     TableFilter::default(),
+                    build_document_filter(&cli)?,
                     resolved.max_parse_bytes,
+                    cli.max_work_units,
                 );
                 match parse_document_result(&request) {
                     Ok(result) => {
+                        let page_count = result.stats.page_count;
                         let ParseContent::Document(document) = result.content else {
                             failures.push(InputFailure::from_error(
                                 resolved.input.label.clone(),
@@ -114,6 +182,7 @@ fn run_parse(cli: Cli) -> Result<String> {
                                     warning,
                                 }
                             }));
+                            total_pdf_pages += page_count.unwrap_or(0);
                             documents.push(document);
                         }
                     }
@@ -145,6 +214,15 @@ fn run_parse(cli: Cli) -> Result<String> {
                 .saturating_sub(limited_diagnostics.content.len());
             let limited = limit_markdown_output(markdown, budget);
             report_output_truncation(limited.warning.as_deref());
+            // When a PDF gets truncated by the output cap, tell the user the
+            // page coverage so they can fetch a later slice with --pages instead
+            // of silently losing the tail.
+            if limited.warning.is_some() && total_pdf_pages > 0 {
+                let shown = limited.content.matches("## Page ").count();
+                eprintln!(
+                    "warning: PDF 共 {total_pdf_pages} 页，截断后本次输出约含 {shown} 页；用 --pages <first:last> 取更靠后的页。"
+                );
+            }
             let mut content = limited.content;
             content.push_str(&limited_diagnostics.content);
             Ok(content)
@@ -159,7 +237,9 @@ fn run_parse(cli: Cli) -> Result<String> {
                     &resolved.input,
                     Some(resolved.format),
                     filter.clone(),
+                    DocumentFilter::default(),
                     resolved.max_parse_bytes,
+                    cli.max_work_units,
                 );
                 match parse_tables(&request) {
                     Ok(extracted) => {
@@ -399,38 +479,57 @@ fn all_failed_error(failures: &[InputFailure]) -> anyhow::Error {
 }
 
 fn build_filter(cli: &Cli) -> Result<TableFilter> {
-    let row_range = match &cli.rows {
+    let rows = match &cli.rows {
         Some(s) => Some(parse_row_range(s)?),
         None => None,
     };
-
-    Ok(TableFilter {
-        sheet: cli.sheet.clone(),
-        row_range,
-        columns: cli.columns.clone(),
-        limit: cli.limit,
-        offset: cli.offset,
-    })
+    // Funnel through the same validator the language bindings use, so the
+    // row-range rules (>= 1, first <= last, rows ⟂ limit/offset) live in one
+    // place. Surface a failure as a friendly CLI arg error (matching the
+    // sibling `parse_row_range` shape errors) rather than the structured JSON
+    // reserved for content/parse failures; clap also rejects the rows/limit
+    // conflict at flag-parse time.
+    TableFilter::build(
+        cli.sheet.clone(),
+        rows,
+        cli.columns.clone(),
+        cli.limit,
+        cli.offset,
+    )
+    .map_err(|error| anyhow!("{}", error.reason))
 }
 
+/// Build a validated page filter from the CLI `--pages` flag. Like the row
+/// filter, the page-range bounds live in the shared cross-host
+/// `DocumentFilter::build`; a failure surfaces as a friendly CLI arg error
+/// rather than the structured JSON reserved for content/parse failures.
+fn build_document_filter(cli: &Cli) -> Result<DocumentFilter> {
+    let pages = match &cli.pages {
+        Some(s) => Some(parse_range_flag("--pages", s)?),
+        None => None,
+    };
+    DocumentFilter::build(pages).map_err(|error| anyhow!("{}", error.reason))
+}
+
+/// Parse a `<first>:<last>` range string into a 1-based pair. Bound validation
+/// (>= 1, first <= last) lives in the shared cross-host `TableFilter::build` /
+/// `DocumentFilter::build`, so it is not repeated here.
 fn parse_row_range(s: &str) -> Result<(usize, usize)> {
+    parse_range_flag("--rows", s)
+}
+
+fn parse_range_flag(flag: &str, s: &str) -> Result<(usize, usize)> {
     let (first, last) = s
         .split_once(':')
-        .ok_or_else(|| anyhow!("--rows expects <first>:<last>, got {s:?}"))?;
+        .ok_or_else(|| anyhow!("{flag} expects <first>:<last>, got {s:?}"))?;
     let first: usize = first
         .trim()
         .parse()
-        .map_err(|_| anyhow!("--rows: invalid first row {first:?}"))?;
+        .map_err(|_| anyhow!("{flag}: invalid first number {first:?}"))?;
     let last: usize = last
         .trim()
         .parse()
-        .map_err(|_| anyhow!("--rows: invalid last row {last:?}"))?;
-    if first == 0 || last == 0 {
-        return Err(anyhow!("--rows: row numbers must be >= 1, got {s:?}"));
-    }
-    if first > last {
-        return Err(anyhow!("--rows: first ({first}) > last ({last})"));
-    }
+        .map_err(|_| anyhow!("{flag}: invalid last number {last:?}"))?;
     Ok((first, last))
 }
 
@@ -500,7 +599,9 @@ fn request_for<'a>(
     input: &'a ResolvedInput,
     format_hint: Option<Format>,
     table_filter: TableFilter,
+    document_filter: DocumentFilter,
     max_parse_bytes: usize,
+    max_work_units: Option<usize>,
 ) -> ParseRequest<'a> {
     ParseRequest {
         bytes: &input.bytes,
@@ -508,7 +609,12 @@ fn request_for<'a>(
         content_type: input.content_type.as_deref(),
         format_hint,
         table_filter,
-        limits: ParseLimits { max_parse_bytes },
+        document_filter,
+        limits: ParseLimits {
+            max_parse_bytes,
+            max_work_units,
+        },
+        provenance: ProvenanceLevel::Off,
     }
 }
 
@@ -587,11 +693,14 @@ mod tests {
     }
 
     #[test]
-    fn parse_row_range_rejects_invalid_input() {
+    fn parse_row_range_rejects_malformed_input() {
+        // parse_row_range only validates the string shape; out-of-bound values
+        // (e.g. 0:10, 104:5) are rejected later by TableFilter::build, covered
+        // in spoor-core's engine tests.
         assert!(parse_row_range("5").is_err());
         assert!(parse_row_range("a:b").is_err());
-        assert!(parse_row_range("104:5").is_err());
-        assert!(parse_row_range("0:10").is_err());
+        assert!(parse_row_range(":5").is_err());
+        assert!(parse_row_range("5:").is_err());
     }
 
     #[test]

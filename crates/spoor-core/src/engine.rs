@@ -3,22 +3,61 @@ use crate::error::{ParseStage, SpoorError};
 use crate::limits::{self, DEFAULT_MAX_PARSE_BYTES, ensure_parse_size};
 use crate::parse as parsers;
 use crate::result::{
-    DocumentResult, ParseContent, ParseResult, ParseStats, SpoorWarning, TableResult,
+    DocumentResult, ParseContent, ParseResult, ParseStats, Provenance, SpoorWarning, TableResult,
 };
 use crate::source::Source;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 pub type SpoorResult<T> = std::result::Result<T, SpoorError>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ParseLimits {
     pub max_parse_bytes: usize,
+    /// Cooperative cap on in-parser work units (e.g. PDF content-stream
+    /// operations). `None` disables it. Bounds CPU on pathological inputs that
+    /// the byte budget can't catch; true cancellation still needs host isolation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_work_units: Option<usize>,
 }
 
 impl Default for ParseLimits {
     fn default() -> Self {
         Self {
             max_parse_bytes: DEFAULT_MAX_PARSE_BYTES,
+            max_work_units: None,
+        }
+    }
+}
+
+/// How much output→source provenance to compute and return.
+///
+/// Off by default so existing callers pay nothing: emitting provenance for
+/// every span across a host boundary (WASM/PyO3/napi) would serialize a large
+/// object graph and erase the engine's speed advantage, so callers ask for it
+/// — and how much — explicitly, the same principle as the page/table filters.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ProvenanceLevel {
+    /// No provenance (default; output is byte-identical to before).
+    #[default]
+    Off,
+    /// One mapping per source page (currently PDF). Coarse and small.
+    Page,
+}
+
+impl FromStr for ProvenanceLevel {
+    type Err = SpoorError;
+
+    /// Parse a host-supplied level string (CLI flag / binding option) so every
+    /// host rejects the same inputs with one structured error.
+    fn from_str(value: &str) -> SpoorResult<Self> {
+        match value {
+            "off" => Ok(Self::Off),
+            "page" => Ok(Self::Page),
+            other => Err(SpoorError::parse_failed(
+                format!("未知 provenance 级别 {other:?}；当前支持 off|page"),
+                ParseStage::Parse,
+            )),
         }
     }
 }
@@ -32,6 +71,113 @@ pub struct TableFilter {
     pub offset: Option<usize>,
 }
 
+/// Validate a 1-based inclusive range shared by table row ranges and document
+/// page ranges. Centralizing the bounds contract keeps `--rows`, `--pages` and
+/// every binding rejecting the same inputs with one structured error.
+fn validated_inclusive_range(range: Option<(usize, usize)>) -> SpoorResult<Option<(usize, usize)>> {
+    if let Some((first, last)) = range {
+        if first == 0 || last == 0 {
+            return Err(SpoorError::parse_failed(
+                "区间端点必须 >= 1（含两端的 1-based 区间）",
+                ParseStage::Parse,
+            ));
+        }
+        if first > last {
+            return Err(SpoorError::parse_failed(
+                format!("区间起点 {first} 不能大于终点 {last}"),
+                ParseStage::Parse,
+            ));
+        }
+    }
+    Ok(range)
+}
+
+/// Convert a host-supplied slice (e.g. a JS array marshaled to `Vec<u32>`) into
+/// an inclusive range pair, validating it has exactly two elements. Lets the
+/// Node and WASM bindings forward `rows`/`pages` without each re-implementing
+/// the length check, so the "must be a pair" failure is one structured error.
+fn range_pair_from_slice(slice: Option<&[u32]>) -> SpoorResult<Option<(usize, usize)>> {
+    match slice {
+        None => Ok(None),
+        Some([first, last]) => Ok(Some((*first as usize, *last as usize))),
+        Some(_) => Err(SpoorError::parse_failed(
+            "区间需要恰好两个元素 [first, last]",
+            ParseStage::Parse,
+        )),
+    }
+}
+
+impl TableFilter {
+    /// Assemble a validated table filter from host-agnostic narrowing inputs.
+    ///
+    /// Every adapter — CLI, Python, Node, WASM — funnels user-supplied table
+    /// narrowing through this one place, so pagination, column selection and the
+    /// row-range contract stay identical across hosts. `rows` is an inclusive,
+    /// 1-based row range (Excel rows for XLSX, line numbers for CSV) and is
+    /// mutually exclusive with `limit`/`offset`, mirroring the CLI's `--rows`.
+    pub fn build(
+        sheet: Option<String>,
+        rows: Option<(usize, usize)>,
+        columns: Vec<String>,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> SpoorResult<Self> {
+        let row_range = validated_inclusive_range(rows)?;
+        if row_range.is_some() && (limit.is_some() || offset.is_some()) {
+            return Err(SpoorError::parse_failed(
+                "rows 与 limit/offset 互斥；请二选一",
+                ParseStage::Parse,
+            ));
+        }
+        Ok(Self {
+            sheet,
+            row_range,
+            columns,
+            limit,
+            offset,
+        })
+    }
+
+    /// Like [`TableFilter::build`], but takes the row range as a host-supplied
+    /// slice (e.g. a JS array marshaled to `Vec<u32>`). Lets the Node and WASM
+    /// bindings forward their `rows` without re-implementing the length check.
+    pub fn build_from_row_slice(
+        sheet: Option<String>,
+        rows: Option<&[u32]>,
+        columns: Vec<String>,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> SpoorResult<Self> {
+        Self::build(sheet, range_pair_from_slice(rows)?, columns, limit, offset)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DocumentFilter {
+    /// Inclusive 1-based page range for page-oriented document formats.
+    /// Currently only PDF uses this to avoid extracting unrequested pages.
+    pub page_range: Option<(usize, usize)>,
+}
+
+impl DocumentFilter {
+    /// Assemble a validated document filter. `pages` is an inclusive, 1-based
+    /// page range and shares the row-range bounds contract via the same
+    /// validator, so the CLI's `--pages` and every binding reject the same
+    /// inputs with the same structured error.
+    pub fn build(pages: Option<(usize, usize)>) -> SpoorResult<Self> {
+        Ok(Self {
+            page_range: validated_inclusive_range(pages)?,
+        })
+    }
+
+    /// Like [`DocumentFilter::build`], but takes the page range as a
+    /// host-supplied slice (e.g. a JS array), validating it is a `[first, last]`
+    /// pair. Lets the Node and WASM bindings forward `pages` uniformly.
+    pub fn build_from_page_slice(pages: Option<&[u32]>) -> SpoorResult<Self> {
+        Self::build(range_pair_from_slice(pages)?)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ParseRequest<'a> {
     pub bytes: &'a [u8],
@@ -39,7 +185,10 @@ pub struct ParseRequest<'a> {
     pub content_type: Option<&'a str>,
     pub format_hint: Option<Format>,
     pub table_filter: TableFilter,
+    pub document_filter: DocumentFilter,
     pub limits: ParseLimits,
+    /// How much output→source provenance to return (default `Off`).
+    pub provenance: ProvenanceLevel,
 }
 
 impl<'a> ParseRequest<'a> {
@@ -50,7 +199,9 @@ impl<'a> ParseRequest<'a> {
             content_type: None,
             format_hint: None,
             table_filter: TableFilter::default(),
+            document_filter: DocumentFilter::default(),
             limits: ParseLimits::default(),
+            provenance: ProvenanceLevel::default(),
         }
     }
 }
@@ -74,6 +225,7 @@ fn detect_format_inner(request: &ParseRequest<'_>) -> SpoorResult<Format> {
 }
 
 pub fn parse(request: &ParseRequest<'_>) -> SpoorResult<ParseResult> {
+    let _budget = limits::install_work_budget(request.limits.max_work_units);
     catch_boundary(ParseStage::Parse, || parse_inner(request))
 }
 
@@ -85,15 +237,17 @@ fn parse_inner(request: &ParseRequest<'_>) -> SpoorResult<ParseResult> {
         Ok(ParseResult {
             content: ParseContent::Tables(tables),
             warnings: Vec::new(),
-            stats: ParseStats::new(request.bytes.len(), output_bytes, format),
+            stats: ParseStats::new(request.bytes.len(), output_bytes, format, None),
+            provenance: None,
         })
     } else {
-        let (document, warnings) = parse_document_with_format(request, format)?;
-        let output_bytes = document.markdown.len();
+        let parsed = parse_document_with_format(request, format)?;
+        let output_bytes = parsed.document.markdown.len();
         Ok(ParseResult {
-            content: ParseContent::Document(document),
-            warnings,
-            stats: ParseStats::new(request.bytes.len(), output_bytes, format),
+            content: ParseContent::Document(parsed.document),
+            warnings: parsed.warnings,
+            stats: ParseStats::new(request.bytes.len(), output_bytes, format, parsed.page_count),
+            provenance: parsed.provenance,
         })
     }
 }
@@ -103,14 +257,16 @@ fn parse_inner(request: &ParseRequest<'_>) -> SpoorResult<ParseResult> {
 /// Agents should prefer this function or [`parse`] over [`parse_document`],
 /// because `parse_document` intentionally returns only the rendered document.
 pub fn parse_document_result(request: &ParseRequest<'_>) -> SpoorResult<ParseResult> {
+    let _budget = limits::install_work_budget(request.limits.max_work_units);
     catch_boundary(ParseStage::Parse, || {
         let format = detect_format(request)?;
-        let (document, warnings) = parse_document_with_format(request, format)?;
-        let output_bytes = document.markdown.len();
+        let parsed = parse_document_with_format(request, format)?;
+        let output_bytes = parsed.document.markdown.len();
         Ok(ParseResult {
-            content: ParseContent::Document(document),
-            warnings,
-            stats: ParseStats::new(request.bytes.len(), output_bytes, format),
+            content: ParseContent::Document(parsed.document),
+            warnings: parsed.warnings,
+            stats: ParseStats::new(request.bytes.len(), output_bytes, format, parsed.page_count),
+            provenance: parsed.provenance,
         })
     })
 }
@@ -130,6 +286,7 @@ pub fn parse_document(request: &ParseRequest<'_>) -> SpoorResult<DocumentResult>
 }
 
 pub fn parse_tables(request: &ParseRequest<'_>) -> SpoorResult<TableResult> {
+    let _budget = limits::install_work_budget(request.limits.max_work_units);
     catch_boundary(ParseStage::Parse, || {
         let format = detect_format(request)?;
         parse_tables_with_format(request, format)
@@ -143,6 +300,7 @@ pub fn parse_tables(request: &ParseRequest<'_>) -> SpoorResult<TableResult> {
 /// same archive and parse-budget checks used during parsing. Currently only
 /// safe `spoor-docx://word/media/*` resources are emitted and supported.
 pub fn extract_media(request: &ParseRequest<'_>, resource: &str) -> SpoorResult<Vec<u8>> {
+    let _budget = limits::install_work_budget(request.limits.max_work_units);
     catch_boundary(ParseStage::Parse, || {
         let format = detect_format(request)?;
         match format {
@@ -247,12 +405,27 @@ fn is_safe_media_component(component: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
+/// A parsed document plus the side channels `parse`/`parse_document_result`
+/// hand back to the caller: completeness warnings, total page count, and the
+/// optional output→source provenance mapping.
+struct DocumentParse {
+    document: DocumentResult,
+    warnings: Vec<SpoorWarning>,
+    page_count: Option<usize>,
+    provenance: Option<Provenance>,
+}
+
 fn parse_document_with_format(
     request: &ParseRequest<'_>,
     format: Format,
-) -> SpoorResult<(DocumentResult, Vec<SpoorWarning>)> {
-    let extracted = parsers::extract(&source(request), format, request.limits.max_parse_bytes)
-        .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Parse))?;
+) -> SpoorResult<DocumentParse> {
+    let extracted = parsers::extract(
+        &source(request),
+        format,
+        &request.document_filter,
+        request.limits.max_parse_bytes,
+    )
+    .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Parse))?;
     ensure_parse_size(
         extracted.markdown.len(),
         request.limits.max_parse_bytes,
@@ -260,14 +433,25 @@ fn parse_document_with_format(
     )
     .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Limits))?;
 
-    Ok((
-        DocumentResult {
+    // Parsers always compute the (cheap) page-level mapping; here we keep it only
+    // when the caller asked, so `Off` stays byte-for-byte identical to before.
+    let provenance = match request.provenance {
+        ProvenanceLevel::Off => None,
+        ProvenanceLevel::Page => (!extracted.provenance.is_empty()).then_some(Provenance {
+            spans: extracted.provenance,
+        }),
+    };
+
+    Ok(DocumentParse {
+        document: DocumentResult {
             source: source_label(request).to_string(),
             format,
             markdown: extracted.markdown,
         },
-        extracted.warnings,
-    ))
+        warnings: extracted.warnings,
+        page_count: extracted.page_count,
+        provenance,
+    })
 }
 
 fn parse_tables_with_format(
@@ -349,8 +533,102 @@ pub type ExtractedTables = TableResult;
 
 #[cfg(test)]
 mod tests {
-    use super::{ParseStage, catch_boundary, safe_docx_media_resource};
+    use super::{ParseStage, TableFilter, catch_boundary, safe_docx_media_resource};
     use crate::ErrorCode;
+
+    #[test]
+    fn table_filter_build_accepts_valid_narrowing() {
+        let filter = TableFilter::build(
+            Some("L1".to_string()),
+            Some((5, 104)),
+            vec!["分类".to_string()],
+            None,
+            None,
+        )
+        .expect("valid filter");
+        assert_eq!(filter.sheet.as_deref(), Some("L1"));
+        assert_eq!(filter.row_range, Some((5, 104)));
+        assert_eq!(filter.columns, vec!["分类".to_string()]);
+
+        let paged = TableFilter::build(None, None, Vec::new(), Some(10), Some(2)).expect("paged");
+        assert_eq!(paged.limit, Some(10));
+        assert_eq!(paged.offset, Some(2));
+    }
+
+    #[test]
+    fn table_filter_build_rejects_invalid_rows_and_conflicts() {
+        // Mirrors the CLI's `--rows`/`parse_row_range` contract so every host
+        // rejects the same inputs.
+        for rows in [(0, 5), (5, 3)] {
+            let error = TableFilter::build(None, Some(rows), Vec::new(), None, None)
+                .expect_err("invalid row range");
+            assert_eq!(error.code, ErrorCode::ParseFailed);
+        }
+
+        let error = TableFilter::build(None, Some((2, 4)), Vec::new(), Some(1), None)
+            .expect_err("rows excludes limit");
+        assert_eq!(error.code, ErrorCode::ParseFailed);
+
+        let error = TableFilter::build(None, Some((2, 4)), Vec::new(), None, Some(1))
+            .expect_err("rows excludes offset");
+        assert_eq!(error.code, ErrorCode::ParseFailed);
+    }
+
+    #[test]
+    fn table_filter_build_from_row_slice_requires_pair() {
+        let filter =
+            TableFilter::build_from_row_slice(None, Some(&[5, 104]), Vec::new(), None, None)
+                .expect("valid pair");
+        assert_eq!(filter.row_range, Some((5, 104)));
+
+        assert_eq!(
+            TableFilter::build_from_row_slice(None, None, Vec::new(), None, None)
+                .expect("no range")
+                .row_range,
+            None
+        );
+
+        for bad in [vec![], vec![1u32], vec![1, 2, 3]] {
+            let error = TableFilter::build_from_row_slice(None, Some(&bad), Vec::new(), None, None)
+                .expect_err("non-pair slice");
+            assert_eq!(error.code, ErrorCode::ParseFailed);
+        }
+    }
+
+    #[test]
+    fn document_filter_build_validates_page_range_like_rows() {
+        use super::DocumentFilter;
+
+        assert_eq!(
+            DocumentFilter::build(Some((2, 5))).unwrap().page_range,
+            Some((2, 5))
+        );
+        assert_eq!(DocumentFilter::build(None).unwrap().page_range, None);
+
+        // Same 1-based inclusive bounds contract as table row ranges.
+        for bad in [(0, 5), (5, 3)] {
+            assert_eq!(
+                DocumentFilter::build(Some(bad)).unwrap_err().code,
+                ErrorCode::ParseFailed
+            );
+        }
+
+        // Slice variant enforces the [first, last] pair shape.
+        assert_eq!(
+            DocumentFilter::build_from_page_slice(Some(&[2, 5]))
+                .unwrap()
+                .page_range,
+            Some((2, 5))
+        );
+        for bad in [vec![], vec![1u32], vec![1, 2, 3]] {
+            assert_eq!(
+                DocumentFilter::build_from_page_slice(Some(&bad))
+                    .unwrap_err()
+                    .code,
+                ErrorCode::ParseFailed
+            );
+        }
+    }
 
     #[test]
     fn public_boundary_normalizes_parser_panics() {

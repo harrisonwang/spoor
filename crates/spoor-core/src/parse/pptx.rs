@@ -33,10 +33,7 @@ pub fn extract(source: &Source<'_>, max_parse_bytes: usize) -> Result<ExtractedM
             render_notes(&notes_xml, &mut md)?;
         }
     }
-    Ok(ExtractedMarkdown {
-        markdown: md.build()?,
-        warnings,
-    })
+    Ok(ExtractedMarkdown::with_warnings(md.build()?, warnings))
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]

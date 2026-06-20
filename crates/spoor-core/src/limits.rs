@@ -10,6 +10,60 @@ pub(crate) const DEFAULT_MAX_ZIP_COMPRESSION_RATIO: u64 = 200;
 pub const DEFAULT_MAX_PARSE_BYTES: usize = 64 * 1024 * 1024;
 pub const MIN_MAX_PARSE_BYTES: usize = 1024;
 
+// --- Cooperative work-unit budget ------------------------------------------
+//
+// A byte budget bounds input/output size but not CPU: a small PDF can pin a
+// parser at 100% CPU (cyclic xref, pathological content streams). Since a
+// synchronous parse cannot be safely interrupted from outside, parsers charge
+// "work units" at loop boundaries and abort cooperatively when the budget runs
+// out. True wall-clock cancellation remains a host concern (Web Worker
+// terminate, subprocess/cgroups) — this only bounds in-parser work.
+//
+// The budget is thread-local for the duration of one parse so parsers can tick
+// it without threading a counter through every signature (including the vendored
+// PDF engine). It is installed by the public entry points and cleared on drop.
+
+use std::cell::Cell;
+
+thread_local! {
+    static WORK_REMAINING: Cell<Option<u64>> = const { Cell::new(None) };
+}
+
+/// Clears the thread's work budget when dropped, including on panic unwind.
+pub(crate) struct WorkBudgetGuard(());
+
+impl Drop for WorkBudgetGuard {
+    fn drop(&mut self) {
+        WORK_REMAINING.with(|cell| cell.set(None));
+    }
+}
+
+/// Install a cooperative work budget for the current thread for one parse.
+/// `None` disables it. The returned guard clears the budget on drop.
+pub(crate) fn install_work_budget(max_work_units: Option<usize>) -> WorkBudgetGuard {
+    WORK_REMAINING.with(|cell| cell.set(max_work_units.map(|units| units as u64)));
+    WorkBudgetGuard(())
+}
+
+/// Charge `n` work units against the current budget. Returns `true` if the
+/// budget is now exhausted (the caller should abort with a work-budget error).
+/// A no-op returning `false` when no budget is installed.
+pub(crate) fn charge_work(n: u64) -> bool {
+    WORK_REMAINING.with(|cell| match cell.get() {
+        Some(remaining) => match remaining.checked_sub(n) {
+            Some(left) => {
+                cell.set(Some(left));
+                false
+            }
+            None => {
+                cell.set(Some(0));
+                true
+            }
+        },
+        None => false,
+    })
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Limits {
     pub max_zip_entries: usize,

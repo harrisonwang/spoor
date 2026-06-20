@@ -1,5 +1,5 @@
 use clap::{ArgAction, Parser, ValueEnum};
-use spoor_core::{Format, OutputMode};
+use spoor_core::{Format, OutputMode, ProvenanceLevel};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub(crate) enum FormatArg {
@@ -47,6 +47,20 @@ impl From<ModeArg> for OutputMode {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub(crate) enum ProvenanceArg {
+    /// One mapping per source page (PDF page-level).
+    Page,
+}
+
+impl From<ProvenanceArg> for ProvenanceLevel {
+    fn from(value: ProvenanceArg) -> Self {
+        match value {
+            ProvenanceArg::Page => ProvenanceLevel::Page,
+        }
+    }
+}
+
 const HELP_TEMPLATE: &str = "\
 {about}
 
@@ -65,6 +79,10 @@ For tables (CSV/XLSX), the recommended pattern is:
   spoor file.xlsx --sheet L1 --rows 5:104      # read a slice
   spoor file.xlsx --columns 分类,技能          # filter columns
 
+For PDFs, use --pages first when an agent only needs a slice:
+
+  spoor report.pdf --pages 1:3              # read selected PDF pages
+
 spoor bounds JSON previews by default (first 100 data rows per table) and
 caps total CLI output at 256 KiB. Use --limit/--rows to narrow tables or
 --max-output-bytes to raise the total output cap. Parsing uses a shared
@@ -72,6 +90,7 @@ caps total CLI output at 256 KiB. Use --limit/--rows to narrow tables or
 
 Examples:
   spoor report.pdf
+  spoor report.pdf --pages 1:3
   spoor data.xlsx
   spoor data.csv | jq '.tables[]'
   cat data.csv | spoor --format csv -
@@ -112,6 +131,10 @@ pub(crate) struct Cli {
     )]
     pub(crate) mode: Option<ModeArg>,
 
+    /// PDF 限定页码区间，例如 `1:3`（含两端）；用于按需读取大型 PDF。
+    #[arg(long, value_name = "first:last")]
+    pub(crate) pages: Option<String>,
+
     /// XLSX 限定 sheet；找不到时报错并列出可用 sheets。CSV 无此概念，自动忽略。
     #[arg(long, value_name = "name")]
     pub(crate) sheet: Option<String>,
@@ -148,6 +171,16 @@ pub(crate) struct Cli {
     )]
     pub(crate) max_parse_bytes: usize,
 
+    /// 解析工作量上限（如 PDF 操作数），用于约束字节预算管不到的 CPU；默认不限。
+    /// 不可信输入还应配合宿主级超时与进程/容器隔离才能真正掐断。
+    #[arg(long, value_name = "n")]
+    pub(crate) max_work_units: Option<usize>,
+
+    /// 返回"输出 → 原文"来源定位；当前支持 page（PDF 页级）。默认不产出。
+    /// 输出为 JSON（含 markdown 与 provenance），仅支持单个文档型输入。
+    #[arg(long, value_enum, value_name = "level", conflicts_with = "mode")]
+    pub(crate) provenance: Option<ProvenanceArg>,
+
     /// 将 spoor 输出的单个内嵌媒体资源原样输出到 stdout；当前支持 spoor-docx://。
     #[arg(
         long,
@@ -155,12 +188,14 @@ pub(crate) struct Cli {
         conflicts_with_all = [
             "format",
             "mode",
+            "pages",
             "sheet",
             "rows",
             "columns",
             "limit",
             "offset",
-            "max_output_bytes"
+            "max_output_bytes",
+            "provenance"
         ]
     )]
     pub(crate) extract: Option<String>,
@@ -186,6 +221,7 @@ mod tests {
         assert!(cli.mode.is_none());
         assert!(cli.format.is_none());
         assert!(cli.sheet.is_none());
+        assert!(cli.pages.is_none());
         assert!(cli.rows.is_none());
         assert!(cli.columns.is_empty());
         assert!(cli.limit.is_none());
@@ -218,6 +254,8 @@ mod tests {
             "data.xlsx",
             "--sheet",
             "L1",
+            "--pages",
+            "1:3",
             "--rows",
             "5:104",
             "--columns",
@@ -226,6 +264,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(cli.sheet, Some("L1".to_string()));
+        assert_eq!(cli.pages, Some("1:3".to_string()));
         assert_eq!(cli.rows, Some("5:104".to_string()));
         assert_eq!(cli.columns, vec!["分类".to_string(), "技能".to_string()]);
     }
@@ -284,6 +323,7 @@ mod tests {
         assert!(help.contains("--format <format>"));
         assert!(help.contains("--mode <mode>"));
         assert!(help.contains("--sheet <name>"));
+        assert!(help.contains("--pages <first:last>"));
         assert!(help.contains("--rows <first:last>"));
         assert!(help.contains("--columns <columns>"));
         assert!(help.contains("--limit <n>"));
@@ -293,6 +333,7 @@ mod tests {
         assert!(help.contains("--extract <uri>"));
         assert!(help.contains("spoor \"*.pdf\""));
         assert!(help.contains("Examples:"));
+        assert!(help.contains("spoor report.pdf --pages 1:3"));
         assert!(help.contains("spoor report.pdf | llm \"Summarize risks and action items\""));
         assert!(help.contains("--sheet L1 --rows 5:104"));
         assert!(help.contains("caps total CLI output at 256 KiB"));
@@ -316,8 +357,11 @@ mod tests {
         let not_narrowing = [
             "format",
             "mode",
+            "pages",
             "max-output-bytes",
             "max-parse-bytes",
+            "max-work-units",
+            "provenance",
             "extract",
             "help",
             "version",

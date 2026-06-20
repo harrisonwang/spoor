@@ -17,6 +17,7 @@ const LEGACY_OR_ENCRYPTED_OFFICE_HINT: &str = "该文件是 OLE/CFB 容器：可
 pub enum ErrorCode {
     ImageOnlyPdf,
     ParseBudgetExceeded,
+    WorkBudgetExceeded,
     UnsupportedFormat,
     EncryptedPdf,
     LegacyOrEncryptedOffice,
@@ -25,9 +26,10 @@ pub enum ErrorCode {
 }
 
 impl ErrorCode {
-    pub const ALL: [ErrorCode; 7] = [
+    pub const ALL: [ErrorCode; 8] = [
         ErrorCode::ImageOnlyPdf,
         ErrorCode::ParseBudgetExceeded,
+        ErrorCode::WorkBudgetExceeded,
         ErrorCode::UnsupportedFormat,
         ErrorCode::EncryptedPdf,
         ErrorCode::LegacyOrEncryptedOffice,
@@ -39,6 +41,7 @@ impl ErrorCode {
         match self {
             ErrorCode::ImageOnlyPdf => "image_only_pdf",
             ErrorCode::ParseBudgetExceeded => "parse_budget_exceeded",
+            ErrorCode::WorkBudgetExceeded => "work_budget_exceeded",
             ErrorCode::UnsupportedFormat => "unsupported_format",
             ErrorCode::EncryptedPdf => "encrypted_pdf",
             ErrorCode::LegacyOrEncryptedOffice => "legacy_or_encrypted_office",
@@ -93,6 +96,16 @@ impl SpoorError {
             ),
             true,
             ParseStage::Limits,
+        )
+    }
+
+    pub fn work_budget_exceeded() -> Self {
+        Self::new(
+            ErrorCode::WorkBudgetExceeded,
+            "超出工作量预算",
+            "解析所需的工作量（如 PDF 操作数）超过了 max_work_units 限制。请调高该预算，或对不可信输入改用进程/容器隔离与宿主级超时来真正掐断。",
+            true,
+            ParseStage::Parse,
         )
     }
 

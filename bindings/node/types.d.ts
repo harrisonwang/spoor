@@ -3,6 +3,29 @@ export interface ParseOptions {
   contentType?: string;
   format?: string;
   maxParseBytes?: number;
+  /** XLSX only: restrict output to one sheet by name. */
+  sheet?: string;
+  /**
+   * Inclusive 1-based `[first, last]` row range (Excel rows for XLSX, line
+   * numbers for CSV). Mutually exclusive with `limit`/`offset`.
+   */
+  rows?: [number, number];
+  /** Keep only these columns, by header name. */
+  columns?: string[];
+  /** Max data rows per table (default 100). */
+  limit?: number;
+  /** Skip this many data rows before applying `limit`. */
+  offset?: number;
+  /** PDF only: inclusive 1-based `[first, last]` page range to parse. */
+  pages?: [number, number];
+  /** Cooperative cap on in-parser work units (e.g. PDF operations) to bound CPU. */
+  maxWorkUnits?: number;
+  /**
+   * Return output→source provenance: `"page"` for page-level (PDF), `"off"`
+   * (default) for none. Output byte ranges in `provenance` index `markdown` as
+   * UTF-8; slice with `Buffer.from(markdown).subarray(start, end)`.
+   */
+  provenance?: string;
 }
 
 export interface DocumentResult {
@@ -27,6 +50,7 @@ export type WarningLocation =
 export type WarningCode =
   | 'pdf_page_no_text_layer'
   | 'pdf_page_suspicious_text_layer'
+  | 'pdf_multi_column_reading_order'
   | 'merged_table_structure_not_preserved'
   | 'embedded_visuals_omitted';
 
@@ -36,6 +60,24 @@ export interface SpoorWarning {
   location?: WarningLocation;
 }
 
+/** Half-open `[start, end)` byte range into the returned `markdown`. */
+export interface TextRange {
+  start: number;
+  end: number;
+}
+
+/** Where a span of output came from. Currently page-oriented (PDF). */
+export type SourceAnchor = { kind: 'page'; number: number };
+
+export interface ProvenanceSpan {
+  output: TextRange;
+  source: SourceAnchor;
+}
+
+export interface Provenance {
+  spans: ProvenanceSpan[];
+}
+
 export interface ParseResult {
   content: ParseContent;
   warnings: SpoorWarning[];
@@ -43,7 +85,11 @@ export interface ParseResult {
     input_bytes: number;
     output_bytes: number;
     format: string;
+    /** Total pages for page-oriented formats (PDF); absent otherwise. */
+    page_count?: number;
   };
+  /** Output→source mapping when requested via `provenance`; absent otherwise. */
+  provenance?: Provenance;
 }
 
 export interface SpoorError extends Error {
@@ -57,3 +103,4 @@ export interface SpoorError extends Error {
 
 export function detectFormat(data: Buffer, sourceName?: string | null): string;
 export function parseBytes(data: Buffer, options?: ParseOptions | null): ParseResult;
+export function extractMedia(data: Buffer, resource: string, options?: ParseOptions | null): Buffer;

@@ -82,3 +82,64 @@ assert.throws(
   () => extract_media(imageDocx, 'spoor-docx://word/media/../evil.png', 'images.docx'),
   (error) => error.code === 'parse_failed' && error.stage === 'parse',
 );
+
+// Table narrowing reaches the WASM host too (csv/01_basic.csv: Alice/Bob/Carol).
+// serde_wasm_bindgen serializes row maps as JS Map, so normalize before compare.
+const csv = await readFile(new URL(
+  '../../crates/spoor-cli/tests/fixtures/csv/01_basic.csv',
+  import.meta.url,
+));
+const asObject = (row) => (row instanceof Map ? Object.fromEntries(row) : row);
+
+// columns=['Name'], limit=1, offset=1 -> just Bob, Name-only.
+const filtered = parse_bytes(csv, 'data.csv', undefined, undefined, undefined, undefined, undefined, ['Name'], 1, 1);
+assert.equal(filtered.content.value.tables[0].rows.length, 1);
+assert.deepEqual(asObject(filtered.content.value.tables[0].rows[0]), { Name: 'Bob' });
+
+// Inclusive 1-based row range selects the same row by its number.
+const ranged = parse_bytes(csv, 'data.csv', undefined, undefined, undefined, undefined, [3, 3]);
+assert.deepEqual(ranged.content.value.tables[0].rows.map((r) => asObject(r).Name), ['Bob']);
+
+// rows is mutually exclusive with limit/offset (shared TableFilter::build contract).
+assert.throws(
+  () => parse_bytes(csv, 'data.csv', undefined, undefined, undefined, undefined, [2, 4], undefined, 1),
+  (error) => error.code === 'parse_failed',
+);
+
+// Page filter reaches the WASM host too (02_multipage.pdf has 3 pages). The
+// 11th positional arg is `pages`.
+const multipagePdf = await readFile(new URL(
+  '../../crates/spoor-cli/tests/fixtures/pdf/02_multipage.pdf',
+  import.meta.url,
+));
+const pageFiltered = parse_bytes(
+  multipagePdf, 'doc.pdf', undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, [2, 2],
+);
+const pageMd = pageFiltered.content.value.markdown;
+assert.ok(
+  pageMd.includes('## Page 2') && !pageMd.includes('## Page 1') && !pageMd.includes('## Page 3'),
+  pageMd,
+);
+
+// Work budget aborts with a stable, branchable error (12th positional arg).
+assert.throws(
+  () => parse_bytes(
+    multipagePdf, 'doc.pdf', undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 1,
+  ),
+  (error) => error.code === 'work_budget_exceeded',
+);
+
+// Page provenance reaches the WASM host too (13th positional arg). It maps each
+// output byte range back to a source page.
+const provenance = parse_bytes(
+  multipagePdf, 'doc.pdf', undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'page',
+);
+assert.equal(provenance.provenance.spans.length, 3);
+assert.deepEqual(provenance.provenance.spans[0].source, { kind: 'page', number: 1 });
+// Output byte ranges index the Markdown as UTF-8.
+const provMd = new TextEncoder().encode(provenance.content.value.markdown);
+const { start, end } = provenance.provenance.spans[0].output;
+assert.ok(new TextDecoder().decode(provMd.subarray(start, end)).startsWith('## Page 1'));
+
+// Off by default: no provenance field on the result.
+assert.equal(parse_bytes(multipagePdf, 'doc.pdf').provenance, undefined);

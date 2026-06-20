@@ -86,14 +86,21 @@ let result = spoor_core::parse(&request)?;
 ```
 
 需要按解析结果中的安全 URI 提取单个内嵌媒体时，使用格式无关的
-`spoor_core::extract_media(&request, uri)`；当前仅支持 `spoor-docx://`。
+`spoor_core::extract_media(&request, uri)`；当前支持 `spoor-docx://` 与 `spoor-pdf://`。
 
 Agent 应优先调用 `parse` 并处理 `warnings[]`。只需要 Markdown 的兼容场景可调用
 `parse_document`；需要强制文档输出并保留 warnings 时使用 `parse_document_result`。
 
 Python 使用 `pyspoor` 的 `parse_bytes` / `parse_path`；Node.js 使用
 `@harrisonwang/spoor`；浏览器与 Edge Runtime 使用
-`@harrisonwang/spoor-wasm`。从 `v0.8.3` 起，发布的 WASM 包默认包含全部重点格式；
+`@harrisonwang/spoor-wasm`。表格筛选（`sheet`/`rows`/`columns`/`limit`/`offset`）、
+PDF 页码筛选（`pages`）与内嵌媒体提取（`extract_media`）在 CLI、Python、Node、WASM
+行为等价，嵌入式调用可直接分页拉取整张表或只取 PDF 指定页。PDF 默认解析全部页；
+`stats.page_count` 始终报告总页数（即便只取了某几页），所以可以用 `--pages 1:1`
+廉价地"探一眼"页数，再决定要不要、要哪段。`--provenance page`（各绑定为 `provenance`
+选项）返回每页"输出 markdown 字节区间 → 源页码"的来源定位映射，便于把 LLM 引用锚定
+回原文页；默认关闭。从 `v0.8.3` 起，发布的
+WASM 包默认包含全部重点格式；
 需要更小体积时可自行构建 `core-formats`。
 
 主示例：
@@ -102,7 +109,6 @@ Python 使用 `pyspoor` 的 `parse_bytes` / `parse_path`；Node.js 使用
 | --- | --- | --- |
 | [`examples/cloudflare-pages`](examples/cloudflare-pages/) | Cloudflare Pages 本地 WASM 演示 + Pages Functions 边缘 API | [`spoor-pages-demo.pages.dev`](https://spoor-pages-demo.pages.dev) |
 | [`examples/local-corpus-explorer`](examples/local-corpus-explorer/) | 浏览器内混合文档批处理、跨文件检索与 JSONL 导出 | [`spoor-corpus-demo.pages.dev`](https://spoor-corpus-demo.pages.dev) |
-| [`examples/rag-ingestion`](examples/rag-ingestion/) | Python 原生绑定驱动的确定性 RAG / 搜索索引摄取流水线 | - |
 
 集成形态：
 
@@ -133,6 +139,7 @@ Python 使用 `pyspoor` 的 `parse_bytes` / `parse_path`；Node.js 使用
 | --- | --- |
 | `image_only_pdf` | PDF 无文本层，需要外部 OCR |
 | `parse_budget_exceeded` | 输入、解压或结果超过解析预算 |
+| `work_budget_exceeded` | 解析工作量（如 PDF 操作数）超过 `max_work_units` 上限 |
 | `unsupported_format` | 无法识别或不支持格式 |
 | `encrypted_pdf` | PDF 受密码保护 |
 | `legacy_or_encrypted_office` | 旧版或加密 Office 容器 |
@@ -145,6 +152,7 @@ Python 使用 `pyspoor` 的 `parse_bytes` / `parse_path`；Node.js 使用
 | --- | --- |
 | `pdf_page_no_text_layer` | 混合 PDF 的某页没有可提取文本层 |
 | `pdf_page_suspicious_text_layer` | 某页文本层包含明显可疑字符或 glyph 占位符 |
+| `pdf_multi_column_reading_order` | 某页检测到多栏版面，已按列重排阅读顺序（几何推断，可能不完美） |
 | `merged_table_structure_not_preserved` | DOCX/PPTX 合并单元格未被 GFM 表格完整保留 |
 | `embedded_visuals_omitted` | DOCX/PPTX 中存在尚未被理解或未进入文本输出的视觉对象；DOCX 内嵌栅格图片可能已有 `spoor-docx://` 占位符 |
 

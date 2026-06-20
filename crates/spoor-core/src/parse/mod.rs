@@ -1,7 +1,7 @@
 use crate::detect::Format;
-use crate::engine::TableFilter;
+use crate::engine::{DocumentFilter, TableFilter};
 use crate::json_schema::TableEntry;
-use crate::result::SpoorWarning;
+use crate::result::{ProvenanceSpan, SpoorWarning};
 use crate::source::Source;
 use anyhow::{Result, anyhow};
 
@@ -18,6 +18,8 @@ mod ipynb;
 mod markdown;
 #[cfg(feature = "pdf")]
 mod pdf;
+#[cfg(feature = "pdf")]
+mod pdf_layout;
 #[cfg(feature = "pdf")]
 #[rustfmt::skip]
 mod pdf_engine;
@@ -37,6 +39,14 @@ mod xml;
 pub(crate) struct ExtractedMarkdown {
     pub markdown: String,
     pub warnings: Vec<SpoorWarning>,
+    /// Total document unit count for page-oriented formats (currently PDF pages),
+    /// computed independently of any page-range slice so callers learn the whole
+    /// size even from a one-page peek. `None` for formats without a page model.
+    pub page_count: Option<usize>,
+    /// Output→source spans (currently page-level for PDF). Always computed where
+    /// cheap; the engine keeps or drops it per `ParseRequest.provenance`. Empty
+    /// for formats that do not produce a mapping yet.
+    pub provenance: Vec<ProvenanceSpan>,
 }
 
 impl ExtractedMarkdown {
@@ -44,6 +54,17 @@ impl ExtractedMarkdown {
         Self {
             markdown,
             warnings: Vec::new(),
+            page_count: None,
+            provenance: Vec::new(),
+        }
+    }
+
+    fn with_warnings(markdown: String, warnings: Vec<SpoorWarning>) -> Self {
+        Self {
+            markdown,
+            warnings,
+            page_count: None,
+            provenance: Vec::new(),
         }
     }
 }
@@ -51,19 +72,20 @@ impl ExtractedMarkdown {
 pub fn extract(
     source: &Source<'_>,
     format: Format,
+    document_filter: &DocumentFilter,
     max_parse_bytes: usize,
 ) -> Result<ExtractedMarkdown> {
     match format {
-        Format::Url => extract_url(source, max_parse_bytes),
-        Format::Html => extract_html(source, max_parse_bytes),
+        Format::Url => extract_url(source, document_filter, max_parse_bytes),
+        Format::Html => extract_html(source, document_filter, max_parse_bytes),
         Format::Markdown => markdown::extract(source).map(ExtractedMarkdown::without_warnings),
-        Format::Pdf => extract_pdf(source, max_parse_bytes),
-        Format::Docx => extract_docx(source, max_parse_bytes),
-        Format::Xlsx => extract_xlsx(source, max_parse_bytes),
-        Format::Pptx => extract_pptx(source, max_parse_bytes),
-        Format::Csv => extract_csv(source, max_parse_bytes),
-        Format::Ipynb => extract_ipynb(source, max_parse_bytes),
-        Format::Epub => extract_epub(source, max_parse_bytes),
+        Format::Pdf => extract_pdf(source, document_filter, max_parse_bytes),
+        Format::Docx => extract_docx(source, document_filter, max_parse_bytes),
+        Format::Xlsx => extract_xlsx(source, document_filter, max_parse_bytes),
+        Format::Pptx => extract_pptx(source, document_filter, max_parse_bytes),
+        Format::Csv => extract_csv(source, document_filter, max_parse_bytes),
+        Format::Ipynb => extract_ipynb(source, document_filter, max_parse_bytes),
+        Format::Epub => extract_epub(source, document_filter, max_parse_bytes),
         Format::PlainText => plain::extract(source).map(ExtractedMarkdown::without_warnings),
     }
 }
@@ -87,12 +109,20 @@ pub fn extract_table_entries(
 macro_rules! format_extractor {
     ($name:ident, $feature:literal, $module:ident) => {
         #[cfg(feature = $feature)]
-        fn $name(source: &Source<'_>, max_parse_bytes: usize) -> Result<ExtractedMarkdown> {
+        fn $name(
+            source: &Source<'_>,
+            _document_filter: &DocumentFilter,
+            max_parse_bytes: usize,
+        ) -> Result<ExtractedMarkdown> {
             $module::extract(source, max_parse_bytes).map(ExtractedMarkdown::without_warnings)
         }
 
         #[cfg(not(feature = $feature))]
-        fn $name(_source: &Source<'_>, _max_parse_bytes: usize) -> Result<ExtractedMarkdown> {
+        fn $name(
+            _source: &Source<'_>,
+            _document_filter: &DocumentFilter,
+            _max_parse_bytes: usize,
+        ) -> Result<ExtractedMarkdown> {
             Err(anyhow!(concat!(
                 "format disabled at compile time; enable feature ",
                 $feature
@@ -111,12 +141,20 @@ format_extractor!(extract_epub, "epub", epub);
 macro_rules! diagnostic_extractor {
     ($name:ident, $feature:literal, $module:ident) => {
         #[cfg(feature = $feature)]
-        fn $name(source: &Source<'_>, max_parse_bytes: usize) -> Result<ExtractedMarkdown> {
+        fn $name(
+            source: &Source<'_>,
+            _document_filter: &DocumentFilter,
+            max_parse_bytes: usize,
+        ) -> Result<ExtractedMarkdown> {
             $module::extract(source, max_parse_bytes)
         }
 
         #[cfg(not(feature = $feature))]
-        fn $name(_source: &Source<'_>, _max_parse_bytes: usize) -> Result<ExtractedMarkdown> {
+        fn $name(
+            _source: &Source<'_>,
+            _document_filter: &DocumentFilter,
+            _max_parse_bytes: usize,
+        ) -> Result<ExtractedMarkdown> {
             Err(anyhow!(concat!(
                 "format disabled at compile time; enable feature ",
                 $feature
@@ -125,7 +163,26 @@ macro_rules! diagnostic_extractor {
     };
 }
 
-diagnostic_extractor!(extract_pdf, "pdf", pdf);
+#[cfg(feature = "pdf")]
+fn extract_pdf(
+    source: &Source<'_>,
+    document_filter: &DocumentFilter,
+    max_parse_bytes: usize,
+) -> Result<ExtractedMarkdown> {
+    pdf::extract(source, document_filter, max_parse_bytes)
+}
+
+#[cfg(not(feature = "pdf"))]
+fn extract_pdf(
+    _source: &Source<'_>,
+    _document_filter: &DocumentFilter,
+    _max_parse_bytes: usize,
+) -> Result<ExtractedMarkdown> {
+    Err(anyhow!(
+        "format disabled at compile time; enable feature pdf"
+    ))
+}
+
 diagnostic_extractor!(extract_docx, "office", docx);
 diagnostic_extractor!(extract_pptx, "office", pptx);
 
