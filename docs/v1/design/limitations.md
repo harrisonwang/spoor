@@ -26,7 +26,7 @@
 | --- | --- | --- |
 | DOCX | 标题 1-6、段落、粗体/斜体、列表、小型 GFM 表格、链接、脚注、Unicode、插入型 tracked changes；内嵌栅格图片以安全 `spoor-docx://word/media/*` 占位符保留正文位置，CLI 可通过 `--extract` 提取单个占位符资源；合并表格/视觉对象会返回 warning | 不理解或批量导出图片；不保留样式与版式、删除型 tracked changes、comments/endnotes、复杂编号重启、复杂合并表格、图表与嵌入对象 |
 | XLSX | sheet、range、标题/表头/preamble、文本/数字/布尔/日期、缓存公式结果、错误单元格、合并单元格左上值 | 默认每个 sheet 仅前 100 条数据行；不计算公式、不保留公式表达式/样式/图表；Excel 1904 date system 尚未完整处理；一个 sheet 按一个逻辑 table 输出 |
-| PDF | text layer、页顺序、`## Page N` 边界、`--pages` 页码区间、`stats.page_count` 总页数（不随切片变化）；对清晰双栏版面基于字形几何重排阅读顺序并返回 `pdf_multi_column_reading_order` warning（保守、可回退）；混合文档的无文本页与明显可疑文本层返回带页码 warning | 默认解析全部页；不做 OCR；不恢复标题语义；多于两栏或复杂版面不保证阅读顺序（保守判定为单栏，回退原始顺序）；不去重页眉页脚、不修复断词；纯图片与加密 PDF 返回结构化错误 |
+| PDF | text layer、页顺序、`## Page N` 边界、`--pages` 页码区间、`stats.page_count` 总页数（不随切片变化）；`--provenance page` 返回每页"输出字节区间 → 源页码"的来源定位映射；对清晰双栏版面基于字形几何重排阅读顺序并返回 `pdf_multi_column_reading_order` warning（保守、可回退）；混合文档的无文本页与明显可疑文本层返回带页码 warning | 默认解析全部页；不做 OCR；不恢复标题语义；来源定位当前仅页级（无 bbox）；多于两栏或复杂版面不保证阅读顺序（保守判定为单栏，回退原始顺序）；不去重页眉页脚、不修复断词；纯图片与加密 PDF 返回结构化错误 |
 | PPTX | 按数字 slide 顺序输出文本、小型表格、speaker notes；合并表格/视觉对象省略会返回带 slide 位置 warning | 不按 shape 坐标恢复视觉阅读顺序；不保留 bullet 层级、主题、动画、图表、图片或嵌入对象 |
 | HTML / URL | 优先 `article`、其次 `main`、最后 `body`；标题、段落、列表、链接、表格、引用块、代码块、image alt、粗体/斜体；跳过常见导航与脚本噪声 | 不是完整 readability 引擎；不解析相对链接；caption 与嵌套列表仍有限；core 不抓 URL，只有 CLI 会发起网络请求 |
 | EPUB | OPF spine 阅读顺序、章节边界，并复用 HTML Markdown renderer | 不处理 DRM、固定版式视觉结构、图片/音视频、复杂导航与 CSS 布局 |
@@ -100,13 +100,18 @@ Cloudflare 官方当前还限制 Worker 压缩后体积为 Free 3 MB / Paid 10 M
 
 近期最值得增强的不是继续增加格式数量，而是：
 
-1. 在已落地的 PDF 布局中间模型与双栏阅读顺序之上，继续做页眉页脚分类、标题层级与断词修复；OCR 保持外置。
-2. 建立 DOCX/PPTX 表格 span 模型，把合并表格从“显式 warning”升级为 HTML 降级输出。
-3. 为 PPTX 按 shape 坐标恢复阅读顺序并保留 bullet 层级。
-4. 把工作量预算（`max_work_units`）从 PDF 扩展到 XML/表格等其余解析器，并由批处理宿主补上可真实终止的 wall-clock 超时、取消和进程/容器隔离。
+1. 在已落地的 PDF 页级来源定位之上，做块级来源定位（段落 `bbox`），再扩展到纯文本/表格的输入区间与单元格锚点；OCR 保持外置。
+2. 在已落地的 PDF 布局中间模型与双栏阅读顺序之上，继续做页眉页脚分类、标题层级与断词修复。
+3. 建立 DOCX/PPTX 表格 span 模型，把合并表格从“显式 warning”升级为 HTML 降级输出。
+4. 为 PPTX 按 shape 坐标恢复阅读顺序并保留 bullet 层级。
+5. 把工作量预算（`max_work_units`）从 PDF 扩展到 XML/表格等其余解析器，并由批处理宿主补上可真实终止的 wall-clock 超时、取消和进程/容器隔离。
 
 PDF 布局中间模型（基于字形几何收集 span）已落地，并已用于清晰双栏版面的阅读顺序
 重排（保守判定、失败回退原始顺序、返回 `pdf_multi_column_reading_order` warning）。
+
+来源定位（provenance）页级已落地：`--provenance page` 与各绑定的 `provenance` 选项返回
+“输出 markdown 字节区间 → 源页码”的映射，默认关闭、确定性、无 ML；块级坐标见
+[docs/v1/design/provenance.md](provenance.md)。
 
 表格分页筛选（`sheet`/`rows`/`columns`/`limit`/`offset`）、PDF 页码筛选（`pages`）
 与内嵌媒体提取（`extract_media`）现已在 CLI、Python、Node、WASM 全部贯通，四个宿主

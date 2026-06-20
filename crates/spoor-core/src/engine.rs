@@ -3,10 +3,11 @@ use crate::error::{ParseStage, SpoorError};
 use crate::limits::{self, DEFAULT_MAX_PARSE_BYTES, ensure_parse_size};
 use crate::parse as parsers;
 use crate::result::{
-    DocumentResult, ParseContent, ParseResult, ParseStats, SpoorWarning, TableResult,
+    DocumentResult, ParseContent, ParseResult, ParseStats, Provenance, SpoorWarning, TableResult,
 };
 use crate::source::Source;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 pub type SpoorResult<T> = std::result::Result<T, SpoorError>;
 
@@ -25,6 +26,38 @@ impl Default for ParseLimits {
         Self {
             max_parse_bytes: DEFAULT_MAX_PARSE_BYTES,
             max_work_units: None,
+        }
+    }
+}
+
+/// How much output→source provenance to compute and return.
+///
+/// Off by default so existing callers pay nothing: emitting provenance for
+/// every span across a host boundary (WASM/PyO3/napi) would serialize a large
+/// object graph and erase the engine's speed advantage, so callers ask for it
+/// — and how much — explicitly, the same principle as the page/table filters.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ProvenanceLevel {
+    /// No provenance (default; output is byte-identical to before).
+    #[default]
+    Off,
+    /// One mapping per source page (currently PDF). Coarse and small.
+    Page,
+}
+
+impl FromStr for ProvenanceLevel {
+    type Err = SpoorError;
+
+    /// Parse a host-supplied level string (CLI flag / binding option) so every
+    /// host rejects the same inputs with one structured error.
+    fn from_str(value: &str) -> SpoorResult<Self> {
+        match value {
+            "off" => Ok(Self::Off),
+            "page" => Ok(Self::Page),
+            other => Err(SpoorError::parse_failed(
+                format!("未知 provenance 级别 {other:?}；当前支持 off|page"),
+                ParseStage::Parse,
+            )),
         }
     }
 }
@@ -154,6 +187,8 @@ pub struct ParseRequest<'a> {
     pub table_filter: TableFilter,
     pub document_filter: DocumentFilter,
     pub limits: ParseLimits,
+    /// How much output→source provenance to return (default `Off`).
+    pub provenance: ProvenanceLevel,
 }
 
 impl<'a> ParseRequest<'a> {
@@ -166,6 +201,7 @@ impl<'a> ParseRequest<'a> {
             table_filter: TableFilter::default(),
             document_filter: DocumentFilter::default(),
             limits: ParseLimits::default(),
+            provenance: ProvenanceLevel::default(),
         }
     }
 }
@@ -202,14 +238,16 @@ fn parse_inner(request: &ParseRequest<'_>) -> SpoorResult<ParseResult> {
             content: ParseContent::Tables(tables),
             warnings: Vec::new(),
             stats: ParseStats::new(request.bytes.len(), output_bytes, format, None),
+            provenance: None,
         })
     } else {
-        let (document, warnings, page_count) = parse_document_with_format(request, format)?;
-        let output_bytes = document.markdown.len();
+        let parsed = parse_document_with_format(request, format)?;
+        let output_bytes = parsed.document.markdown.len();
         Ok(ParseResult {
-            content: ParseContent::Document(document),
-            warnings,
-            stats: ParseStats::new(request.bytes.len(), output_bytes, format, page_count),
+            content: ParseContent::Document(parsed.document),
+            warnings: parsed.warnings,
+            stats: ParseStats::new(request.bytes.len(), output_bytes, format, parsed.page_count),
+            provenance: parsed.provenance,
         })
     }
 }
@@ -222,12 +260,13 @@ pub fn parse_document_result(request: &ParseRequest<'_>) -> SpoorResult<ParseRes
     let _budget = limits::install_work_budget(request.limits.max_work_units);
     catch_boundary(ParseStage::Parse, || {
         let format = detect_format(request)?;
-        let (document, warnings, page_count) = parse_document_with_format(request, format)?;
-        let output_bytes = document.markdown.len();
+        let parsed = parse_document_with_format(request, format)?;
+        let output_bytes = parsed.document.markdown.len();
         Ok(ParseResult {
-            content: ParseContent::Document(document),
-            warnings,
-            stats: ParseStats::new(request.bytes.len(), output_bytes, format, page_count),
+            content: ParseContent::Document(parsed.document),
+            warnings: parsed.warnings,
+            stats: ParseStats::new(request.bytes.len(), output_bytes, format, parsed.page_count),
+            provenance: parsed.provenance,
         })
     })
 }
@@ -366,10 +405,20 @@ fn is_safe_media_component(component: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
+/// A parsed document plus the side channels `parse`/`parse_document_result`
+/// hand back to the caller: completeness warnings, total page count, and the
+/// optional output→source provenance mapping.
+struct DocumentParse {
+    document: DocumentResult,
+    warnings: Vec<SpoorWarning>,
+    page_count: Option<usize>,
+    provenance: Option<Provenance>,
+}
+
 fn parse_document_with_format(
     request: &ParseRequest<'_>,
     format: Format,
-) -> SpoorResult<(DocumentResult, Vec<SpoorWarning>, Option<usize>)> {
+) -> SpoorResult<DocumentParse> {
     let extracted = parsers::extract(
         &source(request),
         format,
@@ -384,15 +433,25 @@ fn parse_document_with_format(
     )
     .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Limits))?;
 
-    Ok((
-        DocumentResult {
+    // Parsers always compute the (cheap) page-level mapping; here we keep it only
+    // when the caller asked, so `Off` stays byte-for-byte identical to before.
+    let provenance = match request.provenance {
+        ProvenanceLevel::Off => None,
+        ProvenanceLevel::Page => (!extracted.provenance.is_empty()).then_some(Provenance {
+            spans: extracted.provenance,
+        }),
+    };
+
+    Ok(DocumentParse {
+        document: DocumentResult {
             source: source_label(request).to_string(),
             format,
             markdown: extracted.markdown,
         },
-        extracted.warnings,
-        extracted.page_count,
-    ))
+        warnings: extracted.warnings,
+        page_count: extracted.page_count,
+        provenance,
+    })
 }
 
 fn parse_tables_with_format(

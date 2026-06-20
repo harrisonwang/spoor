@@ -129,11 +129,53 @@ impl ParseStats {
     }
 }
 
+/// Maps spans of the produced output back to where they came from in the
+/// source, so a caller can ground an LLM's quote in an exact location instead
+/// of trusting the model's self-citation. Opt-in via `ParseRequest.provenance`;
+/// absent (and not serialized) when provenance was not requested.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Provenance {
+    /// Output→source mappings, ordered by `output.start` and non-overlapping.
+    pub spans: Vec<ProvenanceSpan>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProvenanceSpan {
+    /// Where this run sits in the returned Markdown.
+    pub output: TextRange,
+    /// Where it came from in the source document.
+    pub source: SourceAnchor,
+}
+
+/// A half-open byte range `[start, end)` into the returned Markdown string.
+/// Byte offsets (not chars) keep the contract unambiguous across hosts and
+/// aligned with `stats.output_bytes`; bindings document how to slice per
+/// language (UTF-8 strings in Rust, `bytes` in Python, `Buffer` in Node/WASM).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TextRange {
+    pub start: usize,
+    pub end: usize,
+}
+
+/// Where a span of output came from in the source. A tagged enum (like
+/// [`WarningLocation`]) so more anchor kinds (input byte ranges, table cells,
+/// born-digital bounding boxes) can be added without breaking consumers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SourceAnchor {
+    /// Page-oriented formats (currently PDF): the 1-based source page number.
+    Page { number: usize },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ParseResult {
     pub content: ParseContent,
     pub warnings: Vec<SpoorWarning>,
     pub stats: ParseStats,
+    /// Output→source mapping when requested via `ParseRequest.provenance`;
+    /// omitted entirely otherwise, so existing callers see no change.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<Provenance>,
 }
 
 #[cfg(test)]

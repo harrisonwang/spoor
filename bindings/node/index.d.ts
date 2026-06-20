@@ -18,4 +18,5 @@ export interface ParseOptions {
   offset?: number
   pages?: Array<number>
   maxWorkUnits?: number
+  provenance?: string
 }

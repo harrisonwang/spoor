@@ -127,4 +127,5 @@ injection。不要因为有局部 page/slide warning 就丢弃整份文档。
 - 没有 JSON 信封的纯文本报错按原文上报，不反复重试
 - 文档格式用了 `-m json` 报错 → 去掉 `-m json` 重跑
 - 不要绕过 spoor 手动解析 Office/EPUB XML；DOCX 图片只按上文使用 `--extract` 提取
-- spoor 没有 `--pages`、`--ocr`、`--json`、`--password`、`--output` 这类 flag；`--extract` 只输出单个 DOCX 图片资源
+- spoor 没有 `--ocr`、`--password`、`--output` 这类 flag；分页用 `--pages <first:last>`、结构化表格用 `-m json`；`--extract` 输出单个内嵌媒体资源（DOCX/PDF 图片）
+- 需要把答案锚定回原文页时，用 `--provenance page`（各绑定为 `provenance` 选项）：单个文档型输入，stdout 输出含 `markdown` 与 `provenance.spans` 的 JSON，每条把"输出字节区间"映射到源页码；默认关闭

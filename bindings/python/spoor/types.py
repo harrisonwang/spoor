@@ -53,11 +53,36 @@ class ParseStats:
     page_count: int | None = None
 
 
+class TextRange(TypedDict):
+    """Half-open ``[start, end)`` byte range into the returned ``markdown``."""
+
+    start: int
+    end: int
+
+
+class SourceAnchor(TypedDict):
+    """Where a span of output came from. Currently page-oriented (PDF)."""
+
+    kind: Literal["page"]
+    number: int
+
+
+class ProvenanceSpan(TypedDict):
+    output: TextRange
+    source: SourceAnchor
+
+
+@dataclass(frozen=True, slots=True)
+class Provenance:
+    spans: tuple[ProvenanceSpan, ...]
+
+
 @dataclass(frozen=True, slots=True)
 class ParseResult:
     content: ParseContent
     warnings: tuple[SpoorWarning, ...]
     stats: ParseStats
+    provenance: Provenance | None = None
 
 
 def parse_result(raw: dict[str, Any]) -> ParseResult:
@@ -70,8 +95,15 @@ def parse_result(raw: dict[str, Any]) -> ParseResult:
             tables=tuple(table_value["tables"]),
             serialized_bytes=table_value["serialized_bytes"],
         )
+    provenance_raw = raw.get("provenance")
+    provenance = (
+        Provenance(spans=tuple(provenance_raw["spans"]))
+        if provenance_raw is not None
+        else None
+    )
     return ParseResult(
         content=ParseContent(kind=content["kind"], value=value),
         warnings=tuple(raw["warnings"]),
         stats=ParseStats(**raw["stats"]),
+        provenance=provenance,
     )

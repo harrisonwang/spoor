@@ -97,7 +97,9 @@ Python 使用 `pyspoor` 的 `parse_bytes` / `parse_path`；Node.js 使用
 PDF 页码筛选（`pages`）与内嵌媒体提取（`extract_media`）在 CLI、Python、Node、WASM
 行为等价，嵌入式调用可直接分页拉取整张表或只取 PDF 指定页。PDF 默认解析全部页；
 `stats.page_count` 始终报告总页数（即便只取了某几页），所以可以用 `--pages 1:1`
-廉价地"探一眼"页数，再决定要不要、要哪段。从 `v0.8.3` 起，发布的
+廉价地"探一眼"页数，再决定要不要、要哪段。`--provenance page`（各绑定为 `provenance`
+选项）返回每页"输出 markdown 字节区间 → 源页码"的来源定位映射，便于把 LLM 引用锚定
+回原文页；默认关闭。从 `v0.8.3` 起，发布的
 WASM 包默认包含全部重点格式；
 需要更小体积时可自行构建 `core-formats`。
 

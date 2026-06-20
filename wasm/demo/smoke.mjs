@@ -128,3 +128,18 @@ assert.throws(
   ),
   (error) => error.code === 'work_budget_exceeded',
 );
+
+// Page provenance reaches the WASM host too (13th positional arg). It maps each
+// output byte range back to a source page.
+const provenance = parse_bytes(
+  multipagePdf, 'doc.pdf', undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'page',
+);
+assert.equal(provenance.provenance.spans.length, 3);
+assert.deepEqual(provenance.provenance.spans[0].source, { kind: 'page', number: 1 });
+// Output byte ranges index the Markdown as UTF-8.
+const provMd = new TextEncoder().encode(provenance.content.value.markdown);
+const { start, end } = provenance.provenance.spans[0].output;
+assert.ok(new TextDecoder().decode(provMd.subarray(start, end)).startsWith('## Page 1'));
+
+// Off by default: no provenance field on the result.
+assert.equal(parse_bytes(multipagePdf, 'doc.pdf').provenance, undefined);

@@ -1,7 +1,7 @@
 use crate::detect::Format;
 use crate::engine::{DocumentFilter, TableFilter};
 use crate::json_schema::TableEntry;
-use crate::result::SpoorWarning;
+use crate::result::{ProvenanceSpan, SpoorWarning};
 use crate::source::Source;
 use anyhow::{Result, anyhow};
 
@@ -43,6 +43,10 @@ pub(crate) struct ExtractedMarkdown {
     /// computed independently of any page-range slice so callers learn the whole
     /// size even from a one-page peek. `None` for formats without a page model.
     pub page_count: Option<usize>,
+    /// Output→source spans (currently page-level for PDF). Always computed where
+    /// cheap; the engine keeps or drops it per `ParseRequest.provenance`. Empty
+    /// for formats that do not produce a mapping yet.
+    pub provenance: Vec<ProvenanceSpan>,
 }
 
 impl ExtractedMarkdown {
@@ -51,6 +55,7 @@ impl ExtractedMarkdown {
             markdown,
             warnings: Vec::new(),
             page_count: None,
+            provenance: Vec::new(),
         }
     }
 
@@ -59,6 +64,7 @@ impl ExtractedMarkdown {
             markdown,
             warnings,
             page_count: None,
+            provenance: Vec::new(),
         }
     }
 }

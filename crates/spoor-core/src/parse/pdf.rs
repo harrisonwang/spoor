@@ -8,7 +8,7 @@ use crate::parse::pdf_layout::{
 use crate::parse::pdf_media;
 #[cfg(test)]
 use crate::parse::pdf_media::PageImage;
-use crate::result::{SpoorWarning, WarningCode};
+use crate::result::{ProvenanceSpan, SourceAnchor, SpoorWarning, TextRange, WarningCode};
 use crate::source::Source;
 use anyhow::{Result, anyhow};
 
@@ -61,7 +61,7 @@ pub fn extract(
         return Err(StructuredError::image_only_pdf().into());
     }
 
-    let markdown = render_layout(&layout);
+    let (markdown, provenance) = render_layout(&layout);
     limits::ensure_parse_size(markdown.len(), max_parse_bytes, "PDF Markdown rendering")?;
 
     let mut warnings = layout_warnings(&layout);
@@ -81,28 +81,47 @@ pub fn extract(
         // Total pages regardless of any --pages slice, so a cheap one-page peek
         // still tells the caller how big the document is.
         page_count: super::pdf_engine::pdf_total_pages(source.bytes()),
+        provenance,
     })
 }
 
 #[cfg(test)]
 fn render_pages(pages: &[String], images: &[Vec<PageImage>]) -> String {
     let layout = PdfLayoutDocument::from_page_text_and_images(pages.to_vec(), images.to_vec());
-    render_layout(&layout)
+    render_layout(&layout).0
 }
 
-fn render_layout(layout: &PdfLayoutDocument) -> String {
+/// Render the page-oriented Markdown and, alongside it, a page-level provenance
+/// span per page: the half-open byte range its `## Page N` block occupies in the
+/// returned Markdown, mapped to that source page. Computing it here is free —
+/// each page's start/end offset is already known while concatenating.
+fn render_layout(layout: &PdfLayoutDocument) -> (String, Vec<ProvenanceSpan>) {
     let mut markdown = String::new();
     let mut image_number = 0usize;
+    let mut spans = Vec::with_capacity(layout.pages.len());
 
     for (index, page) in layout.pages.iter().enumerate() {
         if index > 0 {
             markdown.push_str("\n\n");
         }
 
+        // The block spans from here (after any inter-page separator) to the end
+        // of this page's rendered text, so a quote landing anywhere in it maps
+        // back to this page; the 2-byte gap between blocks belongs to no page.
+        let start = markdown.len();
         render_page(page, &mut markdown, &mut image_number);
+        spans.push(ProvenanceSpan {
+            output: TextRange {
+                start,
+                end: markdown.len(),
+            },
+            source: SourceAnchor::Page {
+                number: page.number,
+            },
+        });
     }
 
-    markdown
+    (markdown, spans)
 }
 
 fn render_page(page: &PdfLayoutPage, markdown: &mut String, image_number: &mut usize) {

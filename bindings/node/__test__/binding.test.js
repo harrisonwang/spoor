@@ -78,6 +78,25 @@ test('work budget aborts with a stable error', () => {
   );
 });
 
+test('page provenance maps output ranges back to source pages', () => {
+  const pdf = readFileSync(join(
+    __dirname,
+    '../../../crates/spoor-cli/tests/fixtures/pdf/02_multipage.pdf',
+  ));
+  const result = parseBytes(pdf, { sourceName: 'doc.pdf', provenance: 'page' });
+  assert.equal(result.provenance.spans.length, 3);
+  assert.deepEqual(result.provenance.spans[0].source, { kind: 'page', number: 1 });
+
+  // Output byte ranges index the Markdown as UTF-8.
+  const markdown = Buffer.from(result.content.value.markdown, 'utf8');
+  const { start, end } = result.provenance.spans[0].output;
+  assert.ok(markdown.subarray(start, end).toString('utf8').startsWith('## Page 1'));
+
+  // Off by default: no provenance key at all.
+  const plain = parseBytes(pdf, { sourceName: 'doc.pdf' });
+  assert.equal(plain.provenance, undefined);
+});
+
 test('extract_media returns safe docx resource bytes', () => {
   const docx = readFileSync(join(
     __dirname,

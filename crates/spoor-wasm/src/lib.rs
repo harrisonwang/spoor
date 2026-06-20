@@ -1,4 +1,4 @@
-use spoor_core::{DocumentFilter, Format, ParseLimits, ParseRequest, TableFilter};
+use spoor_core::{DocumentFilter, Format, ParseLimits, ParseRequest, ProvenanceLevel, TableFilter};
 use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 
@@ -27,7 +27,8 @@ pub fn detect_format(
 /// other bindings: `sheet` (XLSX only), `rows` as an inclusive 1-based
 /// `[first, last]` pair (mutually exclusive with `limit`/`offset`), `columns`
 /// to keep, and `limit`/`offset` for pagination. For page-oriented formats
-/// (PDF), `pages` is an inclusive 1-based `[first, last]` range. Each is ignored
+/// (PDF), `pages` is an inclusive 1-based `[first, last]` range. `provenance`
+/// (`"page"`/`"off"`) returns an output→source page mapping. Each is ignored
 /// by formats it does not apply to, and all are optional, so existing
 /// 5-argument calls keep working.
 #[wasm_bindgen]
@@ -45,6 +46,7 @@ pub fn parse_bytes(
     offset: Option<usize>,
     pages: Option<Vec<u32>>,
     max_work_units: Option<usize>,
+    provenance: Option<String>,
 ) -> Result<JsValue, JsValue> {
     let mut request = request(
         bytes,
@@ -64,6 +66,9 @@ pub fn parse_bytes(
     .map_err(error_value)?;
     request.document_filter =
         DocumentFilter::build_from_page_slice(pages.as_deref()).map_err(error_value)?;
+    if let Some(level) = provenance.as_deref() {
+        request.provenance = ProvenanceLevel::from_str(level).map_err(error_value)?;
+    }
     let result = spoor_core::parse(&request).map_err(error_value)?;
     serde_wasm_bindgen::to_value(&result).map_err(|error| JsValue::from_str(&error.to_string()))
 }

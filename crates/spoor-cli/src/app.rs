@@ -4,8 +4,8 @@ use anyhow::{Context, Result, anyhow};
 use glob::{MatchOptions, glob_with};
 use spoor_core::{
     DocumentFilter, Format, JsonOutput, OutputMode, ParseContent, ParseLimits, ParseRequest,
-    SpoorError, SpoorWarning, TableFilter, default_mode_for, detect_format, extract_media,
-    limit_markdown_output, parse_document_result, parse_tables, render_documents,
+    ProvenanceLevel, SpoorError, SpoorWarning, TableFilter, default_mode_for, detect_format,
+    extract_media, limit_markdown_output, parse_document_result, parse_tables, render_documents,
     render_json_limited,
 };
 
@@ -22,7 +22,58 @@ pub(crate) fn run(cli: Cli) -> Result<CommandOutput> {
         return extract_resource(&cli, &resource).map(CommandOutput::Binary);
     }
     validate_max_output_bytes(cli.max_output_bytes)?;
+    if cli.provenance.is_some() {
+        return run_provenance(cli).map(CommandOutput::Text);
+    }
     run_parse(cli).map(CommandOutput::Text)
+}
+
+/// Single-input path for `--provenance`: parse one document and emit the whole
+/// `ParseResult` as JSON (Markdown plus the output→source mapping). Provenance
+/// is structured data, so it goes to stdout as JSON rather than polluting the
+/// Markdown; offsets index one document's Markdown, so this takes a single
+/// input rather than a concatenated batch.
+fn run_provenance(cli: Cli) -> Result<String> {
+    let level: ProvenanceLevel = cli
+        .provenance
+        .expect("run_provenance requires --provenance")
+        .into();
+
+    let inputs = expand_inputs(&cli.inputs)?;
+    if inputs.len() != 1 {
+        return Err(anyhow!("--provenance 目前仅支持单个输入"));
+    }
+    let input = resolve_input(&inputs[0], cli.max_parse_bytes)?;
+    let mut request = request_for(
+        &input,
+        cli.format.map(Into::into),
+        TableFilter::default(),
+        build_document_filter(&cli)?,
+        cli.max_parse_bytes,
+        cli.max_work_units,
+    );
+    request.provenance = level;
+
+    let format = detect_format(&request)?;
+    if matches!(format, Format::Csv | Format::Xlsx) {
+        return Err(anyhow!(
+            "--provenance 暂不支持表格型（{format}）；当前用于文档型（如 PDF）"
+        ));
+    }
+
+    let result = parse_document_result(&request)?;
+    let json = serde_json::to_string_pretty(&result)
+        .map_err(|error| anyhow!("序列化 provenance 结果失败：{error}"))?;
+    // Keep the stdout byte cap a hard contract; truncating JSON would make it
+    // invalid, so over-budget output is an error pointing at the way to shrink.
+    if json.len() > cli.max_output_bytes {
+        return Err(anyhow!(
+            "provenance JSON 约 {} 字节，超过 --max-output-bytes={}；用 --pages 缩小范围或调大上限",
+            json.len(),
+            cli.max_output_bytes
+        ));
+    }
+    Ok(json)
 }
 
 fn extract_resource(cli: &Cli, resource: &str) -> Result<Vec<u8>> {
@@ -563,6 +614,7 @@ fn request_for<'a>(
             max_parse_bytes,
             max_work_units,
         },
+        provenance: ProvenanceLevel::Off,
     }
 }
 

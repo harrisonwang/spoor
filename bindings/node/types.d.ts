@@ -20,6 +20,12 @@ export interface ParseOptions {
   pages?: [number, number];
   /** Cooperative cap on in-parser work units (e.g. PDF operations) to bound CPU. */
   maxWorkUnits?: number;
+  /**
+   * Return output→source provenance: `"page"` for page-level (PDF), `"off"`
+   * (default) for none. Output byte ranges in `provenance` index `markdown` as
+   * UTF-8; slice with `Buffer.from(markdown).subarray(start, end)`.
+   */
+  provenance?: string;
 }
 
 export interface DocumentResult {
@@ -54,6 +60,24 @@ export interface SpoorWarning {
   location?: WarningLocation;
 }
 
+/** Half-open `[start, end)` byte range into the returned `markdown`. */
+export interface TextRange {
+  start: number;
+  end: number;
+}
+
+/** Where a span of output came from. Currently page-oriented (PDF). */
+export type SourceAnchor = { kind: 'page'; number: number };
+
+export interface ProvenanceSpan {
+  output: TextRange;
+  source: SourceAnchor;
+}
+
+export interface Provenance {
+  spans: ProvenanceSpan[];
+}
+
 export interface ParseResult {
   content: ParseContent;
   warnings: SpoorWarning[];
@@ -64,6 +88,8 @@ export interface ParseResult {
     /** Total pages for page-oriented formats (PDF); absent otherwise. */
     page_count?: number;
   };
+  /** Output→source mapping when requested via `provenance`; absent otherwise. */
+  provenance?: Provenance;
 }
 
 export interface SpoorError extends Error {

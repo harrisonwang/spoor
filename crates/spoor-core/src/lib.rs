@@ -16,9 +16,9 @@ mod source;
 
 pub use detect::Format;
 pub use engine::{
-    DocumentFilter, ExtractedDocument, ExtractedTables, ParseLimits, ParseRequest, SpoorResult,
-    TableFilter, detect_format, extract_media, parse, parse_document, parse_document_result,
-    parse_tables,
+    DocumentFilter, ExtractedDocument, ExtractedTables, ParseLimits, ParseRequest, ProvenanceLevel,
+    SpoorResult, TableFilter, detect_format, extract_media, parse, parse_document,
+    parse_document_result, parse_tables,
 };
 pub use error::{ErrorCode, ParseStage, SpoorError, StructuredError};
 pub use json_schema::{
@@ -31,6 +31,6 @@ pub use render::{
     limit_markdown_output, render_documents, render_json, render_json_limited,
 };
 pub use result::{
-    DocumentResult, ParseContent, ParseResult, ParseStats, SpoorWarning, TableResult, WarningCode,
-    WarningLocation,
+    DocumentResult, ParseContent, ParseResult, ParseStats, Provenance, ProvenanceSpan,
+    SourceAnchor, SpoorWarning, TableResult, TextRange, WarningCode, WarningLocation,
 };

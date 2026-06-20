@@ -93,6 +93,53 @@ fn format_override_is_honored() {
 }
 
 #[test]
+fn provenance_page_emits_json_mapping_output_to_source_pages() {
+    let source = fixture_path("pdf/02_multipage.pdf");
+    let output = spoor_bin()
+        .args([&source, "--provenance", "page"])
+        .output()
+        .expect("run spoor");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
+    let value: serde_json::Value = serde_json::from_str(&stdout).expect("provenance JSON");
+
+    // Markdown rides in the document content; provenance maps each output byte
+    // range back to a source page, in order.
+    let markdown = value["content"]["value"]["markdown"]
+        .as_str()
+        .expect("markdown string");
+    assert!(markdown.contains("## Page 1"));
+
+    let spans = value["provenance"]["spans"]
+        .as_array()
+        .expect("provenance spans");
+    assert_eq!(spans.len(), 3);
+    assert_eq!(spans[0]["source"]["kind"], "page");
+    assert_eq!(spans[0]["source"]["number"], 1);
+
+    // The first span's byte range slices page 1's block out of the Markdown.
+    let start = spans[0]["output"]["start"].as_u64().unwrap() as usize;
+    let end = spans[0]["output"]["end"].as_u64().unwrap() as usize;
+    assert!(markdown.as_bytes()[start..end].starts_with(b"## Page 1"));
+}
+
+#[test]
+fn provenance_rejects_multiple_inputs() {
+    // Offsets index a single document's Markdown, so the page path is single-input.
+    let first = fixture_path("pdf/01_basic.pdf");
+    let second = fixture_path("pdf/02_multipage.pdf");
+    let output = spoor_bin()
+        .args([&first, &second, "--provenance", "page"])
+        .output()
+        .expect("run spoor");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    assert!(stderr.contains("仅支持单个输入"), "{stderr}");
+}
+
+#[test]
 fn extract_outputs_the_referenced_docx_media_bytes() {
     let source = fixture_path("docx/16_image_placeholders.docx");
     let output = spoor_bin()

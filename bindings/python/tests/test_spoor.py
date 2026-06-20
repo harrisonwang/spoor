@@ -103,6 +103,25 @@ def test_work_budget_aborts_with_stable_error() -> None:
     assert exc.value.code == "work_budget_exceeded"
 
 
+def test_page_provenance_maps_output_to_source_pages() -> None:
+    # 02_multipage.pdf has 3 pages; page provenance returns one span per page,
+    # each output byte range slicing that page's block out of the Markdown.
+    result = parse_path(FIXTURES / "pdf/02_multipage.pdf", provenance="page")
+    assert result.provenance is not None
+    spans = result.provenance.spans
+    assert len(spans) == 3
+    assert spans[0]["source"] == {"kind": "page", "number": 1}
+
+    markdown = result.content.value.markdown
+    start = spans[0]["output"]["start"]
+    end = spans[0]["output"]["end"]
+    assert markdown.encode("utf-8")[start:end].startswith(b"## Page 1")
+
+
+def test_provenance_off_by_default() -> None:
+    assert parse_path(FIXTURES / "pdf/02_multipage.pdf").provenance is None
+
+
 def test_error_fields_are_stable() -> None:
     try:
         parse_bytes(b"\x00\x01", source_name="unknown.bin")

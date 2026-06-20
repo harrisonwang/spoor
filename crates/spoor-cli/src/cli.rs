@@ -1,5 +1,5 @@
 use clap::{ArgAction, Parser, ValueEnum};
-use spoor_core::{Format, OutputMode};
+use spoor_core::{Format, OutputMode, ProvenanceLevel};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub(crate) enum FormatArg {
@@ -43,6 +43,20 @@ impl From<ModeArg> for OutputMode {
         match value {
             ModeArg::Md => OutputMode::Md,
             ModeArg::Json => OutputMode::Json,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub(crate) enum ProvenanceArg {
+    /// One mapping per source page (PDF page-level).
+    Page,
+}
+
+impl From<ProvenanceArg> for ProvenanceLevel {
+    fn from(value: ProvenanceArg) -> Self {
+        match value {
+            ProvenanceArg::Page => ProvenanceLevel::Page,
         }
     }
 }
@@ -162,6 +176,11 @@ pub(crate) struct Cli {
     #[arg(long, value_name = "n")]
     pub(crate) max_work_units: Option<usize>,
 
+    /// 返回"输出 → 原文"来源定位；当前支持 page（PDF 页级）。默认不产出。
+    /// 输出为 JSON（含 markdown 与 provenance），仅支持单个文档型输入。
+    #[arg(long, value_enum, value_name = "level", conflicts_with = "mode")]
+    pub(crate) provenance: Option<ProvenanceArg>,
+
     /// 将 spoor 输出的单个内嵌媒体资源原样输出到 stdout；当前支持 spoor-docx://。
     #[arg(
         long,
@@ -175,7 +194,8 @@ pub(crate) struct Cli {
             "columns",
             "limit",
             "offset",
-            "max_output_bytes"
+            "max_output_bytes",
+            "provenance"
         ]
     )]
     pub(crate) extract: Option<String>,
@@ -341,6 +361,7 @@ mod tests {
             "max-output-bytes",
             "max-parse-bytes",
             "max-work-units",
+            "provenance",
             "extract",
             "help",
             "version",
