@@ -121,7 +121,7 @@ pub struct ParseRequest<'a> {
 ## 跨宿主暴露（已落地）
 
 - core：`ParseResult.provenance` + `ParseRequest.provenance`（`ProvenanceLevel`）。
-- CLI：`--provenance page`（默认 off）。开启时 stdout 输出整个 `ParseResult` 的 JSON（含 markdown 与 provenance），**仅支持单个文档型输入**（偏移针对单份 markdown）；与 `--mode`、`--extract` 互斥；表格型报友好错误。仍受 `--max-output-bytes` 约束（超限报错而非截断，避免破坏 JSON）。
+- CLI：`--provenance page`（默认 off）。开启时 stdout 输出整个 `ParseResult` 的 JSON（含 markdown 与 provenance），**仅支持单个文档型输入**（偏移针对单份 markdown）；与 `--mode`、`--extract` 互斥；表格型报友好错误。仍受 `--max-output-kib` 约束（超限报错而非截断，避免破坏 JSON）。
 - Python / Node / WASM：`parse_*` 增加 `provenance` 选项（字符串 `"page"`），返回结构带 `provenance`；只有开启时才序列化，规避边界税。绑定层把整份 `ParseResult` 直接序列化，因此 provenance 自动透传。
 
 ## 已定决策

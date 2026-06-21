@@ -3,30 +3,30 @@ use spoor_core::{Format, OutputMode, ProvenanceLevel};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub(crate) enum FormatArg {
-    Html,
-    Markdown,
     Pdf,
     Docx,
     Xlsx,
-    Pptx,
     Csv,
-    Ipynb,
+    Pptx,
     Epub,
+    Ipynb,
+    Html,
+    Markdown,
     Text,
 }
 
 impl From<FormatArg> for Format {
     fn from(value: FormatArg) -> Self {
         match value {
-            FormatArg::Html => Format::Html,
-            FormatArg::Markdown => Format::Markdown,
             FormatArg::Pdf => Format::Pdf,
             FormatArg::Docx => Format::Docx,
             FormatArg::Xlsx => Format::Xlsx,
-            FormatArg::Pptx => Format::Pptx,
             FormatArg::Csv => Format::Csv,
-            FormatArg::Ipynb => Format::Ipynb,
+            FormatArg::Pptx => Format::Pptx,
             FormatArg::Epub => Format::Epub,
+            FormatArg::Ipynb => Format::Ipynb,
+            FormatArg::Html => Format::Html,
+            FormatArg::Markdown => Format::Markdown,
             FormatArg::Text => Format::PlainText,
         }
     }
@@ -65,7 +65,7 @@ const HELP_TEMPLATE: &str = "\
 {about}
 
 Usage:
-  {usage}
+  spoor [OPTIONS] <input>...
 
 Arguments:
 {positionals}
@@ -73,38 +73,43 @@ Arguments:
 Options:
 {options}
 
-For tables (CSV/XLSX), the recommended pattern is:
+Common Patterns
 
-  spoor file.xlsx                              # see structure + preview
-  spoor file.xlsx --sheet L1 --rows 5:104      # read a slice
-  spoor file.xlsx --columns 分类,技能          # filter columns
+  Tables (CSV/XLSX)
+    spoor data.xlsx                         查看结构
+    spoor data.xlsx --sheet Sheet1 --rows 5:104   按行切片
+    spoor data.xlsx --columns 名称,数量        按列筛选
 
-For PDFs, use --pages first when an agent only needs a slice:
+  Documents (DOCX/PDF)
+    spoor report.docx                       提取文本
+    spoor report.pdf --pages 1:3            仅提取前 3 页
 
-  spoor report.pdf --pages 1:3              # read selected PDF pages
+  Pipes
+    cat data.csv | spoor --format csv -      从 stdin 读取
+    spoor report.pdf | llm \"总结\"            对接 LLM
 
-spoor bounds JSON previews by default (first 100 data rows per table) and
-caps total CLI output at 256 KiB. Use --limit/--rows to narrow tables or
---max-output-bytes to raise the total output cap. Parsing uses a shared
-64 MiB data-volume budget by default; raise it with --max-parse-bytes.
+  Media Extraction
+    spoor doc.docx --extract spoor://docx/part/word/media/img.png > img.png
 
-Examples:
-  spoor report.pdf
-  spoor report.pdf --pages 1:3
-  spoor data.xlsx
+Defaults
+  - 每表默认 100 行（--limit 翻页，--rows 定区间）
+  - stdout 上限 256 KiB（--max-output-kib 调高）
+  - 解析预算 64 MiB（--max-parse-mib 调高）
+
+Examples
   spoor data.csv | jq '.tables[]'
-  cat data.csv | spoor --format csv -
-  spoor https://example.com/article
+  spoor https://example.com/report
   spoor \"*.pdf\"
-  spoor document.docx --extract spoor-docx://word/media/image1.png > image.png
-  spoor report.pdf | llm \"Summarize risks and action items\"
+  spoor report.pdf --provenance page
+  spoor report.pdf --pages 1:3 --mode json
+  spoor data.xlsx --sheet Sheet1 --limit 50 --offset 100
 ";
 
 #[derive(Parser, Debug)]
 #[command(
     name = "spoor",
     version,
-    about = "离线、单二进制、CLI-first 的 LLM-friendly 文档预处理工具",
+    about = "将文档（DOCX/PDF）、表格（XLSX/CSV）、网页和幻灯片（PPTX）转成 LLM 可直接消费的文本",
     long_about = None,
     override_usage = "spoor [OPTIONS] <input>...",
     help_template = HELP_TEMPLATE,
@@ -112,15 +117,15 @@ Examples:
     disable_version_flag = true
 )]
 pub(crate) struct Cli {
-    /// 文件路径、URL、本地 glob，或 - 表示标准输入；可传多个，URL 与 - 不参与 glob 展开。
+    /// 文件路径、URL、glob，或 - 表示 stdin。可传多个。URL 与 - 不参与 glob 展开。
     #[arg(value_name = "input", required = true, num_args = 1..)]
     pub(crate) inputs: Vec<String>,
 
-    /// 覆盖自动 format 检测（默认按 magic-byte / 扩展名推断）。
+    /// 手动指定输入格式。默认自动检测。
     #[arg(long, value_enum, value_name = "format")]
     pub(crate) format: Option<FormatArg>,
 
-    /// 覆盖默认输出模式；表格型（CSV/XLSX）默认 json，其他默认 md。
+    /// 输出模式。表格默认 json、文档默认 md；json 仅表格可用。
     #[arg(
         long,
         short = 'm',
@@ -131,57 +136,56 @@ pub(crate) struct Cli {
     )]
     pub(crate) mode: Option<ModeArg>,
 
-    /// PDF 限定页码区间，例如 `1:3`（含两端）；用于按需读取大型 PDF。
+    /// 仅提取 PDF 指定页，如 `1:3`。
     #[arg(long, value_name = "first:last")]
     pub(crate) pages: Option<String>,
 
-    /// XLSX 限定 sheet；找不到时报错并列出可用 sheets。CSV 无此概念，自动忽略。
+    /// 指定 XLSX 工作表名。CSV 忽略此选项。
     #[arg(long, value_name = "name")]
     pub(crate) sheet: Option<String>,
 
-    /// 限定数据行的 Excel 行号区间，例如 `5:104`（含两端）。与 --limit/--offset 互斥。
+    /// 指定行号范围，如 `5:104`。与 --limit/--offset 互斥。
     #[arg(long, value_name = "first:last", conflicts_with_all = ["limit", "offset"])]
     pub(crate) rows: Option<String>,
 
-    /// 按列名筛选，逗号分隔；找不到时报错并列出可用列。
+    /// 按列名筛选，逗号分隔。
     #[arg(long, value_name = "columns", value_delimiter = ',')]
     pub(crate) columns: Vec<String>,
 
-    /// 每个 table 最多返回多少数据行；默认 100。
+    /// 每表最多返回行数，默认 100。
     #[arg(long, value_name = "n")]
     pub(crate) limit: Option<usize>,
 
-    /// 跳过前 N 条数据行再应用 --limit；默认 0。
+    /// 跳过前 N 行，默认 0。
     #[arg(long, value_name = "n")]
     pub(crate) offset: Option<usize>,
 
-    /// 整次命令 stdout 的最大字节数；默认 262144（256 KiB）。
+    /// stdout 上限，单位 KiB，默认 256。
     #[arg(
         long,
-        value_name = "n",
-        default_value_t = spoor_core::DEFAULT_MAX_OUTPUT_BYTES
+        value_name = "kib",
+        default_value_t = spoor_core::DEFAULT_MAX_OUTPUT_BYTES >> 10
     )]
-    pub(crate) max_output_bytes: usize,
+    pub(crate) max_output_kib: usize,
 
-    /// 解析输入、中间文本和容器解压内容的共享字节预算；默认 67108864（64 MiB）。
+    /// 解析预算上限，单位 MiB，默认 64。
     #[arg(
         long,
-        value_name = "n",
-        default_value_t = spoor_core::DEFAULT_MAX_PARSE_BYTES
+        value_name = "mib",
+        default_value_t = spoor_core::DEFAULT_MAX_PARSE_BYTES >> 20
     )]
-    pub(crate) max_parse_bytes: usize,
+    pub(crate) max_parse_mib: usize,
 
-    /// 解析工作量上限（如 PDF 操作数），用于约束字节预算管不到的 CPU；默认不限。
-    /// 不可信输入还应配合宿主级超时与进程/容器隔离才能真正掐断。
+    /// 解析运算量上限，默认不限。不可信输入建议配合进程隔离。
     #[arg(long, value_name = "n")]
     pub(crate) max_work_units: Option<usize>,
 
-    /// 返回"输出 → 原文"来源定位；当前支持 page（PDF 页级）。默认不产出。
-    /// 输出为 JSON（含 markdown 与 provenance），仅支持单个文档型输入。
+    /// 输出原文定位映射。当前支持 page（PDF 页级）。仅限单文件输入。
+    /// 输出为 JSON，包含 markdown 与 provenance。
     #[arg(long, value_enum, value_name = "level", conflicts_with = "mode")]
     pub(crate) provenance: Option<ProvenanceArg>,
 
-    /// 将 spoor 输出的单个内嵌媒体资源原样输出到 stdout；当前支持 spoor-docx://。
+    /// 提取内嵌媒体到 stdout。接受 spoor://... URI。
     #[arg(
         long,
         value_name = "uri",
@@ -194,7 +198,7 @@ pub(crate) struct Cli {
             "columns",
             "limit",
             "offset",
-            "max_output_bytes",
+            "max_output_kib",
             "provenance"
         ]
     )]
@@ -207,6 +211,18 @@ pub(crate) struct Cli {
     /// 显示版本。
     #[arg(short = 'V', long = "version", action = ArgAction::Version)]
     version: Option<bool>,
+}
+
+impl Cli {
+    /// `--max-parse-mib` 是面向用户的 MiB 单位；core 仍按字节计，这里换算并防溢出。
+    pub(crate) fn max_parse_bytes(&self) -> usize {
+        self.max_parse_mib.saturating_mul(1024 * 1024)
+    }
+
+    /// `--max-output-kib` 是面向用户的 KiB 单位；换算成字节交给 core。
+    pub(crate) fn max_output_bytes(&self) -> usize {
+        self.max_output_kib.saturating_mul(1024)
+    }
 }
 
 #[cfg(test)]
@@ -226,8 +242,11 @@ mod tests {
         assert!(cli.columns.is_empty());
         assert!(cli.limit.is_none());
         assert!(cli.offset.is_none());
-        assert_eq!(cli.max_output_bytes, spoor_core::DEFAULT_MAX_OUTPUT_BYTES);
-        assert_eq!(cli.max_parse_bytes, spoor_core::DEFAULT_MAX_PARSE_BYTES);
+        assert_eq!(
+            cli.max_output_kib,
+            spoor_core::DEFAULT_MAX_OUTPUT_BYTES >> 10
+        );
+        assert_eq!(cli.max_parse_mib, spoor_core::DEFAULT_MAX_PARSE_BYTES >> 20);
         assert!(cli.extract.is_none());
     }
 
@@ -289,19 +308,19 @@ mod tests {
             "spoor",
             "document.docx",
             "--extract",
-            "spoor-docx://word/media/image1.png",
+            "spoor://docx/part/word/media/image1.png",
         ])
         .unwrap();
         assert_eq!(
             cli.extract.as_deref(),
-            Some("spoor-docx://word/media/image1.png")
+            Some("spoor://docx/part/word/media/image1.png")
         );
 
         let err = Cli::try_parse_from([
             "spoor",
             "document.docx",
             "--extract",
-            "spoor-docx://word/media/image1.png",
+            "spoor://docx/part/word/media/image1.png",
             "--mode",
             "md",
         ])
@@ -310,12 +329,14 @@ mod tests {
     }
 
     #[test]
-    fn help_uses_bilingual_headings_and_english_placeholders() {
+    fn help_shows_common_patterns_and_all_options() {
         let err = Cli::try_parse_from(["spoor", "-h"]).unwrap_err();
 
         assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
         let help = err.to_string();
-        assert!(help.contains("离线、单二进制、CLI-first 的 LLM-friendly 文档预处理工具"));
+        assert!(help.contains(
+            "将文档（DOCX/PDF）、表格（XLSX/CSV）、网页和幻灯片（PPTX）转成 LLM 可直接消费的文本"
+        ));
         assert!(help.contains("Usage:"));
         assert!(help.contains("spoor [OPTIONS] <input>..."));
         assert!(help.contains("Arguments:"));
@@ -328,21 +349,18 @@ mod tests {
         assert!(help.contains("--columns <columns>"));
         assert!(help.contains("--limit <n>"));
         assert!(help.contains("--offset <n>"));
-        assert!(help.contains("--max-output-bytes <n>"));
-        assert!(help.contains("--max-parse-bytes <n>"));
+        assert!(help.contains("--max-output-kib <kib>"));
+        assert!(help.contains("--max-parse-mib <mib>"));
         assert!(help.contains("--extract <uri>"));
+        assert!(help.contains("Common Patterns"));
+        assert!(help.contains("Defaults"));
+        assert!(help.contains("Examples"));
         assert!(help.contains("spoor \"*.pdf\""));
-        assert!(help.contains("Examples:"));
         assert!(help.contains("spoor report.pdf --pages 1:3"));
-        assert!(help.contains("spoor report.pdf | llm \"Summarize risks and action items\""));
-        assert!(help.contains("--sheet L1 --rows 5:104"));
-        assert!(help.contains("caps total CLI output at 256 KiB"));
+        assert!(help.contains("总结"));
+        assert!(help.contains("--sheet Sheet1 --rows 5:104"));
+        assert!(help.contains("256 KiB"));
         assert!(help.contains("显示帮助。"));
-        assert!(!help.contains("<输入>"));
-        assert!(!help.contains("<格式>"));
-        assert!(!help.contains("<模式>"));
-        assert!(!help.contains("用法:"));
-        assert!(!help.contains("选项:"));
     }
 
     /// The JSON envelope's `usage` hint must stay in sync with the real CLI
@@ -358,8 +376,8 @@ mod tests {
             "format",
             "mode",
             "pages",
-            "max-output-bytes",
-            "max-parse-bytes",
+            "max-output-kib",
+            "max-parse-mib",
             "max-work-units",
             "provenance",
             "extract",

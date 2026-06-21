@@ -94,13 +94,13 @@ fn feature_warnings(features: DocumentFeatures) -> Vec<SpoorWarning> {
     if features.merged_table {
         warnings.push(SpoorWarning::new(
             WarningCode::MergedTableStructureNotPreserved,
-            "DOCX 包含合并单元格；当前 Markdown 表格不保留 rowspan/colspan，Agent 不应把空白或重复单元格解释为原始结构。",
+            "表格含合并单元格，Markdown 降级后跨行/跨列信息已丢失。",
         ));
     }
     if features.embedded_visuals {
         warnings.push(SpoorWarning::new(
             WarningCode::EmbeddedVisualsOmitted,
-            "DOCX 包含图片、图表、绘图或嵌入对象；内嵌栅格图片会以 spoor-docx URI 标出位置但尚未被理解，其他视觉内容可能省略。Agent 应按需提取相关图片并调用外部视觉解析。",
+            "含图片、图表或嵌入对象，文本输出可能不完整。位图已用 spoor://docx/part/ 标注，可用 --extract 取出。",
         ));
     }
     warnings
@@ -410,21 +410,12 @@ fn safe_docx_media_path(target: &str) -> Option<String> {
     if remaining.is_empty()
         || remaining
             .iter()
-            .any(|component| !is_safe_media_component(component))
+            .any(|component| !crate::engine::is_safe_media_component(component))
     {
         return None;
     }
 
     Some(format!("word/{target}"))
-}
-
-fn is_safe_media_component(component: &str) -> bool {
-    !component.is_empty()
-        && component != "."
-        && component != ".."
-        && component
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
 fn render_document(
@@ -661,7 +652,7 @@ fn push_image_placeholder(
 
     *image_number += 1;
     paragraph.text.push_str(&format!(
-        "![DOCX image {image_number}](spoor-docx://{path})"
+        "![DOCX image {image_number}](spoor://docx/part/{path})"
     ));
 }
 

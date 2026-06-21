@@ -48,9 +48,9 @@ pub fn parse_bytes(data: Buffer, options: Option<ParseOptions>) -> Result<serde_
 }
 
 /// Extract one safe embedded media resource referenced by a URI emitted in the
-/// parsed output (e.g. `spoor-docx://word/media/image1.png` or
-/// `spoor-pdf://obj/{id}/{gen}`). Returns the raw resource bytes. spoor does not
-/// decode or interpret the bytes.
+/// parsed output (e.g. `spoor://docx/part/word/media/image1.png`,
+/// `spoor://pptx/part/ppt/media/imageN.png`, or `spoor://pdf/obj/{id}/{gen}`).
+/// Returns the raw resource bytes. spoor does not decode or interpret the bytes.
 #[napi]
 pub fn extract_media(
     data: Buffer,

@@ -5,7 +5,7 @@
 //!      position and warn (the agent learns an image is there), and
 //!   2. hands back the raw bytes of an image whose stream is already a usable
 //!      file (JPEG via `DCTDecode`, JPEG 2000 via `JPXDecode`) when an agent
-//!      asks via `spoor-pdf://obj/{id}/{gen}`.
+//!      asks via `spoor://pdf/obj/{id}/{gen}`.
 //!
 //! Images in other encodings (`FlateDecode` raster, `CCITTFax`, `JBIG2`, …)
 //! need real pixel decoding plus a PNG re-encode, which is out of scope; they
@@ -32,7 +32,7 @@ pub(crate) struct PageImage {
     pub(crate) extractable: bool,
 }
 
-/// Why a `spoor-pdf://` image could not be returned as bytes.
+/// Why a `spoor://pdf/obj/` image could not be returned as bytes.
 #[derive(Debug)]
 pub(crate) enum ImageExtractError {
     Unreadable,
@@ -42,21 +42,21 @@ pub(crate) enum ImageExtractError {
     /// CCITTFax, JBIG2, non-8-bit, …). The string names what was seen.
     UnsupportedEncoding(String),
     /// Decoding the raster would exceed the parse budget; `needed` is the raw
-    /// size in bytes the consumer must allow via `--max-parse-bytes`.
+    /// size in bytes the consumer must allow via `--max-parse-mib`.
     TooLarge(usize),
 }
 
 impl ImageExtractError {
     pub(crate) fn message(&self) -> String {
         match self {
-            Self::Unreadable => "无法解析该 PDF".to_string(),
-            Self::NotFound => "spoor-pdf:// 指向的对象不存在".to_string(),
-            Self::NotAnImage => "spoor-pdf:// 指向的对象不是内嵌图片".to_string(),
-            Self::UnsupportedEncoding(detail) => format!(
-                "该内嵌图片（{detail}）的编码/色彩空间 spoor 暂不能直出；请在外部渲染该页后交给视觉模型。"
-            ),
+            Self::Unreadable => "无法解析该 PDF。".to_string(),
+            Self::NotFound => "spoor://pdf/obj/ 指向的对象不存在。".to_string(),
+            Self::NotAnImage => "spoor://pdf/obj/ 指向的对象不是图片。".to_string(),
+            Self::UnsupportedEncoding(detail) => {
+                format!("该图片编码或色彩空间（{detail}）无法直接导出；需外部渲染后交 VLM。")
+            }
             Self::TooLarge(needed) => format!(
-                "该图片解码后约 {needed} 字节，超过当前解析预算；请用 --max-parse-bytes 提高上限后重试，或在外部渲染该页。"
+                "该图片解码后约 {needed} 字节，超过解析上限；可调高 --max-parse-mib 后重试，或在外部渲染该页。"
             ),
         }
     }
@@ -356,7 +356,13 @@ fn walk_drawn_xobjects(
                     extractable: is_extractable_image(doc, &stream.dict),
                 });
             }
-            Some(subtype) if subtype == b"Form" => {
+            // Dedupe forms too, not just images: without this a form referenced
+            // k times is re-decoded k times, so a crafted diamond of forms fans
+            // out ~k^depth content-stream decodes before the depth cap stops it
+            // (the work budget does not reach this discovery path). Trade-off: a
+            // Resources-less form drawn under two different scopes is walked once
+            // (first scope wins) — acceptable next to the work blowup.
+            Some(subtype) if subtype == b"Form" && seen.insert(id) => {
                 let form_content = stream
                     .decompressed_content()
                     .unwrap_or_else(|_| stream.content.clone());
@@ -903,5 +909,80 @@ mod tests {
     #[test]
     fn unreadable_pdf_yields_no_images() {
         assert!(discover_images(b"not a pdf", 1).iter().all(Vec::is_empty));
+    }
+
+    /// Two Form XObjects that draw each other (a reference cycle), each also
+    /// drawing its own image. Exercises the form-dedup guard: the walk must
+    /// visit each form once, terminate, and report both images exactly once.
+    fn build_mutually_recursive_forms() -> (Vec<u8>, (u32, u16), (u32, u16)) {
+        let mut doc = Document::with_version("1.5");
+        let img_a = doc.add_object(Stream::new(image_dict("DCTDecode"), b"AAAA".to_vec()));
+        let img_b = doc.add_object(Stream::new(image_dict("DCTDecode"), b"BBBB".to_vec()));
+
+        // Content references the other form by name only, so it can be set at
+        // creation; the name→id wiring goes into Resources, patched afterwards to
+        // break the mutual-reference chicken-and-egg.
+        let form_a = doc.add_object(Stream::new(
+            dictionary! {
+                "Type" => "XObject",
+                "Subtype" => "Form",
+                "BBox" => vec![0i64.into(), 0i64.into(), 1i64.into(), 1i64.into()],
+            },
+            b"/ImA Do /FmB Do".to_vec(),
+        ));
+        let form_b = doc.add_object(Stream::new(
+            dictionary! {
+                "Type" => "XObject",
+                "Subtype" => "Form",
+                "BBox" => vec![0i64.into(), 0i64.into(), 1i64.into(), 1i64.into()],
+            },
+            b"/ImB Do /FmA Do".to_vec(),
+        ));
+        if let Ok(Object::Stream(stream)) = doc.get_object_mut(form_a) {
+            stream.dict.set(
+                "Resources",
+                dictionary! { "XObject" => dictionary! { "ImA" => img_a, "FmB" => form_b } },
+            );
+        }
+        if let Ok(Object::Stream(stream)) = doc.get_object_mut(form_b) {
+            stream.dict.set(
+                "Resources",
+                dictionary! { "XObject" => dictionary! { "ImB" => img_b, "FmA" => form_a } },
+            );
+        }
+
+        let page_resources =
+            doc.add_object(dictionary! { "XObject" => dictionary! { "Fm0" => form_a } });
+        let content = doc.add_object(Stream::new(dictionary! {}, b"/Fm0 Do".to_vec()));
+        let page = doc.add_object(dictionary! {
+            "Type" => "Page",
+            "Resources" => page_resources,
+            "Contents" => content,
+        });
+        let pages = doc.add_object(dictionary! {
+            "Type" => "Pages",
+            "Kids" => vec![page.into()],
+            "Count" => 1,
+        });
+        if let Ok(Object::Dictionary(dict)) = doc.get_object_mut(page) {
+            dict.set("Parent", pages);
+        }
+        (finish(doc, pages), img_a, img_b)
+    }
+
+    #[test]
+    fn mutually_recursive_forms_terminate_and_report_each_image_once() {
+        let (bytes, img_a, img_b) = build_mutually_recursive_forms();
+        let images = discover_images(&bytes, 1);
+        assert_eq!(images.len(), 1);
+
+        let mut found: Vec<(u32, u16)> = images[0].iter().map(|i| (i.id, i.generation)).collect();
+        found.sort();
+        let mut expected = vec![img_a, img_b];
+        expected.sort();
+        assert_eq!(
+            found, expected,
+            "both images reported once, no duplication from the cycle"
+        );
     }
 }

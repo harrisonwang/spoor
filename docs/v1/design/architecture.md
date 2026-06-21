@@ -24,7 +24,7 @@ Rust packages 为 `spoor-core`、`spoor-cli`，CLI binary 为 `spoor`。Python d
 
 - 接受 bytes 和显式 metadata（source name、content type、format hint）。
 - 负责 format 检测、解析、限制单次解析的数据量、ZIP 安全检查，以及返回结构化结果。
-- 通过格式无关的 `extract_media` 按安全资源 URI 提取单个内嵌媒体；当前仅实现 `spoor-docx://`。
+- 通过格式无关的 `extract_media` 按安全资源 URI 提取单个内嵌媒体；当前实现 `spoor://{pdf,docx,pptx}/...`。
 - 不依赖 `clap`、glob、stdin/stdout/stderr、进程退出和网络请求。
 - 不依赖 Python，也不把 CLI 字符串错误暴露为 API 契约。
 - 保持每次调用独立，不使用可变全局状态，便于并发和测试。
@@ -83,7 +83,7 @@ pub fn extract_media(
 
 CLI 已实现的稳定错误码（core 化时原样继承）：
 
-- `image_only_pdf`
+- `pdf_no_extractable_content`
 - `parse_budget_exceeded`
 - `unsupported_format`
 - `encrypted_pdf`

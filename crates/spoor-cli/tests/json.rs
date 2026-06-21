@@ -231,7 +231,7 @@ fn prose_format_with_explicit_json_errors() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("csv 和 xlsx"),
+        stderr.contains("CSV 和 XLSX"),
         "stderr should mention csv/xlsx-only json support; got: {stderr}"
     );
 }
@@ -503,8 +503,8 @@ fn total_output_limit_keeps_json_valid_and_marks_truncation() {
             "json",
             "--limit",
             "2000",
-            "--max-output-bytes",
-            "2048",
+            "--max-output-kib",
+            "2",
             &fixture_path("csv/10_large.csv"),
         ])
         .output()
@@ -520,11 +520,11 @@ fn total_output_limit_keeps_json_valid_and_marks_truncation() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|warning| warning.as_str().unwrap().contains("--max-output-bytes"))
+            .any(|warning| warning.as_str().unwrap().contains("--max-output-kib"))
     );
 
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("warning: spoor 输出"));
+    assert!(stderr.contains("warning: 输出在"));
 }
 
 #[test]

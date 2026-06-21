@@ -127,7 +127,9 @@ def extract_media(
     """Extract one safe embedded media resource referenced by a URI spoor emitted.
 
     ``resource`` is a safe URI from the parsed output, e.g.
-    ``spoor-docx://word/media/image1.png`` or ``spoor-pdf://obj/{id}/{gen}``.
+    ``spoor://docx/part/word/media/image1.png``,
+    ``spoor://pptx/part/ppt/media/imageN.png``, or
+    ``spoor://pdf/obj/{id}/{gen}``.
     Returns the raw bytes; spoor does not decode or interpret them.
     """
     try:

@@ -19,8 +19,8 @@ const mediaGrid = $('#media-grid');
 const mediaHint = $('#media-hint');
 const modeButtons = [...document.querySelectorAll('.mode')];
 
-// 占位符正则：![DOCX image N](spoor-docx://word/media/imageN.png)
-const PLACEHOLDER = /spoor-docx:\/\/[^\s)"']+/g;
+// 占位符正则：![DOCX image N](spoor://docx/part/word/media/imageN.png)
+const PLACEHOLDER = /spoor:\/\/docx\/part\/[^\s)"']+/g;
 
 let mode = 'local';
 let parsedText = '';
@@ -167,7 +167,7 @@ function resetMedia() {
   mediaHint.textContent = '';
 }
 
-// 扫出 markdown 里的 spoor-docx:// 占位符，去重后渲染为缩略图按钮，
+// 扫出 markdown 里的 spoor://docx/part/ 占位符，去重后渲染为缩略图按钮，
 // 点击时才调用 extract_media 取该图字节——懒取、单资源，与 Agent 用法一致。
 function renderMedia(markdown) {
   const uris = [...new Set(markdown.match(PLACEHOLDER) ?? [])];
@@ -186,7 +186,7 @@ function createMediaCard(uri) {
   card.className = 'media-card';
   const label = document.createElement('span');
   label.className = 'media-uri';
-  label.textContent = uri.replace('spoor-docx://word/media/', '');
+  label.textContent = uri.replace('spoor://docx/part/word/media/', '');
   const slot = document.createElement('span');
   slot.className = 'media-slot';
   slot.textContent = '点击提取';

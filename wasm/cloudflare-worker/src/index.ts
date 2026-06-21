@@ -18,7 +18,7 @@ export default {
         formats: ['docx', 'xlsx', 'pdf', 'pptx', 'html', 'epub', 'ipynb', 'markdown', 'text', 'csv'],
         endpoints: {
           'POST /': 'POST 原始文档字节解析为结构化结果',
-          'POST /extract?uri=spoor-docx://word/media/*': 'POST 原始 DOCX 字节，按占位符返回单张内嵌图片字节',
+          'POST /extract?uri=spoor://{docx,pptx}/part/{root}/media/*': 'POST 原始 DOCX/PPTX 字节，按占位符返回单张内嵌图片字节',
         },
       }, { headers: responseHeaders() });
     }
@@ -54,7 +54,7 @@ export default {
       const uri = url.searchParams.get('uri');
       if (!uri) {
         return Response.json(
-          { code: 'missing_uri', message: '缺少 uri 查询参数（spoor-docx://word/media/*）。' },
+          { code: 'missing_uri', message: '缺少 uri 查询参数（spoor://{docx,pptx}/part/{root}/media/*）。' },
           { status: 400, headers: responseHeaders() },
         );
       }

@@ -43,9 +43,9 @@ fn no_text_and_no_images_returns_structured_error() {
         value,
         json!({
             "is_error": true,
-            "code": "image_only_pdf",
-            "reason": "纯图片 PDF（无文本层）",
-            "hint": "该 PDF 没有文本层，需要 OCR，但 spoor 不执行 OCR。",
+            "code": "pdf_no_extractable_content",
+            "reason": "PDF 无可提取内容",
+            "hint": "使用 VLM 处理。",
             "recoverable": true,
             "stage": "parse"
         })

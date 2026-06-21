@@ -46,5 +46,5 @@ images) to a `Buffer` for handing to an external vision model:
 ```js
 const { extractMedia } = require('@harrisonwang/spoor');
 
-const image = extractMedia(data, 'spoor-docx://word/media/image1.png', { sourceName: 'report.docx' });
+const image = extractMedia(data, 'spoor://docx/part/word/media/image1.png', { sourceName: 'report.docx' });
 ```

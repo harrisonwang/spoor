@@ -58,7 +58,7 @@ pub fn extract(
     // skeleton plus image markers/handles and let the agent read them with a
     // vision model — hard-failing here would block exactly that handoff.
     if !layout.has_text() && !layout.has_images() {
-        return Err(StructuredError::image_only_pdf().into());
+        return Err(StructuredError::pdf_no_extractable_content().into());
     }
 
     let (markdown, provenance) = render_layout(&layout);
@@ -68,9 +68,7 @@ pub fn extract(
     for number in reordered_pages {
         warnings.push(SpoorWarning::at_page(
             WarningCode::PdfMultiColumnReadingOrder,
-            format!(
-                "第 {number} 页检测到多栏版面，已按列重排阅读顺序；若顺序异常可回退原始 PDF 文本顺序。"
-            ),
+            format!("第 {number} 页为多栏版面，已按栏重排顺序；若顺序异常可回退原始文本。"),
             number,
         ));
     }
@@ -145,7 +143,7 @@ fn render_image_marker(
     if image.extractable {
         // A real handle: `--extract` returns the JPEG/JPEG2000 bytes.
         markdown.push_str(&format!(
-            "![PDF image {image_number} (p{page_number})](spoor-pdf://obj/{}/{})",
+            "![PDF image {image_number} (p{page_number})](spoor://pdf/obj/{}/{})",
             image.id, image.generation
         ));
     } else {
@@ -170,17 +168,13 @@ fn layout_warnings(layout: &PdfLayoutDocument) -> Vec<SpoorWarning> {
         if page.text().trim().is_empty() {
             warnings.push(SpoorWarning::at_page(
                 WarningCode::PdfPageNoTextLayer,
-                format!(
-                    "第 {number} 页没有可提取文本层；输出保留了页边界，但 Agent 不应把该页视为完整内容。"
-                ),
+                format!("第 {number} 页无文本层，输出为空；需 VLM 处理。"),
                 number,
             ));
         } else if suspicious_text_layer(page.text()) {
             warnings.push(SpoorWarning::at_page(
                 WarningCode::PdfPageSuspiciousTextLayer,
-                format!(
-                    "第 {number} 页文本层包含替换字符、控制字符或重复 glyph 占位符；Agent 应避免直接信任该页文本，并按需转交外部 OCR/VLM。"
-                ),
+                format!("第 {number} 页文本层含乱码或占位符，可能不可靠；建议用 VLM 交叉验证。"),
                 number,
             ));
         }
@@ -189,16 +183,14 @@ fn layout_warnings(layout: &PdfLayoutDocument) -> Vec<SpoorWarning> {
             let total = page.images.len();
             let extractable = page.images.iter().filter(|image| image.extractable).count();
             let message = if extractable == total {
-                format!(
-                    "第 {number} 页含 {total} 张图片，未进入文本；已用 spoor-pdf:// 标注，Agent 可用 --extract 取出交给视觉模型。"
-                )
+                format!("第 {number} 页有 {total} 张图片未进入文本；可用 --extract 取出交 VLM。")
             } else if extractable == 0 {
                 format!(
-                    "第 {number} 页含 {total} 张图片，未进入文本，且编码 spoor 不能直出；请在外部渲染该页后交给视觉模型。"
+                    "第 {number} 页有 {total} 张图片未进入文本，编码无法直接导出；需外部渲染后交 VLM。"
                 )
             } else {
                 format!(
-                    "第 {number} 页含 {total} 张图片，未进入文本；其中 {extractable} 张可用 --extract 取出（已标 spoor-pdf://），其余需外部渲染。"
+                    "第 {number} 页有 {total} 张图片未进入文本：{extractable} 张可 --extract 取出，其余需外部渲染。"
                 )
             };
             warnings.push(SpoorWarning::at_page(
@@ -272,7 +264,7 @@ mod tests {
         ]];
 
         let markdown = render_pages(&pages, &images);
-        assert!(markdown.contains("![PDF image 1 (p1)](spoor-pdf://obj/7/0)"));
+        assert!(markdown.contains("![PDF image 1 (p1)](spoor://pdf/obj/7/0)"));
         assert!(markdown.contains("[PDF image 2 (p1)：内嵌图，编码需外部渲染]"));
     }
 

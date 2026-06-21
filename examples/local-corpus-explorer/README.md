@@ -9,7 +9,7 @@
 - 单文件失败不阻断整个批次，并展示稳定错误码；
 - 展示并导出带 page/slide 位置的解析完整性 warnings；
 - 跨文档本地全文检索；
-- DOCX 内嵌图片：查看器把 `spoor-docx://` 占位符列成缩略图，点击才调用
+- DOCX 内嵌图片：查看器把 `spoor://docx/part/` 占位符列成缩略图，点击才调用
   `extract_media` 按需提取单张图片字节并内联渲染（需 `@harrisonwang/spoor-wasm >= 0.8.6`）；
 - 确定性的 JSONL chunk 与 manifest 导出，便于接入后续索引流水线。
 

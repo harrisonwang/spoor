@@ -60,8 +60,9 @@ cat data.csv | spoor --format csv -
 # glob
 spoor "docs/*.pdf"
 
-# 按正文占位符提取单个 DOCX 图片
-spoor document.docx --extract spoor-docx://word/media/image1.png > image.png
+# 按正文占位符提取单个 DOCX/PPTX 图片
+spoor document.docx --extract spoor://docx/part/word/media/image1.png > image.png
+spoor deck.pptx     --extract spoor://pptx/part/ppt/media/image1.png  > image.png
 
 # 直接喂给 LLM
 spoor report.pdf | llm "总结风险和行动项"
@@ -69,10 +70,12 @@ spoor report.pdf | llm "总结风险和行动项"
 
 输出模式按格式自动分派，`-m` 可显式覆盖。表格型 JSON 默认返回前 100 行预览，通过 `--rows` / `--columns` / `--limit` / `--offset` 收窄。详见 `spoor --help`。
 
-DOCX 内嵌栅格图片会在原始正文位置输出安全占位符，例如
-`![DOCX image 1](spoor-docx://word/media/image1.png)`。Agent 可使用
-`spoor document.docx --extract spoor-docx://word/media/image1.png > image.png`
-提取相关图片并交给外部 VLM；`--extract` 只接受 spoor 输出的安全 DOCX 图片 URI，
+DOCX、PPTX 内嵌栅格图片会在原始正文位置输出统一的安全占位符，例如
+`![DOCX image 1](spoor://docx/part/word/media/image1.png)` 或
+`![PPTX image 2 (slide 1)](spoor://pptx/part/ppt/media/image1.png)`；PDF 同理用
+`![PDF image 1 (p1)](spoor://pdf/obj/{id}/{gen})`。Agent 可使用
+`spoor document.docx --extract spoor://docx/part/word/media/image1.png > image.png`
+提取相关图片并交给外部 VLM；`--extract` 只接受 spoor 输出的安全 URI，
 只支持单个输入和单个资源。spoor 不解码或理解图片。
 
 ## 嵌入
@@ -86,7 +89,8 @@ let result = spoor_core::parse(&request)?;
 ```
 
 需要按解析结果中的安全 URI 提取单个内嵌媒体时，使用格式无关的
-`spoor_core::extract_media(&request, uri)`；当前支持 `spoor-docx://` 与 `spoor-pdf://`。
+`spoor_core::extract_media(&request, uri)`；当前支持 `spoor://docx/part/`、
+`spoor://pptx/part/` 与 `spoor://pdf/obj/`。
 
 Agent 应优先调用 `parse` 并处理 `warnings[]`。只需要 Markdown 的兼容场景可调用
 `parse_document`；需要强制文档输出并保留 warnings 时使用 `parse_document_result`。
@@ -137,7 +141,7 @@ WASM 包默认包含全部重点格式；
 
 | code | 含义 |
 | --- | --- |
-| `image_only_pdf` | PDF 无文本层，需要外部 OCR |
+| `pdf_no_extractable_content` | PDF 无文本层也无可提取图片，无内容可抽取 |
 | `parse_budget_exceeded` | 输入、解压或结果超过解析预算 |
 | `work_budget_exceeded` | 解析工作量（如 PDF 操作数）超过 `max_work_units` 上限 |
 | `unsupported_format` | 无法识别或不支持格式 |
@@ -154,7 +158,7 @@ WASM 包默认包含全部重点格式；
 | `pdf_page_suspicious_text_layer` | 某页文本层包含明显可疑字符或 glyph 占位符 |
 | `pdf_multi_column_reading_order` | 某页检测到多栏版面，已按列重排阅读顺序（几何推断，可能不完美） |
 | `merged_table_structure_not_preserved` | DOCX/PPTX 合并单元格未被 GFM 表格完整保留 |
-| `embedded_visuals_omitted` | DOCX/PPTX 中存在尚未被理解或未进入文本输出的视觉对象；DOCX 内嵌栅格图片可能已有 `spoor-docx://` 占位符 |
+| `embedded_visuals_omitted` | DOCX/PPTX 中存在尚未被理解或未进入文本输出的视觉对象；DOCX/PPTX 内嵌栅格图片可能已有 `spoor://docx/part/` / `spoor://pptx/part/` 占位符，PDF 同理用 `spoor://pdf/obj/` |
 
 warning 可带 `location: {kind: "page" | "slide", number}`。CLI 会同时在 stderr 和
 Markdown stdout 尾部显示这些 warning，避免只读 stdout 的 Agent 静默忽略。

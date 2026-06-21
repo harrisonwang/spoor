@@ -147,10 +147,23 @@ fn extract_media_uses_safe_format_specific_resource_uris() {
     let mut request = ParseRequest::new(bytes);
     request.source_name = Some("images.docx");
 
-    let image = extract_media(&request, "spoor-docx://word/media/image1.png").unwrap();
+    let image = extract_media(&request, "spoor://docx/part/word/media/image1.png").unwrap();
     assert_eq!(image, b"first-image");
 
+    // The retired per-format scheme must no longer resolve.
+    let error = extract_media(&request, "spoor-docx://word/media/image1.png").unwrap_err();
+    assert_eq!(error.code, ErrorCode::ParseFailed);
+
+    // Bare paths without the scheme are still rejected.
     let error = extract_media(&request, "word/media/image1.png").unwrap_err();
+    assert_eq!(error.code, ErrorCode::ParseFailed);
+
+    // Cross-container forgery: a DOCX is fed a PPTX-shaped URI.
+    let error = extract_media(&request, "spoor://pptx/part/ppt/media/image1.png").unwrap_err();
+    assert_eq!(error.code, ErrorCode::ParseFailed);
+
+    // Same scheme but wrong opc-root for the detected format is rejected.
+    let error = extract_media(&request, "spoor://docx/part/ppt/media/image1.png").unwrap_err();
     assert_eq!(error.code, ErrorCode::ParseFailed);
 }
 

@@ -102,7 +102,7 @@ test('extract_media returns safe docx resource bytes', () => {
     __dirname,
     '../../../crates/spoor-cli/tests/fixtures/docx/16_image_placeholders.docx',
   ));
-  const image = extractMedia(docx, 'spoor-docx://word/media/image1.png', { sourceName: 'images.docx' });
+  const image = extractMedia(docx, 'spoor://docx/part/word/media/image1.png', { sourceName: 'images.docx' });
   assert.equal(Buffer.from(image).toString(), 'first-image');
 
   assert.throws(

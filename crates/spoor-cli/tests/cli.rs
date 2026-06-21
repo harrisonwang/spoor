@@ -143,7 +143,11 @@ fn provenance_rejects_multiple_inputs() {
 fn extract_outputs_the_referenced_docx_media_bytes() {
     let source = fixture_path("docx/16_image_placeholders.docx");
     let output = spoor_bin()
-        .args([&source, "--extract", "spoor-docx://word/media/image1.png"])
+        .args([
+            &source,
+            "--extract",
+            "spoor://docx/part/word/media/image1.png",
+        ])
         .output()
         .expect("run spoor");
 
@@ -161,31 +165,97 @@ fn extract_outputs_the_referenced_docx_media_bytes() {
 }
 
 #[test]
+fn extract_outputs_the_referenced_pptx_media_bytes() {
+    let source = fixture_path("pptx/08_image_placeholders.pptx");
+    let output = spoor_bin()
+        .args([
+            &source,
+            "--extract",
+            "spoor://pptx/part/ppt/media/image1.png",
+        ])
+        .output()
+        .expect("run spoor");
+
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+
+    let mut archive = ZipArchive::new(File::open(source).unwrap()).unwrap();
+    let mut expected = Vec::new();
+    archive
+        .by_name("ppt/media/image1.png")
+        .unwrap()
+        .read_to_end(&mut expected)
+        .unwrap();
+    assert_eq!(output.stdout, expected);
+}
+
+#[test]
 fn extract_rejects_paths_that_were_not_emitted_as_safe_docx_uris() {
     let source = fixture_path("docx/16_image_placeholders.docx");
     for resource in [
+        // No scheme at all.
         "word/media/image1.png",
-        "spoor-docx://word/media/../evil.png",
-        "spoor-docx://ppt/media/image1.png",
+        // Retired per-format scheme.
+        "spoor-docx://word/media/image1.png",
+        // Path traversal inside the media filename.
+        "spoor://docx/part/word/media/../evil.png",
+        // Cross-container forgery: docx URI must not use a `ppt/` root.
+        "spoor://docx/part/ppt/media/image1.png",
+        // Format mismatch: PPTX-shaped URI fed to a DOCX input.
+        "spoor://pptx/part/ppt/media/image1.png",
     ] {
         let output = spoor_bin()
             .args([&source, "--extract", resource])
             .output()
             .expect("run spoor");
 
-        assert!(!output.status.success());
-        assert!(output.stdout.is_empty());
+        assert!(
+            !output.status.success(),
+            "unexpected success for {resource}"
+        );
+        assert!(output.stdout.is_empty(), "non-empty stdout for {resource}");
         let value: serde_json::Value =
             serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
-        assert_eq!(value["code"], "parse_failed");
+        assert_eq!(value["code"], "parse_failed", "for {resource}");
     }
 }
 
 #[test]
-fn extract_rejects_non_docx_and_multiple_inputs() {
+fn extract_rejects_paths_that_were_not_emitted_as_safe_pptx_uris() {
+    let source = fixture_path("pptx/08_image_placeholders.pptx");
+    for resource in [
+        // Cross-container forgery: pptx URI must not use a `word/` root.
+        "spoor://pptx/part/word/media/image1.png",
+        // Format mismatch: DOCX-shaped URI fed to a PPTX input.
+        "spoor://docx/part/word/media/image1.png",
+        // Path traversal.
+        "spoor://pptx/part/ppt/media/../evil.png",
+    ] {
+        let output = spoor_bin()
+            .args([&source, "--extract", resource])
+            .output()
+            .expect("run spoor");
+
+        assert!(
+            !output.status.success(),
+            "unexpected success for {resource}"
+        );
+        assert!(output.stdout.is_empty(), "non-empty stdout for {resource}");
+        let value: serde_json::Value =
+            serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
+        assert_eq!(value["code"], "parse_failed", "for {resource}");
+    }
+}
+
+#[test]
+fn extract_rejects_non_opc_and_multiple_inputs() {
     let text = fixture_path("plain/01_ascii.txt");
     let output = spoor_bin()
-        .args([&text, "--extract", "spoor-docx://word/media/image1.png"])
+        .args([
+            &text,
+            "--extract",
+            "spoor://docx/part/word/media/image1.png",
+        ])
         .output()
         .expect("run spoor");
     assert!(!output.status.success());
@@ -196,7 +266,9 @@ fn extract_rejects_non_docx_and_multiple_inputs() {
         value["reason"]
             .as_str()
             .unwrap()
-            .contains("当前仅支持 DOCX")
+            .contains("PDF、DOCX、PPTX"),
+        "got: {}",
+        value["reason"]
     );
 
     let docx = fixture_path("docx/16_image_placeholders.docx");
@@ -205,7 +277,7 @@ fn extract_rejects_non_docx_and_multiple_inputs() {
             &docx,
             &docx,
             "--extract",
-            "spoor-docx://word/media/image1.png",
+            "spoor://docx/part/word/media/image1.png",
         ])
         .output()
         .expect("run spoor");
@@ -246,12 +318,9 @@ fn pdf_without_text_or_images_emits_machine_readable_error() {
     let value: serde_json::Value =
         serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
     assert_eq!(value["is_error"], true);
-    assert_eq!(value["code"], "image_only_pdf");
-    assert_eq!(value["reason"], "纯图片 PDF（无文本层）");
-    assert_eq!(
-        value["hint"],
-        "该 PDF 没有文本层，需要 OCR，但 spoor 不执行 OCR。"
-    );
+    assert_eq!(value["code"], "pdf_no_extractable_content");
+    assert_eq!(value["reason"], "PDF 无可提取内容");
+    assert_eq!(value["hint"], "使用 VLM 处理。");
     assert_eq!(value["recoverable"], true);
 }
 
@@ -267,7 +336,7 @@ fn document_integrity_warnings_are_visible_in_stdout_and_stderr() {
     assert!(stdout.contains(r#""kind":"page","number":2"#));
 
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("warning: 解析结果不完整"));
+    assert!(stderr.contains("warning: 输出不完整"));
     assert!(stderr.contains("pdf_page_no_text_layer"));
 }
 
@@ -331,7 +400,7 @@ fn empty_extraction_emits_inband_placeholder() {
     let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
     assert!(stdout.contains("> [!NOTE]"));
     assert!(stdout.contains("未从"));
-    assert!(stdout.contains("format=text"));
+    assert!(stdout.contains("格式 text"));
     assert!(stdout.contains("empty.txt"));
 }
 
@@ -385,7 +454,7 @@ fn partial_failure_still_outputs_successes_in_md() {
     // The skipped input must be visible in stdout too (agents often only
     // read stdout), mirroring the JSON envelope's in-band warnings[].
     assert!(stdout.contains("> [!WARNING]"));
-    assert!(stdout.contains("已跳过 1 个"));
+    assert!(stdout.contains("1 个输入解析失败"));
     assert!(stdout.contains("does_not_exist.txt"));
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
     assert!(stderr.contains("warning: 已跳过"));
@@ -448,8 +517,8 @@ fn markdown_total_output_limit_is_global_and_visible() {
 
     let output = spoor_bin()
         .args([
-            "--max-output-bytes",
-            "1024",
+            "--max-output-kib",
+            "1",
             &first.to_string_lossy(),
             &second.to_string_lossy(),
         ])
@@ -463,8 +532,8 @@ fn markdown_total_output_limit_is_global_and_visible() {
     assert!(stdout.contains("内容不完整"));
 
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("warning: spoor 输出"));
-    assert!(stderr.contains("--max-output-bytes"));
+    assert!(stderr.contains("warning: 输出在"));
+    assert!(stderr.contains("--max-output-kib"));
 }
 
 #[test]
@@ -485,36 +554,31 @@ fn markdown_uses_default_total_output_limit() {
 fn max_output_bytes_rejects_too_small_budget() {
     let source = fixture_path("plain/01_ascii.txt");
     let output = spoor_bin()
-        .args(["--max-output-bytes", "100", &source])
+        .args(["--max-output-kib", "0", &source])
         .output()
         .expect("run spoor");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("--max-output-bytes 不能小于 1024"));
+    assert!(stderr.contains("--max-output-kib 不能小于 1"));
 }
 
 #[test]
 fn local_file_over_parse_budget_emits_structured_error() {
     let dir = TestDir::new("local_file_over_parse_budget_emits_structured_error");
     let source = dir.path().join("large.txt");
-    std::fs::write(&source, vec![b'x'; 2048]).unwrap();
+    std::fs::write(&source, vec![b'x'; 2 * 1024 * 1024]).unwrap();
 
     let output = spoor_bin()
-        .args(["--max-parse-bytes", "1024", &source.to_string_lossy()])
+        .args(["--max-parse-mib", "1", &source.to_string_lossy()])
         .output()
         .expect("run spoor");
 
     assert!(!output.status.success());
     let value: serde_json::Value =
         serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
-    assert_eq!(value["reason"], "超出解析预算");
-    assert!(
-        value["hint"]
-            .as_str()
-            .unwrap()
-            .contains("--max-parse-bytes")
-    );
+    assert_eq!(value["reason"], "超出解析上限");
+    assert!(value["hint"].as_str().unwrap().contains("--max-parse-mib"));
     assert_eq!(value["recoverable"], true);
 }
 
@@ -523,13 +587,13 @@ fn multiple_inputs_share_parse_budget() {
     let dir = TestDir::new("multiple_inputs_share_parse_budget");
     let first = dir.path().join("a.txt");
     let second = dir.path().join("b.txt");
-    std::fs::write(&first, vec![b'a'; 700]).unwrap();
-    std::fs::write(&second, vec![b'b'; 700]).unwrap();
+    std::fs::write(&first, vec![b'a'; 600 * 1024]).unwrap();
+    std::fs::write(&second, vec![b'b'; 600 * 1024]).unwrap();
 
     let output = spoor_bin()
         .args([
-            "--max-parse-bytes",
-            "1024",
+            "--max-parse-mib",
+            "1",
             &first.to_string_lossy(),
             &second.to_string_lossy(),
         ])
@@ -541,14 +605,14 @@ fn multiple_inputs_share_parse_budget() {
     assert!(stdout.contains(&"a".repeat(100)));
     assert!(!stdout.contains(&"b".repeat(100)));
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("超出解析预算"));
+    assert!(stderr.contains("超出解析上限"));
 }
 
 #[test]
 fn extracted_text_expansion_respects_parse_budget() {
     let dir = TestDir::new("extracted_text_expansion_respects_parse_budget");
     let source = dir.path().join("wide.csv");
-    std::fs::write(&source, format!("{}\n", vec!["x"; 400].join(","))).unwrap();
+    std::fs::write(&source, format!("{}\n", vec!["x"; 300_000].join(","))).unwrap();
 
     let output = spoor_bin()
         .args([
@@ -556,8 +620,8 @@ fn extracted_text_expansion_respects_parse_budget() {
             "csv",
             "--mode",
             "md",
-            "--max-parse-bytes",
-            "1024",
+            "--max-parse-mib",
+            "1",
             &source.to_string_lossy(),
         ])
         .output()
@@ -566,7 +630,7 @@ fn extracted_text_expansion_respects_parse_budget() {
     assert!(!output.status.success());
     let value: serde_json::Value =
         serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
-    assert_eq!(value["reason"], "超出解析预算");
+    assert_eq!(value["reason"], "超出解析上限");
     assert!(
         value["hint"]
             .as_str()
@@ -579,13 +643,13 @@ fn extracted_text_expansion_respects_parse_budget() {
 fn max_parse_bytes_rejects_too_small_budget() {
     let source = fixture_path("plain/01_ascii.txt");
     let output = spoor_bin()
-        .args(["--max-parse-bytes", "100", &source])
+        .args(["--max-parse-mib", "0", &source])
         .output()
         .expect("run spoor");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("--max-parse-bytes 不能小于 1024"));
+    assert!(stderr.contains("--max-parse-mib 不能小于 1"));
 }
 
 fn run_with_stdin(args: &[&str], input: &[u8]) -> std::process::Output {
@@ -599,12 +663,15 @@ fn run_with_stdin(args: &[&str], input: &[u8]) -> std::process::Output {
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn spoor");
-    child
-        .stdin
-        .take()
-        .expect("child stdin")
-        .write_all(input)
-        .expect("write to child stdin");
+    if let Err(error) = child.stdin.take().expect("child stdin").write_all(input) {
+        // The child can close stdin early (e.g. once the parse budget is
+        // exceeded) before we finish writing; treat a broken pipe as expected.
+        assert_eq!(
+            error.kind(),
+            std::io::ErrorKind::BrokenPipe,
+            "write to child stdin: {error}"
+        );
+    }
     child.wait_with_output().expect("wait for spoor")
 }
 
@@ -620,14 +687,14 @@ fn stdin_dash_reads_text_as_markdown() {
 #[test]
 fn stdin_over_parse_budget_emits_structured_error() {
     let output = run_with_stdin(
-        &["--format", "text", "--max-parse-bytes", "1024", "-"],
-        &vec![b'x'; 2048],
+        &["--format", "text", "--max-parse-mib", "1", "-"],
+        &vec![b'x'; 2 * 1024 * 1024],
     );
 
     assert!(!output.status.success());
     let value: serde_json::Value =
         serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
-    assert_eq!(value["reason"], "超出解析预算");
+    assert_eq!(value["reason"], "超出解析上限");
 }
 
 #[test]

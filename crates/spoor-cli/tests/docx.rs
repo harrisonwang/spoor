@@ -145,10 +145,18 @@ fn image_placeholders_follow_document_order_and_only_reference_safe_entries() {
     let out = extract_fixture("docx/16_image_placeholders.docx", Format::Docx);
     assert_snapshot!(out);
 
-    assert_eq!(out.matches("spoor-docx://word/media/image1.png").count(), 2);
-    assert_eq!(out.matches("spoor-docx://word/media/image2.png").count(), 1);
     assert_eq!(
-        out.matches("spoor-docx://word/media/fallback-only.png")
+        out.matches("spoor://docx/part/word/media/image1.png")
+            .count(),
+        2
+    );
+    assert_eq!(
+        out.matches("spoor://docx/part/word/media/image2.png")
+            .count(),
+        1
+    );
+    assert_eq!(
+        out.matches("spoor://docx/part/word/media/fallback-only.png")
             .count(),
         1
     );

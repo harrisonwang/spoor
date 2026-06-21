@@ -2,13 +2,13 @@ import { extractMedia } from '../../src/edge-spoor';
 
 const MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 
-// POST /api/extract?uri=spoor-docx://word/media/*
+// POST /api/extract?uri=spoor://docx/part/word/media/*
 // body 为原始 DOCX 字节，按占位符返回单张内嵌图片的原始字节（懒取、单资源）。
 export const onRequestPost = async (context: { request: Request }): Promise<Response> => {
   const { request } = context;
   const uri = new URL(request.url).searchParams.get('uri');
   if (!uri) {
-    return errorResponse('missing_uri', '缺少 uri 查询参数（spoor-docx://word/media/*）。', 400);
+    return errorResponse('missing_uri', '缺少 uri 查询参数（spoor://docx/part/word/media/*）。', 400);
   }
 
   const declaredLength = Number(request.headers.get('content-length') ?? 0);
