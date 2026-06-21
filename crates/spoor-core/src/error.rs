@@ -143,7 +143,7 @@ impl SpoorError {
         Self::new(
             ErrorCode::InvalidContainer,
             format!("无效的 {label} 文件"),
-            format!("确认文件完整；若扩展名不匹配，手动指定格式。"),
+            "确认文件完整；若扩展名不匹配，手动指定格式。",
             true,
             ParseStage::Parse,
         )

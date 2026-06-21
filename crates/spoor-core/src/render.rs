@@ -118,7 +118,7 @@ pub fn render_json_limited(output: &JsonOutput, max_output_bytes: usize) -> Limi
         table.rows.truncate(keep);
         table.truncated = true;
         let table_warning =
-            format!("部分行因输出上限被省略。使用 --limit 翻页或 --rows 指定区间以获取完整数据。");
+            "部分行因输出上限被省略。使用 --limit 翻页或 --rows 指定区间以获取完整数据。".to_string();
         if !table.warnings.contains(&table_warning) {
             table.warnings.push(table_warning);
         }

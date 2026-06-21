@@ -44,48 +44,63 @@
 当前 CLI 是一等入口。`spoor -h` 应保持短、稳定、适合复制到 README：
 
 ```text
-离线、单二进制、CLI-first 的 LLM-friendly 文档预处理工具
+将文档（DOCX/PDF）、表格（XLSX/CSV）、网页和幻灯片（PPTX）转成 LLM 可直接消费的文本
 
 Usage:
   spoor [OPTIONS] <input>...
 
 Arguments:
-  <input>...  文件路径、URL、本地 glob，或 - 表示标准输入；可传多个，URL 与 - 不参与 glob 展开。
+  <input>...  文件路径、URL、glob，或 - 表示 stdin。可传多个。URL 与 - 不参与 glob 展开。
 
 Options:
-      --format <format>    覆盖自动 format 检测（默认按 magic-byte / 扩展名推断）。 [possible values: html, markdown, pdf, docx, xlsx, pptx, csv, ipynb, epub, text]
-  -m, --mode <mode>        覆盖默认输出模式；表格型（CSV/XLSX）默认 json、其他默认 md。json 仅表格型可用，文档型只能 md。
-      --sheet <name>       XLSX 限定 sheet；找不到时报错并列出可用 sheets。CSV 无此概念，自动忽略。
-      --rows <first:last>  限定数据行的 Excel 行号区间，例如 `5:104`（含两端）。与 --limit/--offset 互斥。
-      --columns <columns>  按列名筛选，逗号分隔；找不到时报错并列出可用列。
-      --limit <n>          每个 table 最多返回多少数据行；默认 100。
-      --offset <n>         跳过前 N 条数据行再应用 --limit；默认 0。
+      --format <format>    手动指定输入格式。默认自动检测。 [possible values: pdf, docx, xlsx, csv, pptx, epub, ipynb, html, markdown, text]
+  -m, --mode <mode>        输出模式。表格默认 json、文档默认 md；json 仅表格可用。
+      --pages <first:last> 仅提取 PDF 指定页，如 `1:3`。
+      --sheet <name>       指定 XLSX 工作表名。CSV 忽略此选项。
+      --rows <first:last>  指定行号范围，如 `5:104`。与 --limit/--offset 互斥。
+      --columns <columns>  按列名筛选，逗号分隔。
+      --limit <n>          每表最多返回行数，默认 100。
+      --offset <n>         跳过前 N 行，默认 0。
       --max-output-kib <kib>
-                           整次命令 stdout 的上限，单位 KiB；默认 256。
+                           stdout 上限，单位 KiB，默认 256。
       --max-parse-mib <mib>
-                           解析输入、中间文本和容器解压内容的共享上限，单位 MiB；默认 64。
+                           解析预算上限，单位 MiB，默认 64。
+      --max-work-units <n> 解析运算量上限，默认不限。不可信输入建议配合进程隔离。
+      --provenance <level> 输出原文定位映射。当前支持 page（PDF 页级）。仅限单文件输入。输出为 JSON。 [possible values: page]
+      --extract <uri>      提取内嵌媒体到 stdout。接受 spoor://... URI。
   -h, --help               显示帮助。
   -V, --version            显示版本。
 
-For tables (CSV/XLSX), the recommended pattern is:
+Common Patterns
 
-  spoor file.xlsx                              # see structure + preview
-  spoor file.xlsx --sheet L1 --rows 5:104      # read a slice
-  spoor file.xlsx --columns 分类,技能          # filter columns
+  Tables (CSV/XLSX)
+    spoor data.xlsx                               查看结构
+    spoor data.xlsx --sheet Sheet1 --rows 5:104   按行切片
+    spoor data.xlsx --columns 名称,数量           按列筛选
 
-spoor bounds JSON previews by default (first 100 data rows per table) and
-caps total CLI output at 256 KiB. Use --limit/--rows to narrow tables or
---max-output-kib to raise the total output cap. Parsing uses a shared
-64 MiB data-volume budget by default; raise it with --max-parse-mib.
+  Documents (DOCX/PDF)
+    spoor report.docx                       提取文本
+    spoor report.pdf --pages 1:3            仅提取前 3 页
 
-Examples:
-  spoor report.pdf
-  spoor data.xlsx
+  Pipes
+    cat data.csv | spoor --format csv -     从 stdin 读取
+    spoor report.pdf | llm "总结"           对接 LLM
+
+  Media Extraction
+    spoor doc.docx --extract spoor://docx/part/word/media/img.png > img.png
+
+Defaults
+  - 每表默认 100 行（--limit 翻页，--rows 定区间）
+  - stdout 上限 256 KiB（--max-output-kib 调高）
+  - 解析预算 64 MiB（--max-parse-mib 调高）
+
+Examples
   spoor data.csv | jq '.tables[]'
-  cat data.csv | spoor --format csv -
-  spoor https://example.com/article
+  spoor https://example.com/report
   spoor "*.pdf"
-  spoor report.pdf | llm "Summarize risks and action items"
+  spoor report.pdf --provenance page
+  spoor report.pdf --pages 1:3 --mode json
+  spoor data.xlsx --sheet Sheet1 --limit 50 --offset 100
 ```
 
 CLI 行为约定：
