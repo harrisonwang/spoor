@@ -524,7 +524,7 @@ fn total_output_limit_keeps_json_valid_and_marks_truncation() {
     );
 
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("warning: spoor 输出"));
+    assert!(stderr.contains("warning: 输出在"));
 }
 
 #[test]

@@ -39,7 +39,7 @@ pub fn default_mode_for(formats: &[Format]) -> OutputMode {
 pub fn render_documents(documents: &[ExtractedDocument], mode: OutputMode) -> Result<String> {
     match mode {
         OutputMode::Md => Ok(markdown::render(documents)),
-        OutputMode::Json => Err(anyhow!("--mode json 使用表格原生抽取，目前仅支持 csv/xlsx")),
+        OutputMode::Json => Err(anyhow!("--mode json 仅支持 csv 和 xlsx 表格提取")),
     }
 }
 
@@ -117,9 +117,8 @@ pub fn render_json_limited(output: &JsonOutput, max_output_bytes: usize) -> Limi
         let keep = table.rows.len() / 2;
         table.rows.truncate(keep);
         table.truncated = true;
-        let table_warning = format!(
-            "为满足 {max_output_bytes} 字节的总输出上限，部分行已省略；row_range 描述的是总输出截断前的选择范围"
-        );
+        let table_warning =
+            format!("部分行因输出上限被省略。使用 --limit 翻页或 --rows 指定区间以获取完整数据。");
         if !table.warnings.contains(&table_warning) {
             table.warnings.push(table_warning);
         }
@@ -134,7 +133,8 @@ pub fn render_json_limited(output: &JsonOutput, max_output_bytes: usize) -> Limi
 
 fn output_limit_warning(max_output_bytes: usize) -> String {
     format!(
-        "spoor 输出在 {max_output_bytes} 字节的总上限处被截断。内容不完整；请缩小输入范围，或用 --max-output-bytes <n> 调高上限。"
+        "输出在 {} 字节处截断，内容不完整。可缩减范围（如 --pages、--rows），或调高 --max-output-bytes。",
+        max_output_bytes
     )
 }
 
@@ -179,7 +179,7 @@ pub mod markdown {
         // collapse into the same silent empty stdout + exit 0.
         if document.markdown.trim().is_empty() {
             out.push_str(&format!(
-                "> [!NOTE]\n> spoor：未从 {} 抽取到文本内容（format={}，正文为空）。\n",
+                "> [!NOTE]\n> 未从 {} 提取到文本（格式 {}，正文为空）。\n",
                 markdown_heading_text(&document.source),
                 document.format
             ));

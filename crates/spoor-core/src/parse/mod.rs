@@ -101,7 +101,7 @@ pub fn extract_table_entries(
         Format::Csv => extract_csv_tables(source, source_label, filter, max_parse_bytes),
         Format::Xlsx => extract_xlsx_tables(source, source_label, filter, max_parse_bytes),
         _ => Err(anyhow!(
-            "--mode json 目前仅支持 CSV 和 XLSX；当前格式为 {format}，请改用 --mode md 输出 Markdown。"
+            "--mode json 仅支持 CSV 和 XLSX，当前格式为 {format}；请改用 --mode md。"
         )),
     }
 }

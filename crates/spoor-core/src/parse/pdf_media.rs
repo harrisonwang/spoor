@@ -52,9 +52,9 @@ impl ImageExtractError {
             Self::Unreadable => "无法解析该 PDF。".to_string(),
             Self::NotFound => "spoor://pdf/obj/ 指向的对象不存在。".to_string(),
             Self::NotAnImage => "spoor://pdf/obj/ 指向的对象不是图片。".to_string(),
-            Self::UnsupportedEncoding(detail) => format!(
-                "该图片的编码或色彩空间（{detail}）spoor 暂时无法直接导出；请在外部渲染该页后交给视觉模型。"
-            ),
+            Self::UnsupportedEncoding(detail) => {
+                format!("该图片编码或色彩空间（{detail}）无法直接导出；需外部渲染后交 VLM。")
+            }
             Self::TooLarge(needed) => format!(
                 "该图片解码后约 {needed} 字节，超过解析上限；可调高 --max-parse-bytes 后重试，或在外部渲染该页。"
             ),

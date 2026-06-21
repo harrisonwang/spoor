@@ -94,13 +94,13 @@ fn feature_warnings(features: DocumentFeatures) -> Vec<SpoorWarning> {
     if features.merged_table {
         warnings.push(SpoorWarning::new(
             WarningCode::MergedTableStructureNotPreserved,
-            "该 DOCX 的表格有合并单元格；Markdown 表格不保留跨行/跨列，Agent 不应把空白或重复单元格当作原始结构。",
+            "表格含合并单元格，Markdown 降级后跨行/跨列信息已丢失。",
         ));
     }
     if features.embedded_visuals {
         warnings.push(SpoorWarning::new(
             WarningCode::EmbeddedVisualsOmitted,
-            "该 DOCX 含图片、图表、绘图或嵌入对象：位图图片已用 spoor://docx/part/ 标注位置，可用 --extract 取出交给视觉模型；其余视觉内容可能未纳入。",
+            "含图片、图表或嵌入对象，文本输出可能不完整。位图已用 spoor://docx/part/ 标注，可用 --extract 取出。",
         ));
     }
     warnings

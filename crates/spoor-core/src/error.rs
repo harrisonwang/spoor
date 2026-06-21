@@ -1,16 +1,16 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-const PDF_NO_EXTRACTABLE_CONTENT_REASON: &str = "PDF 没有可提取的文本或图片";
-const PDF_NO_EXTRACTABLE_CONTENT_HINT: &str =
-    "该 PDF 既没有文本层，也没有可提取的图片，spoor 无法从中获取内容（可能是空白页、纯矢量图形或损坏文件）。";
+const PDF_NO_EXTRACTABLE_CONTENT_REASON: &str = "PDF 无可提取内容";
+const PDF_NO_EXTRACTABLE_CONTENT_HINT: &str = "使用 VLM 处理。";
 const PARSE_MEMORY_LIMIT_REASON: &str = "超出解析上限";
 const UNSUPPORTED_FORMAT_REASON: &str = "无法识别的格式";
-const UNSUPPORTED_FORMAT_HINT: &str = "无法识别该文件的格式，或暂不支持。可手动指定格式后重试。";
+const UNSUPPORTED_FORMAT_HINT: &str = "当前不支持该格式。";
 const ENCRYPTED_PDF_REASON: &str = "加密的 PDF";
-const ENCRYPTED_PDF_HINT: &str = "该 PDF 已加密，spoor 无法解密。请先去除密码再重试。";
-const LEGACY_OR_ENCRYPTED_OFFICE_REASON: &str = "无法读取的 Office 文档";
-const LEGACY_OR_ENCRYPTED_OFFICE_HINT: &str = "该文件是 OLE/CFB 容器（旧版或加密的 Office 文档），spoor 无法读取。若已加密，请先去除密码。";
+const ENCRYPTED_PDF_HINT: &str = "去除密码后重试。";
+const LEGACY_OR_ENCRYPTED_OFFICE_REASON: &str = "旧版或加密 Office 格式";
+const LEGACY_OR_ENCRYPTED_OFFICE_HINT: &str =
+    "若已加密，去除密码；旧版格式（.doc/.xls/.ppt）需另存为 docx/xlsx/pptx。";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -92,7 +92,7 @@ impl SpoorError {
             ErrorCode::ParseBudgetExceeded,
             PARSE_MEMORY_LIMIT_REASON,
             format!(
-                "解析在 {stage} 阶段超过 {max_bytes} 字节上限。可缩小输入，或调高 --max-parse-bytes。"
+                "解析在 {stage} 阶段超过 {max_bytes} 字节上限。可缩减输入范围，或调高 --max-parse-bytes。"
             ),
             true,
             ParseStage::Limits,
@@ -103,7 +103,7 @@ impl SpoorError {
         Self::new(
             ErrorCode::WorkBudgetExceeded,
             "超出运算量上限",
-            "解析运算量（如 PDF 操作数）超过 --max-work-units 上限。可调高上限；处理不可信文件时，建议再加进程隔离和超时。",
+            "调高 --max-work-units；处理不可信文件时配合进程隔离与超时。",
             true,
             ParseStage::Parse,
         )
@@ -143,9 +143,7 @@ impl SpoorError {
         Self::new(
             ErrorCode::InvalidContainer,
             format!("无效的 {label} 文件"),
-            format!(
-                "该文件不是有效的 {label}（可能为空、损坏，或扩展名与实际内容不符）。请确认文件完整，或手动指定正确格式。"
-            ),
+            format!("确认文件完整；若扩展名不匹配，手动指定格式。"),
             true,
             ParseStage::Parse,
         )
@@ -155,7 +153,7 @@ impl SpoorError {
         Self::new(
             ErrorCode::ParseFailed,
             reason,
-            "解析未能完成。请确认文件完整、格式正确，且未超出资源上限。",
+            "确认文件完整、格式正确，且未超出资源上限。",
             true,
             stage,
         )

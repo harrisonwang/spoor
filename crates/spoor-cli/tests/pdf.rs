@@ -44,8 +44,8 @@ fn no_text_and_no_images_returns_structured_error() {
         json!({
             "is_error": true,
             "code": "pdf_no_extractable_content",
-            "reason": "PDF 没有可提取的文本或图片",
-            "hint": "该 PDF 既没有文本层，也没有可提取的图片，spoor 无法从中获取内容（可能是空白页、纯矢量图形或损坏文件）。",
+            "reason": "PDF 无可提取内容",
+            "hint": "使用 VLM 处理。",
             "recoverable": true,
             "stage": "parse"
         })

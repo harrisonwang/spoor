@@ -68,9 +68,7 @@ pub fn extract(
     for number in reordered_pages {
         warnings.push(SpoorWarning::at_page(
             WarningCode::PdfMultiColumnReadingOrder,
-            format!(
-                "第 {number} 页为多栏版面，已按栏重排阅读顺序；若顺序有误，可回退到 PDF 原始文本顺序。"
-            ),
+            format!("第 {number} 页为多栏版面，已按栏重排顺序；若顺序异常可回退原始文本。"),
             number,
         ));
     }
@@ -170,17 +168,13 @@ fn layout_warnings(layout: &PdfLayoutDocument) -> Vec<SpoorWarning> {
         if page.text().trim().is_empty() {
             warnings.push(SpoorWarning::at_page(
                 WarningCode::PdfPageNoTextLayer,
-                format!(
-                    "第 {number} 页没有可提取的文本层；输出保留了页位置，但 Agent 不应把该页当作完整原文。"
-                ),
+                format!("第 {number} 页无文本层，输出为空；需 VLM 处理。"),
                 number,
             ));
         } else if suspicious_text_layer(page.text()) {
             warnings.push(SpoorWarning::at_page(
                 WarningCode::PdfPageSuspiciousTextLayer,
-                format!(
-                    "第 {number} 页文本层含替换字符、控制字符或重复占位符，可能是乱码；Agent 不应直接信任该页文本，必要时改用视觉模型识别。"
-                ),
+                format!("第 {number} 页文本层含乱码或占位符，可能不可靠；建议用 VLM 交叉验证。"),
                 number,
             ));
         }
@@ -189,16 +183,14 @@ fn layout_warnings(layout: &PdfLayoutDocument) -> Vec<SpoorWarning> {
             let total = page.images.len();
             let extractable = page.images.iter().filter(|image| image.extractable).count();
             let message = if extractable == total {
-                format!(
-                    "第 {number} 页有 {total} 张图片未纳入文本，已用 spoor://pdf/obj/ 标注；可用 --extract 取出，交给视觉模型识别。"
-                )
+                format!("第 {number} 页有 {total} 张图片未进入文本；可用 --extract 取出交 VLM。")
             } else if extractable == 0 {
                 format!(
-                    "第 {number} 页有 {total} 张图片未纳入文本，且其编码 spoor 无法直接导出；请在外部渲染该页后交给视觉模型。"
+                    "第 {number} 页有 {total} 张图片未进入文本，编码无法直接导出；需外部渲染后交 VLM。"
                 )
             } else {
                 format!(
-                    "第 {number} 页有 {total} 张图片未纳入文本：{extractable} 张可用 --extract 取出（已标 spoor://pdf/obj/），其余需在外部渲染。"
+                    "第 {number} 页有 {total} 张图片未进入文本：{extractable} 张可 --extract 取出，其余需外部渲染。"
                 )
             };
             warnings.push(SpoorWarning::at_page(

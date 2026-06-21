@@ -220,7 +220,7 @@ fn run_parse(cli: Cli) -> Result<String> {
             if limited.warning.is_some() && total_pdf_pages > 0 {
                 let shown = limited.content.matches("## Page ").count();
                 eprintln!(
-                    "warning: PDF 共 {total_pdf_pages} 页，本次输出截断到约 {shown} 页；用 --pages <起:止> 读取后面的页。"
+                    "warning: PDF 共 {total_pdf_pages} 页，本次输出截断到约 {shown} 页；用 --pages <start,end> 获取后续页面。"
                 );
             }
             let mut content = limited.content;
@@ -383,7 +383,7 @@ fn report_skipped(failures: &[InputFailure]) {
 
 fn report_parse_warnings(warnings: &[InputWarning]) {
     for warning in warnings.iter().take(MAX_FAILURE_DIAGNOSTICS) {
-        eprintln!("warning: 解析结果不完整 {}", warning.display());
+        eprintln!("warning: 输出不完整 {}", warning.display());
     }
     if warnings.len() > MAX_FAILURE_DIAGNOSTICS {
         eprintln!(
@@ -402,7 +402,7 @@ fn markdown_skipped_block(failures: &[InputFailure]) -> Option<String> {
     }
 
     let mut block = format!(
-        "\n> [!WARNING]\n> spoor 已跳过 {} 个无法读取的输入：\n",
+        "\n> [!WARNING]\n> {} 个输入解析失败，已跳过：\n",
         failures.len()
     );
     for failure in failures.iter().take(MAX_FAILURE_DIAGNOSTICS) {
@@ -427,7 +427,7 @@ fn markdown_parse_warnings_block(warnings: &[InputWarning]) -> Option<String> {
     }
 
     let mut block = format!(
-        "\n> [!WARNING]\n> spoor 有 {} 条解析完整性警告；Agent 不应把受影响的位置当作完整原文：\n",
+        "\n> [!WARNING]\n> 以下 {} 条警告表示对应位置的输出可能不完整：\n",
         warnings.len()
     );
     for warning in warnings.iter().take(MAX_FAILURE_DIAGNOSTICS) {

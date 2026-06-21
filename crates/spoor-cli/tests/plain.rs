@@ -87,6 +87,6 @@ fn json_mode_rejects_plain_text() {
     assert!(output.stdout.is_empty());
 
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("--mode json 目前仅支持 CSV 和 XLSX"));
+    assert!(stderr.contains("--mode json 仅支持 CSV 和 XLSX"));
     assert!(stderr.contains("--mode md"));
 }

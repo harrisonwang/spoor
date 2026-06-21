@@ -319,11 +319,8 @@ fn pdf_without_text_or_images_emits_machine_readable_error() {
         serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
     assert_eq!(value["is_error"], true);
     assert_eq!(value["code"], "pdf_no_extractable_content");
-    assert_eq!(value["reason"], "PDF 没有可提取的文本或图片");
-    assert_eq!(
-        value["hint"],
-        "该 PDF 既没有文本层，也没有可提取的图片，spoor 无法从中获取内容（可能是空白页、纯矢量图形或损坏文件）。"
-    );
+    assert_eq!(value["reason"], "PDF 无可提取内容");
+    assert_eq!(value["hint"], "使用 VLM 处理。");
     assert_eq!(value["recoverable"], true);
 }
 
@@ -339,7 +336,7 @@ fn document_integrity_warnings_are_visible_in_stdout_and_stderr() {
     assert!(stdout.contains(r#""kind":"page","number":2"#));
 
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("warning: 解析结果不完整"));
+    assert!(stderr.contains("warning: 输出不完整"));
     assert!(stderr.contains("pdf_page_no_text_layer"));
 }
 
@@ -403,7 +400,7 @@ fn empty_extraction_emits_inband_placeholder() {
     let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
     assert!(stdout.contains("> [!NOTE]"));
     assert!(stdout.contains("未从"));
-    assert!(stdout.contains("format=text"));
+    assert!(stdout.contains("格式 text"));
     assert!(stdout.contains("empty.txt"));
 }
 
@@ -457,7 +454,7 @@ fn partial_failure_still_outputs_successes_in_md() {
     // The skipped input must be visible in stdout too (agents often only
     // read stdout), mirroring the JSON envelope's in-band warnings[].
     assert!(stdout.contains("> [!WARNING]"));
-    assert!(stdout.contains("已跳过 1 个"));
+    assert!(stdout.contains("1 个输入解析失败"));
     assert!(stdout.contains("does_not_exist.txt"));
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
     assert!(stderr.contains("warning: 已跳过"));
@@ -535,7 +532,7 @@ fn markdown_total_output_limit_is_global_and_visible() {
     assert!(stdout.contains("内容不完整"));
 
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("warning: spoor 输出"));
+    assert!(stderr.contains("warning: 输出在"));
     assert!(stderr.contains("--max-output-bytes"));
 }
 
