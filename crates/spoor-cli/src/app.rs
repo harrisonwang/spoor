@@ -57,7 +57,7 @@ fn run_provenance(cli: Cli) -> Result<String> {
     let format = detect_format(&request)?;
     if matches!(format, Format::Csv | Format::Xlsx) {
         return Err(anyhow!(
-            "--provenance 暂不支持表格型（{format}）；当前用于文档型（如 PDF）"
+            "--provenance 暂不支持表格格式（{format}），仅用于文档型（如 PDF）。"
         ));
     }
 
@@ -68,7 +68,7 @@ fn run_provenance(cli: Cli) -> Result<String> {
     // invalid, so over-budget output is an error pointing at the way to shrink.
     if json.len() > cli.max_output_bytes {
         return Err(anyhow!(
-            "provenance JSON 约 {} 字节，超过 --max-output-bytes={}；用 --pages 缩小范围或调大上限",
+            "provenance JSON 约 {} 字节，超过 --max-output-bytes={}；用 --pages 缩小范围或调高上限。",
             json.len(),
             cli.max_output_bytes
         ));
@@ -220,7 +220,7 @@ fn run_parse(cli: Cli) -> Result<String> {
             if limited.warning.is_some() && total_pdf_pages > 0 {
                 let shown = limited.content.matches("## Page ").count();
                 eprintln!(
-                    "warning: PDF 共 {total_pdf_pages} 页，截断后本次输出约含 {shown} 页；用 --pages <first:last> 取更靠后的页。"
+                    "warning: PDF 共 {total_pdf_pages} 页，本次输出截断到约 {shown} 页；用 --pages <起:止> 读取后面的页。"
                 );
             }
             let mut content = limited.content;
@@ -375,7 +375,7 @@ fn report_skipped(failures: &[InputFailure]) {
     }
     if failures.len() > MAX_FAILURE_DIAGNOSTICS {
         eprintln!(
-            "warning: 另有 {} 条被跳过输入的警告未显示",
+            "warning: 另有 {} 条跳过警告未显示",
             failures.len() - MAX_FAILURE_DIAGNOSTICS
         );
     }
@@ -427,7 +427,7 @@ fn markdown_parse_warnings_block(warnings: &[InputWarning]) -> Option<String> {
     }
 
     let mut block = format!(
-        "\n> [!WARNING]\n> spoor 返回 {} 条解析完整性警告；Agent 不应把受影响位置视为完整原文：\n",
+        "\n> [!WARNING]\n> spoor 有 {} 条解析完整性警告；Agent 不应把受影响的位置当作完整原文：\n",
         warnings.len()
     );
     for warning in warnings.iter().take(MAX_FAILURE_DIAGNOSTICS) {
@@ -540,7 +540,7 @@ fn warn_unused_narrowing(cli: &Cli) {
         || cli.limit.is_some()
         || cli.offset.is_some();
     if used {
-        eprintln!("warning: Markdown 模式下会忽略 --sheet/--rows/--columns/--limit/--offset");
+        eprintln!("warning: Markdown 模式会忽略 --sheet/--rows/--columns/--limit/--offset");
     }
 }
 

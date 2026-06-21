@@ -231,7 +231,7 @@ fn prose_format_with_explicit_json_errors() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("csv 和 xlsx"),
+        stderr.contains("CSV 和 XLSX"),
         "stderr should mention csv/xlsx-only json support; got: {stderr}"
     );
 }

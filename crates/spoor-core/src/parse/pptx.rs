@@ -108,7 +108,7 @@ fn feature_warnings(
         warnings.push(SpoorWarning::at_slide(
             WarningCode::MergedTableStructureNotPreserved,
             format!(
-                "第 {slide} 张幻灯片包含合并单元格；当前 Markdown 表格不保留 rowspan/colspan，Agent 不应把空白或重复单元格解释为原始结构。"
+                "第 {slide} 张幻灯片的表格有合并单元格；Markdown 表格不保留跨行/跨列，Agent 不应把空白或重复单元格当作原始结构。"
             ),
             slide,
         ));
@@ -120,21 +120,21 @@ fn feature_warnings(
         // VLM rendering for the un-handled charts/OLE objects.
         let message = if emission.total_blips == 0 {
             format!(
-                "第 {slide} 张幻灯片包含图表或嵌入对象（无栅格图片）；spoor 当前仅提取文本，Agent 应把该页视为不完整并按需调用外部视觉解析。"
+                "第 {slide} 张幻灯片含图表或嵌入对象（无位图图片），spoor 仅提取了文本；该页内容不完整，必要时请用外部工具解析。"
             )
         } else if emission.emitted_handles == emission.total_blips {
             format!(
-                "第 {slide} 张幻灯片含 {n} 张内嵌图片；已用 spoor://pptx/part/ 标注，Agent 可用 --extract 取出交给视觉模型。",
+                "第 {slide} 张幻灯片有 {n} 张内嵌图片，已用 spoor://pptx/part/ 标注；可用 --extract 取出，交给视觉模型识别。",
                 n = emission.emitted_handles,
             )
         } else if emission.emitted_handles == 0 {
             format!(
-                "第 {slide} 张幻灯片含 {n} 张内嵌图片，但 spoor 未能解析其引用；请视该页为不完整并按需调用外部视觉解析。",
+                "第 {slide} 张幻灯片有 {n} 张内嵌图片，但 spoor 未能解析其引用；该页内容不完整，必要时请用外部工具解析。",
                 n = emission.total_blips,
             )
         } else {
             format!(
-                "第 {slide} 张幻灯片含 {total} 张内嵌图片；其中 {ok} 张已用 spoor://pptx/part/ 标注可 --extract 取出，其余未解析。",
+                "第 {slide} 张幻灯片有 {total} 张内嵌图片：{ok} 张已用 spoor://pptx/part/ 标注、可 --extract 取出，其余未能解析。",
                 total = emission.total_blips,
                 ok = emission.emitted_handles,
             )
@@ -485,7 +485,7 @@ mod feature_warning_tests {
             Some(WarningLocation::Slide { number: 3 })
         );
         assert!(
-            warnings[1].message.contains("无栅格图片"),
+            warnings[1].message.contains("无位图图片"),
             "expected chart/OLE wording, got {:?}",
             warnings[1].message
         );
@@ -519,8 +519,8 @@ mod feature_warning_tests {
         };
         let warnings = feature_warnings(2, features, emission);
         assert_eq!(warnings.len(), 1);
-        assert!(warnings[0].message.contains("其中 1"));
-        assert!(warnings[0].message.contains("其余未解析"));
+        assert!(warnings[0].message.contains("1 张已用"));
+        assert!(warnings[0].message.contains("其余未能解析"));
     }
 
     #[test]

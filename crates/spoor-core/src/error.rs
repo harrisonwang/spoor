@@ -1,21 +1,21 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-const IMAGE_ONLY_PDF_REASON: &str = "纯图片 PDF（无文本层）";
-const IMAGE_ONLY_PDF_HINT: &str = "该 PDF 没有文本层，需要 OCR，但 spoor 不执行 OCR。";
-const PARSE_MEMORY_LIMIT_REASON: &str = "超出解析预算";
+const PDF_NO_EXTRACTABLE_CONTENT_REASON: &str = "PDF 没有可提取的文本或图片";
+const PDF_NO_EXTRACTABLE_CONTENT_HINT: &str =
+    "该 PDF 既没有文本层，也没有可提取的图片，spoor 无法从中获取内容（可能是空白页、纯矢量图形或损坏文件）。";
+const PARSE_MEMORY_LIMIT_REASON: &str = "超出解析上限";
 const UNSUPPORTED_FORMAT_REASON: &str = "无法识别的格式";
-const UNSUPPORTED_FORMAT_HINT: &str = "无法识别或不支持该输入的格式。请显式指定 format。";
-const ENCRYPTED_PDF_REASON: &str = "受密码保护的 PDF";
-const ENCRYPTED_PDF_HINT: &str =
-    "该 PDF 受密码保护，spoor 不支持解密。请先解除密码保护，再重新运行。";
-const LEGACY_OR_ENCRYPTED_OFFICE_REASON: &str = "旧版或加密的 Office 文档";
-const LEGACY_OR_ENCRYPTED_OFFICE_HINT: &str = "该文件是 OLE/CFB 容器：可能是受密码保护的 Office 文档，也可能是旧版二进制格式（.doc/.xls/.ppt）。spoor 都不支持：加密文件请先解除密码，旧版格式请先另存为 docx/xlsx/pptx。";
+const UNSUPPORTED_FORMAT_HINT: &str = "无法识别该文件的格式，或暂不支持。可手动指定格式后重试。";
+const ENCRYPTED_PDF_REASON: &str = "加密的 PDF";
+const ENCRYPTED_PDF_HINT: &str = "该 PDF 已加密，spoor 无法解密。请先去除密码再重试。";
+const LEGACY_OR_ENCRYPTED_OFFICE_REASON: &str = "无法读取的 Office 文档";
+const LEGACY_OR_ENCRYPTED_OFFICE_HINT: &str = "该文件是 OLE/CFB 容器（旧版或加密的 Office 文档），spoor 无法读取。若已加密，请先去除密码。";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
-    ImageOnlyPdf,
+    PdfNoExtractableContent,
     ParseBudgetExceeded,
     WorkBudgetExceeded,
     UnsupportedFormat,
@@ -27,7 +27,7 @@ pub enum ErrorCode {
 
 impl ErrorCode {
     pub const ALL: [ErrorCode; 8] = [
-        ErrorCode::ImageOnlyPdf,
+        ErrorCode::PdfNoExtractableContent,
         ErrorCode::ParseBudgetExceeded,
         ErrorCode::WorkBudgetExceeded,
         ErrorCode::UnsupportedFormat,
@@ -39,7 +39,7 @@ impl ErrorCode {
 
     pub fn as_str(self) -> &'static str {
         match self {
-            ErrorCode::ImageOnlyPdf => "image_only_pdf",
+            ErrorCode::PdfNoExtractableContent => "pdf_no_extractable_content",
             ErrorCode::ParseBudgetExceeded => "parse_budget_exceeded",
             ErrorCode::WorkBudgetExceeded => "work_budget_exceeded",
             ErrorCode::UnsupportedFormat => "unsupported_format",
@@ -77,11 +77,11 @@ pub struct SpoorError {
 pub type StructuredError = SpoorError;
 
 impl SpoorError {
-    pub fn image_only_pdf() -> Self {
+    pub fn pdf_no_extractable_content() -> Self {
         Self::new(
-            ErrorCode::ImageOnlyPdf,
-            IMAGE_ONLY_PDF_REASON,
-            IMAGE_ONLY_PDF_HINT,
+            ErrorCode::PdfNoExtractableContent,
+            PDF_NO_EXTRACTABLE_CONTENT_REASON,
+            PDF_NO_EXTRACTABLE_CONTENT_HINT,
             true,
             ParseStage::Parse,
         )
@@ -92,7 +92,7 @@ impl SpoorError {
             ErrorCode::ParseBudgetExceeded,
             PARSE_MEMORY_LIMIT_REASON,
             format!(
-                "解析在 {stage} 阶段超出了 {max_bytes} 字节的数据量预算。请缩小输入范围，或调高 max_parse_bytes（CLI: --max-parse-bytes）。"
+                "解析在 {stage} 阶段超过 {max_bytes} 字节上限。可缩小输入，或调高 --max-parse-bytes。"
             ),
             true,
             ParseStage::Limits,
@@ -102,8 +102,8 @@ impl SpoorError {
     pub fn work_budget_exceeded() -> Self {
         Self::new(
             ErrorCode::WorkBudgetExceeded,
-            "超出工作量预算",
-            "解析所需的工作量（如 PDF 操作数）超过了 max_work_units 限制。请调高该预算，或对不可信输入改用进程/容器隔离与宿主级超时来真正掐断。",
+            "超出运算量上限",
+            "解析运算量（如 PDF 操作数）超过 --max-work-units 上限。可调高上限；处理不可信文件时，建议再加进程隔离和超时。",
             true,
             ParseStage::Parse,
         )
@@ -142,9 +142,9 @@ impl SpoorError {
     pub fn invalid_container(label: &str) -> Self {
         Self::new(
             ErrorCode::InvalidContainer,
-            format!("无效的 {label} 容器"),
+            format!("无效的 {label} 文件"),
             format!(
-                "文件不是有效的 {label} 容器（可能为空、损坏或扩展名与内容不符）。请确认文件完整；若扩展名不可靠，显式指定真实格式。"
+                "该文件不是有效的 {label}（可能为空、损坏，或扩展名与实际内容不符）。请确认文件完整，或手动指定正确格式。"
             ),
             true,
             ParseStage::Parse,
@@ -155,7 +155,7 @@ impl SpoorError {
         Self::new(
             ErrorCode::ParseFailed,
             reason,
-            "输入未能完成解析。请确认文件完整、格式正确且未超过资源限制。",
+            "解析未能完成。请确认文件完整、格式正确，且未超出资源上限。",
             true,
             stage,
         )

@@ -266,7 +266,7 @@ fn extract_rejects_non_opc_and_multiple_inputs() {
         value["reason"]
             .as_str()
             .unwrap()
-            .contains("PDF、DOCX 与 PPTX"),
+            .contains("PDF、DOCX、PPTX"),
         "got: {}",
         value["reason"]
     );
@@ -318,11 +318,11 @@ fn pdf_without_text_or_images_emits_machine_readable_error() {
     let value: serde_json::Value =
         serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
     assert_eq!(value["is_error"], true);
-    assert_eq!(value["code"], "image_only_pdf");
-    assert_eq!(value["reason"], "纯图片 PDF（无文本层）");
+    assert_eq!(value["code"], "pdf_no_extractable_content");
+    assert_eq!(value["reason"], "PDF 没有可提取的文本或图片");
     assert_eq!(
         value["hint"],
-        "该 PDF 没有文本层，需要 OCR，但 spoor 不执行 OCR。"
+        "该 PDF 既没有文本层，也没有可提取的图片，spoor 无法从中获取内容（可能是空白页、纯矢量图形或损坏文件）。"
     );
     assert_eq!(value["recoverable"], true);
 }
@@ -580,7 +580,7 @@ fn local_file_over_parse_budget_emits_structured_error() {
     assert!(!output.status.success());
     let value: serde_json::Value =
         serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
-    assert_eq!(value["reason"], "超出解析预算");
+    assert_eq!(value["reason"], "超出解析上限");
     assert!(
         value["hint"]
             .as_str()
@@ -613,7 +613,7 @@ fn multiple_inputs_share_parse_budget() {
     assert!(stdout.contains(&"a".repeat(100)));
     assert!(!stdout.contains(&"b".repeat(100)));
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("超出解析预算"));
+    assert!(stderr.contains("超出解析上限"));
 }
 
 #[test]
@@ -638,7 +638,7 @@ fn extracted_text_expansion_respects_parse_budget() {
     assert!(!output.status.success());
     let value: serde_json::Value =
         serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
-    assert_eq!(value["reason"], "超出解析预算");
+    assert_eq!(value["reason"], "超出解析上限");
     assert!(
         value["hint"]
             .as_str()
@@ -699,7 +699,7 @@ fn stdin_over_parse_budget_emits_structured_error() {
     assert!(!output.status.success());
     let value: serde_json::Value =
         serde_json::from_slice(&output.stderr).expect("stderr is pure JSON");
-    assert_eq!(value["reason"], "超出解析预算");
+    assert_eq!(value["reason"], "超出解析上限");
 }
 
 #[test]

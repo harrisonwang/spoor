@@ -141,7 +141,7 @@ WASM 包默认包含全部重点格式；
 
 | code | 含义 |
 | --- | --- |
-| `image_only_pdf` | PDF 无文本层，需要外部 OCR |
+| `pdf_no_extractable_content` | PDF 无文本层也无可提取图片，无内容可抽取 |
 | `parse_budget_exceeded` | 输入、解压或结果超过解析预算 |
 | `work_budget_exceeded` | 解析工作量（如 PDF 操作数）超过 `max_work_units` 上限 |
 | `unsupported_format` | 无法识别或不支持格式 |

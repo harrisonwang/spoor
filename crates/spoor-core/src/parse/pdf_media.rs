@@ -49,14 +49,14 @@ pub(crate) enum ImageExtractError {
 impl ImageExtractError {
     pub(crate) fn message(&self) -> String {
         match self {
-            Self::Unreadable => "无法解析该 PDF".to_string(),
-            Self::NotFound => "spoor://pdf/obj/ 指向的对象不存在".to_string(),
-            Self::NotAnImage => "spoor://pdf/obj/ 指向的对象不是内嵌图片".to_string(),
+            Self::Unreadable => "无法解析该 PDF。".to_string(),
+            Self::NotFound => "spoor://pdf/obj/ 指向的对象不存在。".to_string(),
+            Self::NotAnImage => "spoor://pdf/obj/ 指向的对象不是图片。".to_string(),
             Self::UnsupportedEncoding(detail) => format!(
-                "该内嵌图片（{detail}）的编码/色彩空间 spoor 暂不能直出；请在外部渲染该页后交给视觉模型。"
+                "该图片的编码或色彩空间（{detail}）spoor 暂时无法直接导出；请在外部渲染该页后交给视觉模型。"
             ),
             Self::TooLarge(needed) => format!(
-                "该图片解码后约 {needed} 字节，超过当前解析预算；请用 --max-parse-bytes 提高上限后重试，或在外部渲染该页。"
+                "该图片解码后约 {needed} 字节，超过解析上限；可调高 --max-parse-bytes 后重试，或在外部渲染该页。"
             ),
         }
     }

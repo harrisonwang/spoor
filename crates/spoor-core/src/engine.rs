@@ -55,7 +55,7 @@ impl FromStr for ProvenanceLevel {
             "off" => Ok(Self::Off),
             "page" => Ok(Self::Page),
             other => Err(SpoorError::parse_failed(
-                format!("未知 provenance 级别 {other:?}；当前支持 off|page"),
+                format!("未知的 provenance 级别 {other:?}，目前支持 off、page。"),
                 ParseStage::Parse,
             )),
         }
@@ -78,13 +78,13 @@ fn validated_inclusive_range(range: Option<(usize, usize)>) -> SpoorResult<Optio
     if let Some((first, last)) = range {
         if first == 0 || last == 0 {
             return Err(SpoorError::parse_failed(
-                "区间端点必须 >= 1（含两端的 1-based 区间）",
+                "区间端点必须 ≥ 1（从 1 开始、含两端）。",
                 ParseStage::Parse,
             ));
         }
         if first > last {
             return Err(SpoorError::parse_failed(
-                format!("区间起点 {first} 不能大于终点 {last}"),
+                format!("区间起点 {first} 不能大于终点 {last}。"),
                 ParseStage::Parse,
             ));
         }
@@ -101,7 +101,7 @@ fn range_pair_from_slice(slice: Option<&[u32]>) -> SpoorResult<Option<(usize, us
         None => Ok(None),
         Some([first, last]) => Ok(Some((*first as usize, *last as usize))),
         Some(_) => Err(SpoorError::parse_failed(
-            "区间需要恰好两个元素 [first, last]",
+            "区间需要且仅需两个值 [起, 止]。",
             ParseStage::Parse,
         )),
     }
@@ -125,7 +125,7 @@ impl TableFilter {
         let row_range = validated_inclusive_range(rows)?;
         if row_range.is_some() && (limit.is_some() || offset.is_some()) {
             return Err(SpoorError::parse_failed(
-                "rows 与 limit/offset 互斥；请二选一",
+                "rows 与 limit/offset 不能同时使用，请二选一。",
                 ParseStage::Parse,
             ));
         }
@@ -279,7 +279,7 @@ pub fn parse_document(request: &ParseRequest<'_>) -> SpoorResult<DocumentResult>
     parse_document_result(request).and_then(|result| match result.content {
         ParseContent::Document(document) => Ok(document),
         ParseContent::Tables(_) => Err(SpoorError::parse_failed(
-            "内部错误：文档解析返回了表格结果",
+            "内部错误：文档解析却返回了表格结果。",
             ParseStage::Parse,
         )),
     })
@@ -309,7 +309,7 @@ pub fn extract_media(request: &ParseRequest<'_>, resource: &str) -> SpoorResult<
             Format::Pptx => extract_media_from_opc(request, Format::Pptx, resource),
             Format::Pdf => extract_media_from_pdf(request, resource),
             _ => Err(SpoorError::parse_failed(
-                format!("--extract 当前仅支持 PDF、DOCX 与 PPTX 内嵌媒体；当前格式为 {format}"),
+                format!("--extract 仅支持从 PDF、DOCX、PPTX 提取内嵌媒体；当前格式为 {format}。"),
                 ParseStage::Parse,
             )),
         }
@@ -324,7 +324,7 @@ pub fn extract_media(request: &ParseRequest<'_>, resource: &str) -> SpoorResult<
 fn extract_media_from_pdf(request: &ParseRequest<'_>, resource: &str) -> SpoorResult<Vec<u8>> {
     let (id, generation) = safe_pdf_image_resource(resource).ok_or_else(|| {
         SpoorError::parse_failed(
-            "--extract 仅接受 spoor 输出的安全内嵌媒体 URI；PDF 使用 spoor://pdf/obj/{id}/{gen}",
+            "--extract 只接受 spoor 生成的媒体 URI；PDF 形如 spoor://pdf/obj/{id}/{gen}。",
             ParseStage::Parse,
         )
     })?;
@@ -377,7 +377,7 @@ fn extract_media_from_opc(
     let path = safe_opc_media_resource(fmt, resource).ok_or_else(|| {
         SpoorError::parse_failed(
             format!(
-                "--extract 仅接受 spoor 输出的安全内嵌媒体 URI；{fmt} 使用 spoor://{fmt}/part/{root}/media/*",
+                "--extract 只接受 spoor 生成的媒体 URI；{fmt} 形如 spoor://{fmt}/part/{root}/media/*。",
                 root = opc_root_for(fmt).unwrap_or("?"),
             ),
             ParseStage::Parse,

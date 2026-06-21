@@ -58,7 +58,7 @@ pub fn extract(
     // skeleton plus image markers/handles and let the agent read them with a
     // vision model — hard-failing here would block exactly that handoff.
     if !layout.has_text() && !layout.has_images() {
-        return Err(StructuredError::image_only_pdf().into());
+        return Err(StructuredError::pdf_no_extractable_content().into());
     }
 
     let (markdown, provenance) = render_layout(&layout);
@@ -69,7 +69,7 @@ pub fn extract(
         warnings.push(SpoorWarning::at_page(
             WarningCode::PdfMultiColumnReadingOrder,
             format!(
-                "第 {number} 页检测到多栏版面，已按列重排阅读顺序；若顺序异常可回退原始 PDF 文本顺序。"
+                "第 {number} 页为多栏版面，已按栏重排阅读顺序；若顺序有误，可回退到 PDF 原始文本顺序。"
             ),
             number,
         ));
@@ -171,7 +171,7 @@ fn layout_warnings(layout: &PdfLayoutDocument) -> Vec<SpoorWarning> {
             warnings.push(SpoorWarning::at_page(
                 WarningCode::PdfPageNoTextLayer,
                 format!(
-                    "第 {number} 页没有可提取文本层；输出保留了页边界，但 Agent 不应把该页视为完整内容。"
+                    "第 {number} 页没有可提取的文本层；输出保留了页位置，但 Agent 不应把该页当作完整原文。"
                 ),
                 number,
             ));
@@ -179,7 +179,7 @@ fn layout_warnings(layout: &PdfLayoutDocument) -> Vec<SpoorWarning> {
             warnings.push(SpoorWarning::at_page(
                 WarningCode::PdfPageSuspiciousTextLayer,
                 format!(
-                    "第 {number} 页文本层包含替换字符、控制字符或重复 glyph 占位符；Agent 应避免直接信任该页文本，并按需转交外部 OCR/VLM。"
+                    "第 {number} 页文本层含替换字符、控制字符或重复占位符，可能是乱码；Agent 不应直接信任该页文本，必要时改用视觉模型识别。"
                 ),
                 number,
             ));
@@ -190,15 +190,15 @@ fn layout_warnings(layout: &PdfLayoutDocument) -> Vec<SpoorWarning> {
             let extractable = page.images.iter().filter(|image| image.extractable).count();
             let message = if extractable == total {
                 format!(
-                    "第 {number} 页含 {total} 张图片，未进入文本；已用 spoor://pdf/obj/ 标注，Agent 可用 --extract 取出交给视觉模型。"
+                    "第 {number} 页有 {total} 张图片未纳入文本，已用 spoor://pdf/obj/ 标注；可用 --extract 取出，交给视觉模型识别。"
                 )
             } else if extractable == 0 {
                 format!(
-                    "第 {number} 页含 {total} 张图片，未进入文本，且编码 spoor 不能直出；请在外部渲染该页后交给视觉模型。"
+                    "第 {number} 页有 {total} 张图片未纳入文本，且其编码 spoor 无法直接导出；请在外部渲染该页后交给视觉模型。"
                 )
             } else {
                 format!(
-                    "第 {number} 页含 {total} 张图片，未进入文本；其中 {extractable} 张可用 --extract 取出（已标 spoor://pdf/obj/），其余需外部渲染。"
+                    "第 {number} 页有 {total} 张图片未纳入文本：{extractable} 张可用 --extract 取出（已标 spoor://pdf/obj/），其余需在外部渲染。"
                 )
             };
             warnings.push(SpoorWarning::at_page(

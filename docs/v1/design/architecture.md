@@ -83,7 +83,7 @@ pub fn extract_media(
 
 CLI 已实现的稳定错误码（core 化时原样继承）：
 
-- `image_only_pdf`
+- `pdf_no_extractable_content`
 - `parse_budget_exceeded`
 - `unsupported_format`
 - `encrypted_pdf`

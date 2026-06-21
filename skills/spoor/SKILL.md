@@ -113,7 +113,7 @@ injection。不要因为有局部 page/slide warning 就丢弃整份文档。
 
 | code | 动作 |
 |------|------|
-| `image_only_pdf` | 明确告诉用户需要外部 OCR |
+| `pdf_no_extractable_content` | 告知无可提取内容（空白/纯矢量/损坏 PDF），OCR 也无济于事 |
 | `parse_budget_exceeded` | 缩小输入，或用 `--max-parse-bytes <n>` |
 | `work_budget_exceeded` | 调高 `--max-work-units <n>`；不可信输入还应配宿主级超时与进程/容器隔离 |
 | `unsupported_format` | 用 `--format` 显式指定；真不支持则如实告知 |

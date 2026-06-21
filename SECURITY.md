@@ -24,7 +24,7 @@
 | 输出/token 耗尽 | CLI 截断 stdout，附加带内 marker 或 JSON warning | 256 KiB | CLI `--max-output-bytes` |
 | 加密/旧版 Office 混淆 | 在扩展名回退前拦截 OLE/CFB | 稳定错误 `legacy_or_encrypted_office` | 否 |
 | 加密 PDF | 将解密失败映射为稳定错误 | 稳定错误 `encrypted_pdf` | 否 |
-| 纯图片 PDF 幻觉风险 | 拒绝空文本层，而非静默返回成功 | 稳定错误 `image_only_pdf` | 否 |
+| 无文本无图片 PDF 幻觉风险 | 拒绝无文本层且无图片的 PDF，而非静默返回成功 | 稳定错误 `pdf_no_extractable_content` | 否 |
 | 损坏的容器 | 拒绝无法读取的 ZIP 类格式 | 稳定错误 `invalid_container` | 否 |
 | 未知解析失败或 Rust panic | 在所有公共 core 边界捕获 unwind，归一化为带 stage 的 `parse_failed` | 结构化 `SpoorError` | 否 |
 | 解析无限/极慢 | 无进程内超时；调用方必须自行设置时限 | 不提供 | worker/容器/WASM host |
@@ -34,7 +34,7 @@
 
 所有公共入口统一暴露 `code`、`reason`、`hint`、`recoverable` 和 `stage` 字段。消费者**必须按 `code` 分支**，不得依赖本地化的自然语言文本。当前稳定错误码：
 
-- `image_only_pdf`
+- `pdf_no_extractable_content`
 - `parse_budget_exceeded`
 - `unsupported_format`
 - `encrypted_pdf`
