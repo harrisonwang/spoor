@@ -336,7 +336,16 @@ fn parse_image_rel_targets(xml: &str, base: &Path) -> HashMap<String, String> {
                     continue;
                 };
                 let normalized = normalize_zip_path(base.join(target));
-                map.insert(id, normalized);
+                // Emit a handle only for a path that will also pass the
+                // extract-time OPC validator. This stops a crafted media
+                // filename (markdown link syntax, spaces) from breaking out of /
+                // injecting into the `](spoor://pptx/part/...)` placeholder link,
+                // and guarantees every emitted handle round-trips through
+                // `--extract`. A dropped rel leaves the blip unresolved, which
+                // the per-slide "partial / unresolved" warning already surfaces.
+                if crate::engine::safe_opc_media_subpath("ppt", &normalized) {
+                    map.insert(id, normalized);
+                }
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -536,5 +545,32 @@ mod feature_warning_tests {
             Some("ppt/media/image2.jpeg")
         );
         assert!(!map.contains_key("rId2"), "non-image rel must be skipped");
+    }
+
+    #[test]
+    fn unsafe_media_filenames_are_dropped_not_emitted_as_handles() {
+        // A crafted media filename with markdown link syntax or spaces must not
+        // become a placeholder target — otherwise it breaks out of / injects
+        // into the `](spoor://pptx/part/...)` link in agent-facing output. Only
+        // charset-safe `ppt/media/<name>` paths (which also pass --extract) emit.
+        let xml = r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+            <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/evil) [x](http://e).png"/>
+            <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/a b.png"/>
+            <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>
+        </Relationships>"#;
+        let map = parse_image_rel_targets(xml, Path::new("ppt/slides"));
+        assert!(
+            !map.contains_key("rId1"),
+            "markdown-injection filename must be dropped"
+        );
+        assert!(
+            !map.contains_key("rId2"),
+            "filename with a space must be dropped"
+        );
+        assert_eq!(
+            map.get("rId3").map(String::as_str),
+            Some("ppt/media/image1.png"),
+            "the safe filename still emits a handle"
+        );
     }
 }

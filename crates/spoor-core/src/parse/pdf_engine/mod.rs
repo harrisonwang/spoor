@@ -2194,7 +2194,10 @@ impl OutputDev for LayoutCollector {
     fn output_character(&mut self, trm: &Transform, width: f64, _spacing: f64, font_size: f64, char: &str) -> Result<(), OutputError> {
         let position = trm.post_transform(&self.flip_ctm);
         let tfs_vec = trm.transform_vector(vec2(font_size, font_size));
-        let tfs = (tfs_vec.x * tfs_vec.y).sqrt();
+        // abs() before sqrt: a rotated text matrix (e.g. 90° vertical text)
+        // makes x*y negative, which would yield NaN and silently drop the span
+        // in layout. abs() leaves axis-aligned text values unchanged.
+        let tfs = (tfs_vec.x * tfs_vec.y).abs().sqrt();
         let (x, y) = (position.m31, position.m32);
         let end_x = x + width * tfs;
 

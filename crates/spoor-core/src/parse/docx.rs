@@ -410,21 +410,12 @@ fn safe_docx_media_path(target: &str) -> Option<String> {
     if remaining.is_empty()
         || remaining
             .iter()
-            .any(|component| !is_safe_media_component(component))
+            .any(|component| !crate::engine::is_safe_media_component(component))
     {
         return None;
     }
 
     Some(format!("word/{target}"))
-}
-
-fn is_safe_media_component(component: &str) -> bool {
-    !component.is_empty()
-        && component != "."
-        && component != ".."
-        && component
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
 fn render_document(

@@ -419,22 +419,24 @@ fn safe_opc_media_resource(fmt: Format, resource: &str) -> Option<&str> {
         _ => return None,
     };
     let path = resource.strip_prefix(prefix)?;
-    let mut components = path.split('/');
-    if components.next()? != expected_root || components.next()? != "media" {
-        return None;
-    }
-    let remaining = components.collect::<Vec<_>>();
-    if remaining.is_empty()
-        || remaining
-            .iter()
-            .any(|component| !is_safe_media_component(component))
-    {
-        return None;
-    }
-    Some(path)
+    safe_opc_media_subpath(expected_root, path).then_some(path)
 }
 
-fn is_safe_media_component(component: &str) -> bool {
+/// Whether `path` is a safe OPC media subpath of the form
+/// `{root}/media/<safe component>+` — no traversal, no empty or odd-character
+/// segments. Shared by the extract-time URI validator above and the parse-time
+/// placeholder emitters (DOCX/PPTX), so a handle is emitted only when it will
+/// also pass validation on `--extract`.
+pub(crate) fn safe_opc_media_subpath(root: &str, path: &str) -> bool {
+    let mut components = path.split('/');
+    if components.next() != Some(root) || components.next() != Some("media") {
+        return false;
+    }
+    let remaining = components.collect::<Vec<_>>();
+    !remaining.is_empty() && remaining.iter().all(|c| is_safe_media_component(c))
+}
+
+pub(crate) fn is_safe_media_component(component: &str) -> bool {
     !component.is_empty()
         && component != "."
         && component != ".."

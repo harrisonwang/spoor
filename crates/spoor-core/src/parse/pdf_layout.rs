@@ -230,6 +230,11 @@ pub(crate) fn reading_order_text(page: &EnginePage) -> Option<(String, bool)> {
             .iter()
             .filter(|span| {
                 let center = (span.x0 + span.x1) / 2.0;
+                if center.is_nan() {
+                    // A NaN coordinate (degenerate/rotated transform) must not
+                    // silently drop the span: keep it in the first column.
+                    return *lo == f64::MIN;
+                }
                 center >= *lo && center < *hi
             })
             .collect();
@@ -493,5 +498,32 @@ mod tests {
         };
         let (_, multi_column) = reading_order_text(&page).expect("text");
         assert!(!multi_column, "straddling lines must not be split");
+    }
+
+    #[test]
+    fn nan_coordinate_span_is_not_silently_dropped() {
+        // A span with NaN x-coords (e.g. from a rotated/degenerate text matrix)
+        // must still appear in the reading-order output rather than vanishing
+        // when its center fails both column-range comparisons.
+        let page = EnginePage {
+            width: 600.0,
+            height: 800.0,
+            spans: vec![
+                span("normal", 50.0, 200.0, 100.0),
+                EngineSpan {
+                    text: "rotated".to_string(),
+                    x0: f64::NAN,
+                    x1: f64::NAN,
+                    y: 120.0,
+                    font_size: 10.0,
+                },
+            ],
+        };
+        let (text, _) = reading_order_text(&page).expect("text");
+        assert!(
+            text.contains("rotated"),
+            "NaN-coordinate span must not be dropped: {text:?}"
+        );
+        assert!(text.contains("normal"));
     }
 }
