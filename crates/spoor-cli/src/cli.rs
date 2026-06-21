@@ -93,8 +93,8 @@ Common Patterns
 
 Defaults
   - 每表默认 100 行（--limit 翻页，--rows 定区间）
-  - stdout 上限 256 KiB（--max-output-bytes 调高）
-  - 解析预算 64 MiB（--max-parse-bytes 调高）
+  - stdout 上限 256 KiB（--max-output-kib 调高）
+  - 解析预算 64 MiB（--max-parse-mib 调高）
 
 Examples
   spoor data.csv | jq '.tables[]'
@@ -125,7 +125,7 @@ pub(crate) struct Cli {
     #[arg(long, value_enum, value_name = "format")]
     pub(crate) format: Option<FormatArg>,
 
-    /// 输出模式。表格默认 json，文档默认 md。
+    /// 输出模式。表格默认 json、文档默认 md；json 仅表格可用。
     #[arg(
         long,
         short = 'm',
@@ -160,21 +160,21 @@ pub(crate) struct Cli {
     #[arg(long, value_name = "n")]
     pub(crate) offset: Option<usize>,
 
-    /// stdout 最大字节数，默认 256 KiB。
+    /// stdout 上限，单位 KiB，默认 256。
     #[arg(
         long,
-        value_name = "n",
-        default_value_t = spoor_core::DEFAULT_MAX_OUTPUT_BYTES
+        value_name = "kib",
+        default_value_t = spoor_core::DEFAULT_MAX_OUTPUT_BYTES >> 10
     )]
-    pub(crate) max_output_bytes: usize,
+    pub(crate) max_output_kib: usize,
 
-    /// 解析预算上限，默认 64 MiB。
+    /// 解析预算上限，单位 MiB，默认 64。
     #[arg(
         long,
-        value_name = "n",
-        default_value_t = spoor_core::DEFAULT_MAX_PARSE_BYTES
+        value_name = "mib",
+        default_value_t = spoor_core::DEFAULT_MAX_PARSE_BYTES >> 20
     )]
-    pub(crate) max_parse_bytes: usize,
+    pub(crate) max_parse_mib: usize,
 
     /// 解析运算量上限，默认不限。不可信输入建议配合进程隔离。
     #[arg(long, value_name = "n")]
@@ -198,7 +198,7 @@ pub(crate) struct Cli {
             "columns",
             "limit",
             "offset",
-            "max_output_bytes",
+            "max_output_kib",
             "provenance"
         ]
     )]
@@ -211,6 +211,18 @@ pub(crate) struct Cli {
     /// 显示版本。
     #[arg(short = 'V', long = "version", action = ArgAction::Version)]
     version: Option<bool>,
+}
+
+impl Cli {
+    /// `--max-parse-mib` 是面向用户的 MiB 单位；core 仍按字节计，这里换算并防溢出。
+    pub(crate) fn max_parse_bytes(&self) -> usize {
+        self.max_parse_mib.saturating_mul(1024 * 1024)
+    }
+
+    /// `--max-output-kib` 是面向用户的 KiB 单位；换算成字节交给 core。
+    pub(crate) fn max_output_bytes(&self) -> usize {
+        self.max_output_kib.saturating_mul(1024)
+    }
 }
 
 #[cfg(test)]
@@ -230,8 +242,8 @@ mod tests {
         assert!(cli.columns.is_empty());
         assert!(cli.limit.is_none());
         assert!(cli.offset.is_none());
-        assert_eq!(cli.max_output_bytes, spoor_core::DEFAULT_MAX_OUTPUT_BYTES);
-        assert_eq!(cli.max_parse_bytes, spoor_core::DEFAULT_MAX_PARSE_BYTES);
+        assert_eq!(cli.max_output_kib, spoor_core::DEFAULT_MAX_OUTPUT_BYTES >> 10);
+        assert_eq!(cli.max_parse_mib, spoor_core::DEFAULT_MAX_PARSE_BYTES >> 20);
         assert!(cli.extract.is_none());
     }
 
@@ -334,8 +346,8 @@ mod tests {
         assert!(help.contains("--columns <columns>"));
         assert!(help.contains("--limit <n>"));
         assert!(help.contains("--offset <n>"));
-        assert!(help.contains("--max-output-bytes <n>"));
-        assert!(help.contains("--max-parse-bytes <n>"));
+        assert!(help.contains("--max-output-kib <kib>"));
+        assert!(help.contains("--max-parse-mib <mib>"));
         assert!(help.contains("--extract <uri>"));
         assert!(help.contains("Common Patterns"));
         assert!(help.contains("Defaults"));
@@ -361,8 +373,8 @@ mod tests {
             "format",
             "mode",
             "pages",
-            "max-output-bytes",
-            "max-parse-bytes",
+            "max-output-kib",
+            "max-parse-mib",
             "max-work-units",
             "provenance",
             "extract",

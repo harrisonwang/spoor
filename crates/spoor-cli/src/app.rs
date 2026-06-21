@@ -17,11 +17,11 @@ pub(crate) enum CommandOutput {
 }
 
 pub(crate) fn run(cli: Cli) -> Result<CommandOutput> {
-    validate_max_parse_bytes(cli.max_parse_bytes)?;
+    validate_max_parse_mib(cli.max_parse_mib)?;
     if let Some(resource) = cli.extract.clone() {
         return extract_resource(&cli, &resource).map(CommandOutput::Binary);
     }
-    validate_max_output_bytes(cli.max_output_bytes)?;
+    validate_max_output_kib(cli.max_output_kib)?;
     if cli.provenance.is_some() {
         return run_provenance(cli).map(CommandOutput::Text);
     }
@@ -43,13 +43,13 @@ fn run_provenance(cli: Cli) -> Result<String> {
     if inputs.len() != 1 {
         return Err(anyhow!("--provenance 目前仅支持单个输入"));
     }
-    let input = resolve_input(&inputs[0], cli.max_parse_bytes)?;
+    let input = resolve_input(&inputs[0], cli.max_parse_bytes())?;
     let mut request = request_for(
         &input,
         cli.format.map(Into::into),
         TableFilter::default(),
         build_document_filter(&cli)?,
-        cli.max_parse_bytes,
+        cli.max_parse_bytes(),
         cli.max_work_units,
     );
     request.provenance = level;
@@ -66,11 +66,10 @@ fn run_provenance(cli: Cli) -> Result<String> {
         .map_err(|error| anyhow!("序列化 provenance 结果失败：{error}"))?;
     // Keep the stdout byte cap a hard contract; truncating JSON would make it
     // invalid, so over-budget output is an error pointing at the way to shrink.
-    if json.len() > cli.max_output_bytes {
+    if json.len() > cli.max_output_bytes() {
         return Err(anyhow!(
-            "provenance JSON 约 {} 字节，超过 --max-output-bytes={}；用 --pages 缩小范围或调高上限。",
-            json.len(),
-            cli.max_output_bytes
+            "provenance JSON 约 {} 字节，超过 --max-output-kib 上限；用 --pages 缩小范围或调高上限。",
+            json.len()
         ));
     }
     Ok(json)
@@ -81,13 +80,13 @@ fn extract_resource(cli: &Cli, resource: &str) -> Result<Vec<u8>> {
     if inputs.len() != 1 {
         return Err(anyhow!("--extract 仅支持单个输入"));
     }
-    let input = resolve_input(&inputs[0], cli.max_parse_bytes)?;
+    let input = resolve_input(&inputs[0], cli.max_parse_bytes())?;
     let request = request_for(
         &input,
         None,
         TableFilter::default(),
         DocumentFilter::default(),
-        cli.max_parse_bytes,
+        cli.max_parse_bytes(),
         cli.max_work_units,
     );
     extract_media(&request, resource).map_err(Into::into)
@@ -106,7 +105,7 @@ fn run_parse(cli: Cli) -> Result<String> {
     let mut failures = Vec::new();
     let mut source_bytes = 0usize;
     for input in inputs {
-        let remaining = cli.max_parse_bytes.saturating_sub(source_bytes);
+        let remaining = cli.max_parse_bytes().saturating_sub(source_bytes);
         match resolve_input(&input, remaining) {
             Ok(input_data) => {
                 let request = request_for(
@@ -168,7 +167,7 @@ fn run_parse(cli: Cli) -> Result<String> {
                         if let Err(error) = retain_within_parse_budget(
                             &mut extracted_bytes,
                             document.markdown.len(),
-                            cli.max_parse_bytes,
+                            cli.max_parse_bytes(),
                             "retained extracted documents",
                         ) {
                             failures.push(InputFailure::from_error(
@@ -199,7 +198,7 @@ fn run_parse(cli: Cli) -> Result<String> {
             report_parse_warnings(&parse_warnings);
             let markdown = render_documents(&documents, mode)?;
             // Reserve room for in-band diagnostics so the total remains within
-            // --max-output-bytes and agents do not lose warnings first.
+            // --max-output-kib and agents do not lose warnings first.
             let diagnostics = [
                 markdown_skipped_block(&failures),
                 markdown_parse_warnings_block(&parse_warnings),
@@ -207,10 +206,10 @@ fn run_parse(cli: Cli) -> Result<String> {
             .into_iter()
             .flatten()
             .collect::<String>();
-            let limited_diagnostics = limit_markdown_output(diagnostics, cli.max_output_bytes);
+            let limited_diagnostics = limit_markdown_output(diagnostics, cli.max_output_bytes());
             report_output_truncation(limited_diagnostics.warning.as_deref());
             let budget = cli
-                .max_output_bytes
+                .max_output_bytes()
                 .saturating_sub(limited_diagnostics.content.len());
             let limited = limit_markdown_output(markdown, budget);
             report_output_truncation(limited.warning.as_deref());
@@ -246,7 +245,7 @@ fn run_parse(cli: Cli) -> Result<String> {
                         if let Err(error) = retain_within_parse_budget(
                             &mut extracted_bytes,
                             extracted.serialized_bytes,
-                            cli.max_parse_bytes,
+                            cli.max_parse_bytes(),
                             "retained extracted tables",
                         ) {
                             failures.push(InputFailure::from_error(
@@ -270,7 +269,7 @@ fn run_parse(cli: Cli) -> Result<String> {
             report_skipped(&failures);
             let mut output = JsonOutput::new(tables);
             output.warnings = failures.iter().map(InputFailure::display).collect();
-            let limited = render_json_limited(&output, cli.max_output_bytes);
+            let limited = render_json_limited(&output, cli.max_output_bytes());
             report_output_truncation(limited.warning.as_deref());
             Ok(limited.content)
         }
@@ -291,22 +290,16 @@ impl InputWarning {
     }
 }
 
-fn validate_max_output_bytes(max_output_bytes: usize) -> Result<()> {
-    if max_output_bytes < spoor_core::MIN_MAX_OUTPUT_BYTES {
-        return Err(anyhow!(
-            "--max-output-bytes 不能小于 {}",
-            spoor_core::MIN_MAX_OUTPUT_BYTES
-        ));
+fn validate_max_output_kib(max_output_kib: usize) -> Result<()> {
+    if max_output_kib == 0 {
+        return Err(anyhow!("--max-output-kib 不能小于 1"));
     }
     Ok(())
 }
 
-fn validate_max_parse_bytes(max_parse_bytes: usize) -> Result<()> {
-    if max_parse_bytes < spoor_core::MIN_MAX_PARSE_BYTES {
-        return Err(anyhow!(
-            "--max-parse-bytes 不能小于 {}",
-            spoor_core::MIN_MAX_PARSE_BYTES
-        ));
+fn validate_max_parse_mib(max_parse_mib: usize) -> Result<()> {
+    if max_parse_mib == 0 {
+        return Err(anyhow!("--max-parse-mib 不能小于 1"));
     }
     Ok(())
 }

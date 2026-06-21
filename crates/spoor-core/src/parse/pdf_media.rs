@@ -42,7 +42,7 @@ pub(crate) enum ImageExtractError {
     /// CCITTFax, JBIG2, non-8-bit, …). The string names what was seen.
     UnsupportedEncoding(String),
     /// Decoding the raster would exceed the parse budget; `needed` is the raw
-    /// size in bytes the consumer must allow via `--max-parse-bytes`.
+    /// size in bytes the consumer must allow via `--max-parse-mib`.
     TooLarge(usize),
 }
 
@@ -56,7 +56,7 @@ impl ImageExtractError {
                 format!("该图片编码或色彩空间（{detail}）无法直接导出；需外部渲染后交 VLM。")
             }
             Self::TooLarge(needed) => format!(
-                "该图片解码后约 {needed} 字节，超过解析上限；可调高 --max-parse-bytes 后重试，或在外部渲染该页。"
+                "该图片解码后约 {needed} 字节，超过解析上限；可调高 --max-parse-mib 后重试，或在外部渲染该页。"
             ),
         }
     }

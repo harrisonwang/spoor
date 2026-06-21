@@ -104,7 +104,7 @@ pub fn render_json_limited(output: &JsonOutput, max_output_bytes: usize) -> Limi
         let Some(table) = limited.tables.last_mut() else {
             // The minimum CLI limit is large enough for this fallback envelope.
             limited.usage =
-                "输出已截断。请缩小输入范围，或用 --max-output-bytes 调高上限。".to_string();
+                "输出已截断。请缩小输入范围，或用 --max-output-kib 调高上限。".to_string();
             limited.warnings = vec![warning.clone()];
             break render_json(&limited);
         };
@@ -133,7 +133,7 @@ pub fn render_json_limited(output: &JsonOutput, max_output_bytes: usize) -> Limi
 
 fn output_limit_warning(max_output_bytes: usize) -> String {
     format!(
-        "输出在 {} 字节处截断，内容不完整。可缩减范围（如 --pages、--rows），或调高 --max-output-bytes。",
+        "输出在 {} 字节处截断，内容不完整。可缩减范围（如 --pages、--rows），或调高 --max-output-kib。",
         max_output_bytes
     )
 }

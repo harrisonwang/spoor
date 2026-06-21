@@ -16,12 +16,12 @@
 
 | 威胁 | 防御措施 | 默认值 | 可配置 |
 | --- | --- | --- | --- |
-| 输入过大 | core 在检测/解析前检查输入字节量 | 64 MiB 共享解析预算 | `ParseLimits.max_parse_bytes`；CLI `--max-parse-bytes` |
+| 输入过大 | core 在检测/解析前检查输入字节量 | 64 MiB 共享解析预算 | `ParseLimits.max_parse_bytes`；CLI `--max-parse-mib` |
 | ZIP 炸弹：条目过多 | 在中央目录检查阶段拒绝存档 | 10,000 条 | 无公开覆写接口 |
 | ZIP 炸弹：单条目过大 | 拒绝声明或实测超大的条目 | 每条目 50 MiB | 无公开覆写接口 |
 | ZIP 炸弹：压缩比异常 | 拒绝可疑的声明压缩比 | 200× | 无公开覆写接口 |
 | ZIP 炸弹：总解压量膨胀 | 将声明未压缩大小累计计入解析预算 | 共享解析预算 | `max_parse_bytes` |
-| 输出/token 耗尽 | CLI 截断 stdout，附加带内 marker 或 JSON warning | 256 KiB | CLI `--max-output-bytes` |
+| 输出/token 耗尽 | CLI 截断 stdout，附加带内 marker 或 JSON warning | 256 KiB | CLI `--max-output-kib` |
 | 加密/旧版 Office 混淆 | 在扩展名回退前拦截 OLE/CFB | 稳定错误 `legacy_or_encrypted_office` | 否 |
 | 加密 PDF | 将解密失败映射为稳定错误 | 稳定错误 `encrypted_pdf` | 否 |
 | 无文本无图片 PDF 幻觉风险 | 拒绝无文本层且无图片的 PDF，而非静默返回成功 | 稳定错误 `pdf_no_extractable_content` | 否 |

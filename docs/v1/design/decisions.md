@@ -54,16 +54,16 @@ Arguments:
 
 Options:
       --format <format>    覆盖自动 format 检测（默认按 magic-byte / 扩展名推断）。 [possible values: html, markdown, pdf, docx, xlsx, pptx, csv, ipynb, epub, text]
-  -m, --mode <mode>        覆盖默认输出模式；表格型（CSV/XLSX）默认 json，其他默认 md。
+  -m, --mode <mode>        覆盖默认输出模式；表格型（CSV/XLSX）默认 json、其他默认 md。json 仅表格型可用，文档型只能 md。
       --sheet <name>       XLSX 限定 sheet；找不到时报错并列出可用 sheets。CSV 无此概念，自动忽略。
       --rows <first:last>  限定数据行的 Excel 行号区间，例如 `5:104`（含两端）。与 --limit/--offset 互斥。
       --columns <columns>  按列名筛选，逗号分隔；找不到时报错并列出可用列。
       --limit <n>          每个 table 最多返回多少数据行；默认 100。
       --offset <n>         跳过前 N 条数据行再应用 --limit；默认 0。
-      --max-output-bytes <n>
-                           整次命令 stdout 的最大字节数；默认 262144（256 KiB）。
-      --max-parse-bytes <n>
-                           解析输入、中间文本和容器解压内容的共享字节预算；默认 67108864（64 MiB）。
+      --max-output-kib <kib>
+                           整次命令 stdout 的上限，单位 KiB；默认 256。
+      --max-parse-mib <mib>
+                           解析输入、中间文本和容器解压内容的共享上限，单位 MiB；默认 64。
   -h, --help               显示帮助。
   -V, --version            显示版本。
 
@@ -75,8 +75,8 @@ For tables (CSV/XLSX), the recommended pattern is:
 
 spoor bounds JSON previews by default (first 100 data rows per table) and
 caps total CLI output at 256 KiB. Use --limit/--rows to narrow tables or
---max-output-bytes to raise the total output cap. Parsing uses a shared
-64 MiB data-volume budget by default; raise it with --max-parse-bytes.
+--max-output-kib to raise the total output cap. Parsing uses a shared
+64 MiB data-volume budget by default; raise it with --max-parse-mib.
 
 Examples:
   spoor report.pdf
@@ -416,7 +416,7 @@ ZIP/Office 安全是自动调用和批处理的前置条件。
 - Markdown 截断时追加显式 warning marker，并向 stderr 输出 warning。
 - JSON 保持合法结构，顶层 `truncated: true` + `warnings[]`；优先移除末尾 rows/tables。
 - skipped/error diagnostics 最多详细输出前 20 条，其余汇总，避免 stderr / CI log warning flood。
-- 输入读取、ZIP archive 总解压量、提取结果和多输入保留结果共享默认 64 MiB 数据量预算；支持 `--max-parse-bytes`，超限返回结构化错误。
+- 输入读取、ZIP archive 总解压量、提取结果和多输入保留结果共享默认 64 MiB 数据量上限；支持 `--max-parse-mib`，超限返回结构化错误。
 - 合作式工作量预算 `max_work_units`（`--max-work-units`）：字节预算管不到 CPU，小 PDF 也可能用病态内容流把 CPU 打满。解析器在循环边界按操作数计费，超限返回 `work_budget_exceeded`。当前覆盖 PDF 内容流操作；线程局部、随解析安装/清除，guard 在 panic 时也会复位。
 
 待补：
@@ -449,8 +449,8 @@ P0：
 - CSV/XLSX table JSON v2（顶层 `usage` + 扁平 `tables[]` + `workbook_sheets`）：已完成。
 - 表格筛选参数（`--sheet` / `--rows` / `--columns` / `--limit` / `--offset`）：已完成。`--rows` 使用 Excel 行号（含两端），与 `--limit`/`--offset` 互斥；找不到的 sheet/columns 直接报错并列出可用列表。
 - PDF page boundary：已完成，每页输出 `## Page N`。
-- 总输出上限：已完成，默认 256 KiB，支持 `--max-output-bytes`，Markdown/JSON 均有可检测 truncation 信号。
-- 数据量预算：已完成，默认 64 MiB，支持 `--max-parse-bytes`，覆盖输入、ZIP 总解压量、提取结果和多输入累计结果。
+- 总输出上限：已完成，默认 256 KiB，支持 `--max-output-kib`，Markdown/JSON 均有可检测 truncation 信号。
+- 数据量上限：已完成，默认 64 MiB，支持 `--max-parse-mib`，覆盖输入、ZIP 总解压量、提取结果和多输入累计结果。
 - ZIP 安全层：entry count、per-entry size、compression ratio 和 archive total decompressed cap 已完成；仍缺细粒度用户配置和 XLSX 依赖层评估。
 
 P1：
@@ -470,7 +470,7 @@ P2/P3：
 - `spoor inspect` 子命令——JSON 默认输出（metadata + preview + usage + workbook_sheets）已经覆盖 inspect 的全部价值。
 MCP server——通过 shell 配合工具封装已足够；社区可以做 `spoor-mcp` 轻量封装。
 - 通用 block-oriented JSON——文档型用 Markdown 已经是 LLM-friendly 表示。
-- `spoor chunk` / 文档分块——文档是顺序读介质，截断是尾部小概率问题：缩小输入或 `--max-output-bytes` 重跑即可。为它引入"清单 + 切片 + 汇总"整套机制，是把表格的随机访问思维套用到顺序读的文档上，已明确否决（2026-06）。
+- `spoor chunk` / 文档分块——文档是顺序读介质，截断是尾部小概率问题：缩小输入或 `--max-output-kib` 重跑即可。为它引入"清单 + 切片 + 汇总"整套机制，是把表格的随机访问思维套用到顺序读的文档上，已明确否决（2026-06）。
 
 ## 测试策略
 

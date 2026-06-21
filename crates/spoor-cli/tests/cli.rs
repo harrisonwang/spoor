@@ -517,8 +517,8 @@ fn markdown_total_output_limit_is_global_and_visible() {
 
     let output = spoor_bin()
         .args([
-            "--max-output-bytes",
-            "1024",
+            "--max-output-kib",
+            "1",
             &first.to_string_lossy(),
             &second.to_string_lossy(),
         ])
@@ -533,7 +533,7 @@ fn markdown_total_output_limit_is_global_and_visible() {
 
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
     assert!(stderr.contains("warning: 输出在"));
-    assert!(stderr.contains("--max-output-bytes"));
+    assert!(stderr.contains("--max-output-kib"));
 }
 
 #[test]
@@ -554,23 +554,23 @@ fn markdown_uses_default_total_output_limit() {
 fn max_output_bytes_rejects_too_small_budget() {
     let source = fixture_path("plain/01_ascii.txt");
     let output = spoor_bin()
-        .args(["--max-output-bytes", "100", &source])
+        .args(["--max-output-kib", "0", &source])
         .output()
         .expect("run spoor");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("--max-output-bytes 不能小于 1024"));
+    assert!(stderr.contains("--max-output-kib 不能小于 1"));
 }
 
 #[test]
 fn local_file_over_parse_budget_emits_structured_error() {
     let dir = TestDir::new("local_file_over_parse_budget_emits_structured_error");
     let source = dir.path().join("large.txt");
-    std::fs::write(&source, vec![b'x'; 2048]).unwrap();
+    std::fs::write(&source, vec![b'x'; 2 * 1024 * 1024]).unwrap();
 
     let output = spoor_bin()
-        .args(["--max-parse-bytes", "1024", &source.to_string_lossy()])
+        .args(["--max-parse-mib", "1", &source.to_string_lossy()])
         .output()
         .expect("run spoor");
 
@@ -582,7 +582,7 @@ fn local_file_over_parse_budget_emits_structured_error() {
         value["hint"]
             .as_str()
             .unwrap()
-            .contains("--max-parse-bytes")
+            .contains("--max-parse-mib")
     );
     assert_eq!(value["recoverable"], true);
 }
@@ -592,13 +592,13 @@ fn multiple_inputs_share_parse_budget() {
     let dir = TestDir::new("multiple_inputs_share_parse_budget");
     let first = dir.path().join("a.txt");
     let second = dir.path().join("b.txt");
-    std::fs::write(&first, vec![b'a'; 700]).unwrap();
-    std::fs::write(&second, vec![b'b'; 700]).unwrap();
+    std::fs::write(&first, vec![b'a'; 600 * 1024]).unwrap();
+    std::fs::write(&second, vec![b'b'; 600 * 1024]).unwrap();
 
     let output = spoor_bin()
         .args([
-            "--max-parse-bytes",
-            "1024",
+            "--max-parse-mib",
+            "1",
             &first.to_string_lossy(),
             &second.to_string_lossy(),
         ])
@@ -617,7 +617,7 @@ fn multiple_inputs_share_parse_budget() {
 fn extracted_text_expansion_respects_parse_budget() {
     let dir = TestDir::new("extracted_text_expansion_respects_parse_budget");
     let source = dir.path().join("wide.csv");
-    std::fs::write(&source, format!("{}\n", vec!["x"; 400].join(","))).unwrap();
+    std::fs::write(&source, format!("{}\n", vec!["x"; 300_000].join(","))).unwrap();
 
     let output = spoor_bin()
         .args([
@@ -625,8 +625,8 @@ fn extracted_text_expansion_respects_parse_budget() {
             "csv",
             "--mode",
             "md",
-            "--max-parse-bytes",
-            "1024",
+            "--max-parse-mib",
+            "1",
             &source.to_string_lossy(),
         ])
         .output()
@@ -648,13 +648,13 @@ fn extracted_text_expansion_respects_parse_budget() {
 fn max_parse_bytes_rejects_too_small_budget() {
     let source = fixture_path("plain/01_ascii.txt");
     let output = spoor_bin()
-        .args(["--max-parse-bytes", "100", &source])
+        .args(["--max-parse-mib", "0", &source])
         .output()
         .expect("run spoor");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("--max-parse-bytes 不能小于 1024"));
+    assert!(stderr.contains("--max-parse-mib 不能小于 1"));
 }
 
 fn run_with_stdin(args: &[&str], input: &[u8]) -> std::process::Output {
@@ -668,12 +668,15 @@ fn run_with_stdin(args: &[&str], input: &[u8]) -> std::process::Output {
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn spoor");
-    child
-        .stdin
-        .take()
-        .expect("child stdin")
-        .write_all(input)
-        .expect("write to child stdin");
+    if let Err(error) = child.stdin.take().expect("child stdin").write_all(input) {
+        // The child can close stdin early (e.g. once the parse budget is
+        // exceeded) before we finish writing; treat a broken pipe as expected.
+        assert_eq!(
+            error.kind(),
+            std::io::ErrorKind::BrokenPipe,
+            "write to child stdin: {error}"
+        );
+    }
     child.wait_with_output().expect("wait for spoor")
 }
 
@@ -689,8 +692,8 @@ fn stdin_dash_reads_text_as_markdown() {
 #[test]
 fn stdin_over_parse_budget_emits_structured_error() {
     let output = run_with_stdin(
-        &["--format", "text", "--max-parse-bytes", "1024", "-"],
-        &vec![b'x'; 2048],
+        &["--format", "text", "--max-parse-mib", "1", "-"],
+        &vec![b'x'; 2 * 1024 * 1024],
     );
 
     assert!(!output.status.success());

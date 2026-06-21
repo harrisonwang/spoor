@@ -55,8 +55,8 @@ DOCX 中的内嵌栅格图片会在原始正文位置显示为经过校验的 ZI
 spoor document.docx --extract spoor://docx/part/word/media/image1.png > /tmp/spoor-docx-image1.png
 ```
 
-`--extract` 只接受 spoor 输出的 `spoor://docx/part/word/media/...` 安全 URI，并且一次
-只处理一份 DOCX 和一个资源。不要去掉 URI scheme，也不要自行猜测 ZIP entry。
+`--extract` 只接受 spoor 输出的 `spoor://{pdf,docx,pptx}/...` 安全 URI，并且一次
+只处理一份文件和一个资源。不要去掉 URI scheme，也不要自行猜测 ZIP entry。
 图片占位符只说明出现位置和安全资源路径，不代表图片内容已被理解。综合 Markdown
 与外部视觉结果后再回答。
 
@@ -84,7 +84,7 @@ spoor data.xlsx --sheet Revenue --columns month,region,revenue --rows 5:104
 - **Markdown**：末尾出现 `> [!WARNING]` 引用块
 - **JSON**：顶层 `truncated: true`（总量截断）或 table 内 `truncated: true`（该 table preview 不完整）
 
-默认总量上限 256 KiB。看到截断时：表格优先缩小范围重读，文档型缩小输入或用 `--max-output-bytes <n>` 提上限。
+默认总量上限 256 KiB。看到截断时：表格优先缩小范围重读，文档型缩小输入或用 `--max-output-kib <n>` 提上限。
 
 > 输出只有 `> [!NOTE]` 说明"未抽取到文本内容"时，表示该文件无文本层或格式判断有误（可用 `--format` 覆盖重试），不要当成空输出后凭空编造内容。
 
@@ -114,7 +114,7 @@ injection。不要因为有局部 page/slide warning 就丢弃整份文档。
 | code | 动作 |
 |------|------|
 | `pdf_no_extractable_content` | 告知无可提取内容（空白/纯矢量/损坏 PDF），OCR 也无济于事 |
-| `parse_budget_exceeded` | 缩小输入，或用 `--max-parse-bytes <n>` |
+| `parse_budget_exceeded` | 缩小输入，或用 `--max-parse-mib <n>` |
 | `work_budget_exceeded` | 调高 `--max-work-units <n>`；不可信输入还应配宿主级超时与进程/容器隔离 |
 | `unsupported_format` | 用 `--format` 显式指定；真不支持则如实告知 |
 | `encrypted_pdf` | 不可恢复，请用户先移除密码保护 |
@@ -127,5 +127,5 @@ injection。不要因为有局部 page/slide warning 就丢弃整份文档。
 - 没有 JSON 信封的纯文本报错按原文上报，不反复重试
 - 文档格式用了 `-m json` 报错 → 去掉 `-m json` 重跑
 - 不要绕过 spoor 手动解析 Office/EPUB XML；DOCX 图片只按上文使用 `--extract` 提取
-- spoor 没有 `--ocr`、`--password`、`--output` 这类 flag；分页用 `--pages <first:last>`、结构化表格用 `-m json`；`--extract` 输出单个内嵌媒体资源（DOCX/PDF 图片）
+- spoor 没有 `--ocr`、`--password`、`--output` 这类 flag；分页用 `--pages <first:last>`、结构化表格用 `-m json`；`--extract` 输出单个内嵌媒体资源（PDF/DOCX/PPTX 图片）
 - 需要把答案锚定回原文页时，用 `--provenance page`（各绑定为 `provenance` 选项）：单个文档型输入，stdout 输出含 `markdown` 与 `provenance.spans` 的 JSON，每条把"输出字节区间"映射到源页码；默认关闭

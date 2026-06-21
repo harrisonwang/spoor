@@ -92,7 +92,7 @@ impl SpoorError {
             ErrorCode::ParseBudgetExceeded,
             PARSE_MEMORY_LIMIT_REASON,
             format!(
-                "解析在 {stage} 阶段超过 {max_bytes} 字节上限。可缩减输入范围，或调高 --max-parse-bytes。"
+                "解析在 {stage} 阶段超过 {max_bytes} 字节上限。可缩减输入范围，或调高 --max-parse-mib。"
             ),
             true,
             ParseStage::Limits,
