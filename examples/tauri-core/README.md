@@ -8,5 +8,5 @@ cargo run -p spoor-tauri-core-example
 ```
 
 在实际应用中为函数加上 `#[tauri::command]`，并从前端传入文件 bytes。
-默认解析预算为 64 MiB；若前端把 `Uint8Array` 转成普通数组再传递，会产生额外
+默认解析内存上限为 64 MiB；若前端把 `Uint8Array` 转成普通数组再传递，会产生额外
 内存副本，大文件应用应设计流式读取或原生侧文件读取命令。

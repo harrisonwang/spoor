@@ -53,7 +53,7 @@ Arguments:
   <input>...  文件路径、URL、glob，或 - 表示 stdin。可传多个。URL 与 - 不参与 glob 展开。
 
 Options:
-      --format <format>    手动指定输入格式。默认自动检测。 [possible values: pdf, docx, xlsx, csv, pptx, epub, ipynb, html, markdown, text]
+      --format <format>    手动指定输入格式。默认自动检测。
   -m, --mode <mode>        输出模式。表格默认 json、文档默认 md；json 仅表格可用。
       --pages <first:last> 仅提取 PDF 指定页，如 `1:3`。
       --sheet <name>       指定 XLSX 工作表名。CSV 忽略此选项。
@@ -62,11 +62,11 @@ Options:
       --limit <n>          每表最多返回行数，默认 100。
       --offset <n>         跳过前 N 行，默认 0。
       --max-output-kib <kib>
-                           stdout 上限，单位 KiB，默认 256。
+                           stdout 上限，默认 256 KiB。
       --max-parse-mib <mib>
-                           解析预算上限，单位 MiB，默认 64。
-      --max-work-units <n> 解析运算量上限，默认不限。不可信输入建议配合进程隔离。
-      --provenance <level> 输出原文定位映射。当前支持 page（PDF 页级）。仅限单文件输入。输出为 JSON。 [possible values: page]
+                           解析内存上限，默认 64 MiB。
+      --max-work-units <n> 运算量上限，默认不限。
+      --provenance <level> 输出原文定位映射。当前支持 page（PDF 页级）。仅限单文件输入。输出为 JSON。
       --extract <uri>      提取内嵌媒体到 stdout。接受 spoor://... URI。
   -h, --help               显示帮助。
   -V, --version            显示版本。
@@ -92,7 +92,7 @@ Common Patterns
 Defaults
   - 每表默认 100 行（--limit 翻页，--rows 定区间）
   - stdout 上限 256 KiB（--max-output-kib 调高）
-  - 解析预算 64 MiB（--max-parse-mib 调高）
+  - 解析内存上限 64 MiB（--max-parse-mib 调高）
 
 Examples
   spoor data.csv | jq '.tables[]'
@@ -432,11 +432,11 @@ ZIP/Office 安全是自动调用和批处理的前置条件。
 - JSON 保持合法结构，顶层 `truncated: true` + `warnings[]`；优先移除末尾 rows/tables。
 - skipped/error diagnostics 最多详细输出前 20 条，其余汇总，避免 stderr / CI log warning flood。
 - 输入读取、ZIP archive 总解压量、提取结果和多输入保留结果共享默认 64 MiB 数据量上限；支持 `--max-parse-mib`，超限返回结构化错误。
-- 合作式工作量预算 `max_work_units`（`--max-work-units`）：字节预算管不到 CPU，小 PDF 也可能用病态内容流把 CPU 打满。解析器在循环边界按操作数计费，超限返回 `work_budget_exceeded`。当前覆盖 PDF 内容流操作；线程局部、随解析安装/清除，guard 在 panic 时也会复位。
+- 合作式运算量上限 `max_work_units`（`--max-work-units`）：字节上限管不到 CPU，小 PDF 也可能用病态内容流把 CPU 打满。解析器在循环边界按操作数计费，超限返回 `work_budget_exceeded`。当前覆盖 PDF 内容流操作；线程局部、随解析安装/清除，guard 在 panic 时也会复位。
 
 待补：
 
-- 把工作量预算扩展到 XML/表格等其余解析器循环。
+- 把运算量上限扩展到 XML/表格等其余解析器循环。
 - 可真正中断的 wall-clock 超时与取消：合作式预算只能在循环边界中止，真正掐断需调用方用 Web Worker terminate、子进程/容器（cgroups + RLIMIT）等宿主手段。
 - 操作系统级精确 RSS / address-space 严格限制；当前数据量预算约束可控数据体积，不承诺覆盖第三方库所有短时分配。
 - 更细粒度的用户可配置 ZIP limits。

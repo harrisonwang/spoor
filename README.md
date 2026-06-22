@@ -127,7 +127,7 @@ WASM 包默认包含全部重点格式；
 
 ## 限制与边界
 
-- core 默认单次共享解析预算为 64 MiB；CLI 默认总输出上限为 256 KiB。
+- core 默认单次共享解析内存上限为 64 MiB；CLI 默认总输出上限为 256 KiB。
 - CSV/XLSX 默认仅返回每个表前 100 条数据行，完整读取需要使用筛选与分页参数。
 - 不执行 OCR、宏、公式、notebook code、脚本或内嵌二进制；加密文件与旧版 Office 格式不支持。
 - 浏览器和边缘示例额外采用 16 MiB 请求/单文件上限，并受宿主内存、CPU 与请求限制约束。
@@ -142,8 +142,8 @@ WASM 包默认包含全部重点格式；
 | code | 含义 |
 | --- | --- |
 | `pdf_no_extractable_content` | PDF 无文本层也无可提取图片，无内容可抽取 |
-| `parse_budget_exceeded` | 输入、解压或结果超过解析预算 |
-| `work_budget_exceeded` | 解析工作量（如 PDF 操作数）超过 `max_work_units` 上限 |
+| `parse_budget_exceeded` | 输入、解压或结果超过解析内存上限 |
+| `work_budget_exceeded` | 解析运算量（如 PDF 操作数）超过 `max_work_units` 上限 |
 | `unsupported_format` | 无法识别或不支持格式 |
 | `encrypted_pdf` | PDF 受密码保护 |
 | `legacy_or_encrypted_office` | 旧版或加密 Office 容器 |

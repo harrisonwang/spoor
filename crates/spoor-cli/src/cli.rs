@@ -94,7 +94,7 @@ Common Patterns
 Defaults
   - 每表默认 100 行（--limit 翻页，--rows 定区间）
   - stdout 上限 256 KiB（--max-output-kib 调高）
-  - 解析预算 64 MiB（--max-parse-mib 调高）
+  - 解析内存上限 64 MiB（--max-parse-mib 调高）
 
 Examples
   spoor data.csv | jq '.tables[]'
@@ -122,7 +122,7 @@ pub(crate) struct Cli {
     pub(crate) inputs: Vec<String>,
 
     /// 手动指定输入格式。默认自动检测。
-    #[arg(long, value_enum, value_name = "format")]
+    #[arg(long, value_enum, value_name = "format", hide_possible_values = true)]
     pub(crate) format: Option<FormatArg>,
 
     /// 输出模式。表格默认 json、文档默认 md；json 仅表格可用。
@@ -160,29 +160,37 @@ pub(crate) struct Cli {
     #[arg(long, value_name = "n")]
     pub(crate) offset: Option<usize>,
 
-    /// stdout 上限，单位 KiB，默认 256。
+    /// stdout 上限，默认 256 KiB。
     #[arg(
         long,
         value_name = "kib",
-        default_value_t = spoor_core::DEFAULT_MAX_OUTPUT_BYTES >> 10
+        default_value_t = spoor_core::DEFAULT_MAX_OUTPUT_BYTES >> 10,
+        hide_default_value = true
     )]
     pub(crate) max_output_kib: usize,
 
-    /// 解析预算上限，单位 MiB，默认 64。
+    /// 解析内存上限，默认 64 MiB。
     #[arg(
         long,
         value_name = "mib",
-        default_value_t = spoor_core::DEFAULT_MAX_PARSE_BYTES >> 20
+        default_value_t = spoor_core::DEFAULT_MAX_PARSE_BYTES >> 20,
+        hide_default_value = true
     )]
     pub(crate) max_parse_mib: usize,
 
-    /// 解析运算量上限，默认不限。不可信输入建议配合进程隔离。
+    /// 运算量上限，默认不限。
     #[arg(long, value_name = "n")]
     pub(crate) max_work_units: Option<usize>,
 
     /// 输出原文定位映射。当前支持 page（PDF 页级）。仅限单文件输入。
     /// 输出为 JSON，包含 markdown 与 provenance。
-    #[arg(long, value_enum, value_name = "level", conflicts_with = "mode")]
+    #[arg(
+        long,
+        value_enum,
+        value_name = "level",
+        conflicts_with = "mode",
+        hide_possible_values = true
+    )]
     pub(crate) provenance: Option<ProvenanceArg>,
 
     /// 提取内嵌媒体到 stdout。接受 spoor://... URI。

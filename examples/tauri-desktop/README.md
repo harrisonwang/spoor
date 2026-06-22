@@ -17,7 +17,7 @@ npm run tauri:dev
 npm run tauri:build
 ```
 
-示例使用 core 默认的 64 MiB 解析预算。当前 command 通过
+示例使用 core 默认的 64 MiB 解析内存上限。当前 command 通过
 `Array.from(Uint8Array)` 转换后再传给 Rust，会同时保留多个内存副本，因此它
 用于说明集成结构，不适合作为超大文件传输方案。最小依赖形态见
 [`../tauri-core`](../tauri-core/)。
