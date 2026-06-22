@@ -1782,15 +1782,33 @@ impl<'a> Processor<'a> {
                                                as_num(&operation.operands[2]),
                                                as_num(&operation.operands[3])))
                 }
-                "s" | "f*" | "B" | "B*" | "b" => {
-                    dlog!("unhandled path op {:?}", operation);
-                }
                 "S" => {
                     output.stroke(&gs.ctm, &gs.stroke_colorspace, &gs.stroke_color, &path)?;
                     path.ops.clear();
                 }
-                "F" | "f" => {
+                "s" => {
+                    // s = h S: close the subpath, then stroke.
+                    path.ops.push(PathOp::Close);
+                    output.stroke(&gs.ctm, &gs.stroke_colorspace, &gs.stroke_color, &path)?;
+                    path.ops.clear();
+                }
+                "F" | "f" | "f*" => {
+                    // f* is even-odd fill; for rendering and ink-counting we treat
+                    // it like a fill.
                     output.fill(&gs.ctm, &gs.fill_colorspace, &gs.fill_color, &path)?;
+                    path.ops.clear();
+                }
+                "B" | "B*" => {
+                    // Fill then stroke the same path.
+                    output.fill(&gs.ctm, &gs.fill_colorspace, &gs.fill_color, &path)?;
+                    output.stroke(&gs.ctm, &gs.stroke_colorspace, &gs.stroke_color, &path)?;
+                    path.ops.clear();
+                }
+                "b" | "b*" => {
+                    // b = h B: close, then fill and stroke.
+                    path.ops.push(PathOp::Close);
+                    output.fill(&gs.ctm, &gs.fill_colorspace, &gs.fill_color, &path)?;
+                    output.stroke(&gs.ctm, &gs.stroke_colorspace, &gs.stroke_color, &path)?;
                     path.ops.clear();
                 }
                 "W" | "w*" => { dlog!("unhandled clipping operation {:?}", operation); }
@@ -1986,51 +2004,86 @@ impl<'a> OutputDev for SVGOutput<'a> {
         write!(self.file, "</svg>")?;
         Ok(())
     }
-    fn output_character(&mut self, _trm: &Transform, _width: f64, _spacing: f64, _font_size: f64, _char: &str) -> Result<(), OutputError>{
+    fn output_character(&mut self, trm: &Transform, _width: f64, _spacing: f64, font_size: f64, char: &str) -> Result<(), OutputError>{
+        // The page group flips y, so a local y-flip keeps glyphs upright. Place
+        // the baseline at the glyph's user-space origin and size it by the text
+        // matrix scale. Rotation is ignored (rare for body text).
+        let size_vec = trm.transform_vector(vec2(font_size, font_size));
+        let size = (size_vec.x * size_vec.y).abs().sqrt();
+        if size <= 0.0 {
+            return Ok(());
+        }
+        write!(
+            self.file,
+            "<text transform='matrix(1,0,0,-1,{},{})' font-size='{}' fill='#111111'>{}</text>\n",
+            trm.m31,
+            trm.m32,
+            size,
+            xml_escape(char),
+        )?;
         Ok(())
     }
     fn begin_word(&mut self) -> Result<(), OutputError> {Ok(())}
     fn end_word(&mut self) -> Result<(), OutputError> {Ok(())}
     fn end_line(&mut self) -> Result<(), OutputError> {Ok(())}
     fn fill(&mut self, ctm: &Transform, _colorspace: &ColorSpace, _color: &[f64], path: &Path) -> Result<(), OutputError>{
-        write!(self.file, "<g transform='matrix({}, {}, {}, {}, {}, {})'>",
-               ctm.m11,
-               ctm.m12,
-               ctm.m21,
-               ctm.m22,
-               ctm.m31,
-               ctm.m32,
+        // V1 simplifies original colors to a light fill so a shape reads as a box
+        // without hiding the black text drawn over it. Structure + labels are what
+        // a vision model needs from a flowchart/diagram.
+        write!(
+            self.file,
+            "<g transform='matrix({}, {}, {}, {}, {}, {})'><path d='{}' fill='#eeeeee' stroke='#cccccc' stroke-width='0.5' /></g>\n",
+            ctm.m11, ctm.m12, ctm.m21, ctm.m22, ctm.m31, ctm.m32,
+            svg_path_data(path),
         )?;
-
-        /*if path.ops.len() == 1 {
-            if let PathOp::Rect(x, y, width, height) = path.ops[0] {
-                write!(self.file, "<rect x={} y={} width={} height={} />\n", x, y, width, height);
-                write!(self.file, "</g>");
-                return;
-            }
-        }*/
-        let mut d = Vec::new();
-        for op in &path.ops {
-            match op {
-                &PathOp::MoveTo(x, y) => { d.push(format!("M{} {}", x, y))}
-                &PathOp::LineTo(x, y) => { d.push(format!("L{} {}", x, y))},
-                &PathOp::CurveTo(x1, y1, x2, y2, x, y) => { d.push(format!("C{} {} {} {} {} {}", x1, y1, x2, y2, x, y))},
-                &PathOp::Close => { d.push(format!("Z"))},
-                &PathOp::Rect(x, y, width, height) => {
-                    d.push(format!("M{} {}", x, y));
-                    d.push(format!("L{} {}", x + width, y));
-                    d.push(format!("L{} {}", x + width, y + height));
-                    d.push(format!("L{} {}", x, y + height));
-                    d.push(format!("Z"));
-                }
-
-            }
-        }
-        write!(self.file, "<path d='{}' />", d.join(" "))?;
-        write!(self.file, "</g>")?;
-        write!(self.file, "\n")?;
         Ok(())
     }
+    fn stroke(&mut self, ctm: &Transform, _colorspace: &ColorSpace, _color: &[f64], path: &Path) -> Result<(), OutputError>{
+        write!(
+            self.file,
+            "<g transform='matrix({}, {}, {}, {}, {}, {})'><path d='{}' fill='none' stroke='#333333' stroke-width='1' /></g>\n",
+            ctm.m11, ctm.m12, ctm.m21, ctm.m22, ctm.m31, ctm.m32,
+            svg_path_data(path),
+        )?;
+        Ok(())
+    }
+}
+
+fn svg_path_data(path: &Path) -> String {
+    let mut d = Vec::new();
+    for op in &path.ops {
+        match op {
+            &PathOp::MoveTo(x, y) => d.push(format!("M{} {}", x, y)),
+            &PathOp::LineTo(x, y) => d.push(format!("L{} {}", x, y)),
+            &PathOp::CurveTo(x1, y1, x2, y2, x, y) => {
+                d.push(format!("C{} {} {} {} {} {}", x1, y1, x2, y2, x, y))
+            }
+            &PathOp::Close => d.push("Z".to_string()),
+            &PathOp::Rect(x, y, width, height) => {
+                d.push(format!("M{} {}", x, y));
+                d.push(format!("L{} {}", x + width, y));
+                d.push(format!("L{} {}", x + width, y + height));
+                d.push(format!("L{} {}", x, y + height));
+                d.push("Z".to_string());
+            }
+        }
+    }
+    d.join(" ")
+}
+
+fn xml_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 pub trait ConvertToFmt {
@@ -2129,12 +2182,26 @@ pub struct EngineSpan {
     pub font_size: f64,
 }
 
+/// Vector-graphics "ink" tallied per page: how many paths were painted and how
+/// many of their segments are Bézier curves. Curves are the high-precision
+/// signal for a real figure (rounded boxes, arrowheads, smooth shapes) that a
+/// table of rules and cell fills does not produce, so a vector-figure detector
+/// keys on `curves`. Counted on the existing span-extraction pass — no extra
+/// traversal.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct VectorInk {
+    pub curves: u32,
+    pub fills: u32,
+    pub strokes: u32,
+}
+
 /// Page geometry: dimensions plus the positioned spans drawn on it.
 #[derive(Debug, Clone, Default)]
 pub struct EnginePage {
     pub width: f64,
     pub height: f64,
     pub spans: Vec<EngineSpan>,
+    pub vector: VectorInk,
 }
 
 /// An `OutputDev` that records positioned text spans instead of emitting flat,
@@ -2239,6 +2306,25 @@ impl OutputDev for LayoutCollector {
     fn begin_word(&mut self) -> Result<(), OutputError> { Ok(()) }
     fn end_word(&mut self) -> Result<(), OutputError> { Ok(()) }
     fn end_line(&mut self) -> Result<(), OutputError> { Ok(()) }
+    // Tally painted vector ink so a caller can tell a figure-bearing page apart
+    // from a plain text/table page. Curves are the strong figure signal.
+    fn fill(&mut self, _ctm: &Transform, _cs: &ColorSpace, _color: &[f64], path: &Path) -> Result<(), OutputError> {
+        self.page.vector.fills += 1;
+        self.page.vector.curves += count_curves(path);
+        Ok(())
+    }
+    fn stroke(&mut self, _ctm: &Transform, _cs: &ColorSpace, _color: &[f64], path: &Path) -> Result<(), OutputError> {
+        self.page.vector.strokes += 1;
+        self.page.vector.curves += count_curves(path);
+        Ok(())
+    }
+}
+
+fn count_curves(path: &Path) -> u32 {
+    path.ops
+        .iter()
+        .filter(|op| matches!(op, PathOp::CurveTo(..)))
+        .count() as u32
 }
 
 /// Total page count, computed from the page tree without extracting any text.
@@ -2274,6 +2360,20 @@ pub fn extract_spans_from_mem_by_page_range(buffer: &[u8], page_range: Option<(u
     Ok(pages)
 }
 
+
+/// Render a single page (1-based) to a self-contained SVG: positioned text plus
+/// the page's vector shapes. Lets a caller hand a vector-drawn figure to a vision
+/// model without bundling a raster renderer.
+pub fn render_page_svg(buffer: &[u8], page_num: usize) -> Result<Vec<u8>, OutputError> {
+    let mut doc = Document::load_mem(buffer)?;
+    maybe_decrypt(&mut doc)?;
+    let mut out: Vec<u8> = Vec::new();
+    {
+        let mut svg = SVGOutput::new(&mut out);
+        output_doc_page(&doc, &mut svg, page_num as u32)?;
+    }
+    Ok(out)
+}
 
 pub fn print_metadata(doc: &Document) {
     dlog!("Version: {}", doc.version);

@@ -22,7 +22,7 @@ mod pdf;
 mod pdf_layout;
 #[cfg(feature = "pdf")]
 #[rustfmt::skip]
-mod pdf_engine;
+pub(crate) mod pdf_engine;
 #[cfg(feature = "pdf")]
 pub(crate) mod pdf_media;
 mod plain;

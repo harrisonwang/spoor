@@ -65,15 +65,17 @@ pub enum WarningCode {
     PdfMultiColumnReadingOrder,
     MergedTableStructureNotPreserved,
     EmbeddedVisualsOmitted,
+    VectorGraphicsOmitted,
 }
 
 impl WarningCode {
-    pub const ALL: [WarningCode; 5] = [
+    pub const ALL: [WarningCode; 6] = [
         WarningCode::PdfPageNoTextLayer,
         WarningCode::PdfPageSuspiciousTextLayer,
         WarningCode::PdfMultiColumnReadingOrder,
         WarningCode::MergedTableStructureNotPreserved,
         WarningCode::EmbeddedVisualsOmitted,
+        WarningCode::VectorGraphicsOmitted,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -83,6 +85,7 @@ impl WarningCode {
             Self::PdfMultiColumnReadingOrder => "pdf_multi_column_reading_order",
             Self::MergedTableStructureNotPreserved => "merged_table_structure_not_preserved",
             Self::EmbeddedVisualsOmitted => "embedded_visuals_omitted",
+            Self::VectorGraphicsOmitted => "vector_graphics_omitted",
         }
     }
 }

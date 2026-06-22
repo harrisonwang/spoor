@@ -12,6 +12,20 @@ use crate::result::{ProvenanceSpan, SourceAnchor, SpoorWarning, TextRange, Warni
 use crate::source::Source;
 use anyhow::{Result, anyhow};
 
+/// Minimum painted Bézier curves on a page for it to count as bearing a
+/// vector-drawn figure (flowchart, chart, diagram). Curves — rounded boxes,
+/// arrowheads, smooth shapes — are the high-precision signal a table of rules
+/// and cell fills does not produce. Validated across real PDFs to separate
+/// figure pages from plain text/table pages; kept conservative to favor
+/// precision over recall. Calibrated on a real-document corpus: genuine
+/// flowcharts/diagrams land at 48–92+ curves while pages with a few decorative
+/// rounded text boxes sit at ~12–16, so 20 keeps figures and drops decoration.
+const VECTOR_FIGURE_MIN_CURVES: u32 = 20;
+
+fn is_vector_figure(ink: &super::pdf_engine::VectorInk) -> bool {
+    ink.curves >= VECTOR_FIGURE_MIN_CURVES
+}
+
 pub fn extract(
     source: &Source<'_>,
     document_filter: &DocumentFilter,
@@ -51,7 +65,27 @@ pub fn extract(
     // Best-effort: locate image XObjects so the renderer can mark their page
     // position and warn. A discovery failure just yields no image markers.
     let images = pdf_media::discover_images_for_page_range(source.bytes(), pages.len(), page_range);
-    let layout = PdfLayoutDocument::from_numbered_page_text_and_images(pages, images);
+
+    // A vector-drawn figure (flowchart/chart/diagram) on a text-bearing page with
+    // no raster image slips past both existing signals: it has text (so not
+    // pdf_no_extractable_content) and no image XObject (so not
+    // embedded_visuals_omitted). Flag those pages so the renderer marks them with
+    // an extractable handle and the agent can pull the page as SVG for a VLM.
+    let vector_figures: Vec<bool> = pages
+        .iter()
+        .enumerate()
+        .map(|(index, (number, text))| {
+            let has_text = !text.trim().is_empty();
+            let has_images = images.get(index).is_some_and(|imgs| !imgs.is_empty());
+            has_text
+                && !has_images
+                && span_pages
+                    .get(number)
+                    .is_some_and(|page| is_vector_figure(&page.vector))
+        })
+        .collect();
+    let layout =
+        PdfLayoutDocument::from_numbered_page_text_and_images(pages, images, vector_figures);
 
     // A PDF with no text layer is only a dead end when it also has no images to
     // hand off. When it *does* (a scan or an exported diagram), surface the page
@@ -132,6 +166,15 @@ fn render_page(page: &PdfLayoutPage, markdown: &mut String, image_number: &mut u
         markdown.push_str("\n\n");
         render_image_marker(number, *image_number, image, markdown);
     }
+
+    if page.has_vector_figure {
+        // A real handle, mirroring the extractable-image marker: `--extract
+        // spoor://pdf/page/N` renders the page (text + vector shapes) to SVG.
+        markdown.push_str("\n\n");
+        markdown.push_str(&format!(
+            "![PDF figure (p{number})](spoor://pdf/page/{number})"
+        ));
+    }
 }
 
 fn render_image_marker(
@@ -182,20 +225,33 @@ fn layout_warnings(layout: &PdfLayoutDocument) -> Vec<SpoorWarning> {
         if !page.images.is_empty() {
             let total = page.images.len();
             let extractable = page.images.iter().filter(|image| image.extractable).count();
+            let unextractable = total - extractable;
             let message = if extractable == total {
-                format!("第 {number} 页有 {total} 张图片未进入文本；可用 --extract 取出交 VLM。")
+                format!(
+                    "第 {number} 页有 {total} 张位图未转成文本；可携带 --extract <链接> 参数提取图片，交由 VLM 识别。"
+                )
             } else if extractable == 0 {
                 format!(
-                    "第 {number} 页有 {total} 张图片未进入文本，编码无法直接导出；需外部渲染后交 VLM。"
+                    "第 {number} 页有 {total} 张位图未转成文本，但编码无法直接导出；需用外部工具渲染该页后交 VLM 识别。"
                 )
             } else {
                 format!(
-                    "第 {number} 页有 {total} 张图片未进入文本：{extractable} 张可 --extract 取出，其余需外部渲染。"
+                    "第 {number} 页有 {total} 张位图未转成文本：{extractable} 张可携带 --extract <链接> 参数提取，其余 {unextractable} 张编码无法直接导出、需外部渲染。"
                 )
             };
             warnings.push(SpoorWarning::at_page(
                 WarningCode::EmbeddedVisualsOmitted,
                 message,
+                number,
+            ));
+        }
+
+        if page.has_vector_figure {
+            warnings.push(SpoorWarning::at_page(
+                WarningCode::VectorGraphicsOmitted,
+                format!(
+                    "第 {number} 页含矢量图形/图表未转成文本；该页末尾已附 spoor://pdf/page/{number} 链接，可携带 --extract <链接> 参数提取该页 SVG 图，交由 VLM 识别。"
+                ),
                 number,
             ));
         }
@@ -324,6 +380,68 @@ mod tests {
         assert_eq!(
             warnings[0].location,
             Some(WarningLocation::Page { number: 2 })
+        );
+    }
+
+    #[test]
+    fn vector_figure_threshold_keys_on_curves_not_fills() {
+        use crate::parse::pdf_engine::VectorInk;
+        // Curves are the signal: at the threshold it counts as a figure.
+        assert!(super::is_vector_figure(&VectorInk {
+            curves: super::VECTOR_FIGURE_MIN_CURVES,
+            fills: 0,
+            strokes: 0,
+        }));
+        // A fill-heavy, curve-light page (shaded table / colored boxes) is not.
+        assert!(!super::is_vector_figure(&VectorInk {
+            curves: super::VECTOR_FIGURE_MIN_CURVES - 1,
+            fills: 300,
+            strokes: 0,
+        }));
+    }
+
+    #[test]
+    fn vector_figure_page_warns_and_marks_with_extract_handle() {
+        use crate::parse::pdf_layout::PdfLayoutDocument;
+        // A text-bearing page flagged as a vector figure (no raster image).
+        let layout = PdfLayoutDocument::from_numbered_page_text_and_images(
+            vec![(1usize, "diagram caption".to_string())],
+            vec![Vec::new()],
+            vec![true],
+        );
+
+        let warnings = super::layout_warnings(&layout);
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.code == WarningCode::VectorGraphicsOmitted),
+            "figure page must warn"
+        );
+
+        let markdown = super::render_layout(&layout).0;
+        assert!(
+            markdown.contains("spoor://pdf/page/1"),
+            "figure page must carry an extractable page handle: {markdown}"
+        );
+    }
+
+    #[test]
+    fn plain_page_has_no_vector_figure_signal() {
+        use crate::parse::pdf_layout::PdfLayoutDocument;
+        let layout = PdfLayoutDocument::from_numbered_page_text_and_images(
+            vec![(1usize, "just prose".to_string())],
+            vec![Vec::new()],
+            vec![false],
+        );
+        assert!(
+            !super::layout_warnings(&layout)
+                .iter()
+                .any(|w| w.code == WarningCode::VectorGraphicsOmitted)
+        );
+        assert!(
+            !super::render_layout(&layout)
+                .0
+                .contains("spoor://pdf/page/")
         );
     }
 

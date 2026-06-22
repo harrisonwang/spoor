@@ -25,19 +25,21 @@ impl PdfLayoutDocument {
             .into_iter()
             .enumerate()
             .map(|(index, text)| (index + 1, text));
-        Self::from_numbered_page_text_and_images(numbered_pages, images)
+        Self::from_numbered_page_text_and_images(numbered_pages, images, Vec::new())
     }
 
     pub(crate) fn from_numbered_page_text_and_images(
         pages: impl IntoIterator<Item = (usize, String)>,
         images: Vec<Vec<PageImage>>,
+        vector_figures: Vec<bool>,
     ) -> Self {
         let pages = pages
             .into_iter()
             .enumerate()
-            .map(|(image_index, (number, text))| {
-                let page_images = images.get(image_index).cloned().unwrap_or_default();
-                PdfLayoutPage::from_page_text(number, text, page_images)
+            .map(|(index, (number, text))| {
+                let page_images = images.get(index).cloned().unwrap_or_default();
+                let has_vector_figure = vector_figures.get(index).copied().unwrap_or(false);
+                PdfLayoutPage::from_page_text(number, text, page_images, has_vector_figure)
             })
             .collect();
 
@@ -66,11 +68,20 @@ pub(crate) struct PdfLayoutPage {
     pub(crate) blocks: Vec<PdfBlock>,
     pub(crate) images: Vec<PdfImageObject>,
     pub(crate) links: Vec<PdfLinkAnnotation>,
+    /// The page bears a vector-drawn figure (flowchart/chart/diagram) the text
+    /// path cannot convey. Drives both the in-body figure marker and the
+    /// `vector_graphics_omitted` warning, mirroring how images drive theirs.
+    pub(crate) has_vector_figure: bool,
     pub(crate) diagnostics: Vec<PdfLayoutDiagnostic>,
 }
 
 impl PdfLayoutPage {
-    fn from_page_text(number: usize, text: String, images: Vec<PageImage>) -> Self {
+    fn from_page_text(
+        number: usize,
+        text: String,
+        images: Vec<PageImage>,
+        has_vector_figure: bool,
+    ) -> Self {
         let mut blocks = Vec::new();
         if !text.is_empty() {
             blocks.push(PdfBlock {
@@ -103,6 +114,7 @@ impl PdfLayoutPage {
             blocks,
             images,
             links: Vec::new(),
+            has_vector_figure,
             diagnostics: Vec::new(),
         }
     }
@@ -428,6 +440,7 @@ mod tests {
                 span("second line", 50.0, 210.0, 120.0),
                 span("third line", 50.0, 190.0, 140.0),
             ],
+            vector: Default::default(),
         };
         let (text, multi_column) = reading_order_text(&page).expect("text");
         assert!(!multi_column);
@@ -449,6 +462,7 @@ mod tests {
                 span("L3", 50.0, 250.0, 140.0),
                 span("R3", 350.0, 550.0, 140.0),
             ],
+            vector: Default::default(),
         };
         let (text, multi_column) = reading_order_text(&page).expect("text");
         assert!(multi_column, "a clear central gutter must be detected");
@@ -495,6 +509,7 @@ mod tests {
                 ),
                 span("and a sixth line so detection can run", 50.0, 535.0, 200.0),
             ],
+            vector: Default::default(),
         };
         let (_, multi_column) = reading_order_text(&page).expect("text");
         assert!(!multi_column, "straddling lines must not be split");
@@ -518,6 +533,7 @@ mod tests {
                     font_size: 10.0,
                 },
             ],
+            vector: Default::default(),
         };
         let (text, _) = reading_order_text(&page).expect("text");
         assert!(

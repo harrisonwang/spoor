@@ -322,9 +322,28 @@ pub fn extract_media(request: &ParseRequest<'_>, resource: &str) -> SpoorResult<
 /// structured error and stay marked-only in the rendered text.
 #[cfg(feature = "pdf")]
 fn extract_media_from_pdf(request: &ParseRequest<'_>, resource: &str) -> SpoorResult<Vec<u8>> {
+    // A whole-page render handle for a vector-drawn figure: return the page
+    // (positioned text + vector shapes) as a self-contained SVG.
+    if let Some(page) = safe_pdf_page_resource(resource) {
+        let svg =
+            crate::parse::pdf_engine::render_page_svg(request.bytes, page).map_err(|error| {
+                SpoorError::parse_failed(
+                    format!("渲染 PDF 第 {page} 页为 SVG 失败：{error}"),
+                    ParseStage::Parse,
+                )
+            })?;
+        ensure_parse_size(
+            svg.len(),
+            request.limits.max_parse_bytes,
+            "rendered pdf page svg",
+        )
+        .map_err(|error| SpoorError::from_anyhow(error, ParseStage::Limits))?;
+        return Ok(svg);
+    }
+
     let (id, generation) = safe_pdf_image_resource(resource).ok_or_else(|| {
         SpoorError::parse_failed(
-            "--extract 的 URI 格式无效，PDF 应为 spoor://pdf/obj/{id}/{gen}。",
+            "--extract 的 URI 格式无效，PDF 应为 spoor://pdf/obj/{id}/{gen} 或 spoor://pdf/page/{n}。",
             ParseStage::Parse,
         )
     })?;
@@ -363,6 +382,17 @@ fn safe_pdf_image_resource(resource: &str) -> Option<(u32, u16)> {
         return None;
     }
     Some((id, generation))
+}
+
+/// Parse and validate a `spoor://pdf/page/{n}` whole-page render handle into a
+/// 1-based page number. Rejects 0 and any trailing segment.
+#[cfg(feature = "pdf")]
+fn safe_pdf_page_resource(resource: &str) -> Option<usize> {
+    let page = resource
+        .strip_prefix("spoor://pdf/page/")?
+        .parse::<usize>()
+        .ok()?;
+    (page > 0).then_some(page)
 }
 
 /// Resolve a `spoor://{fmt}/part/{opc-root}/media/{file}` handle for an OPC
