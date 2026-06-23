@@ -1,4 +1,6 @@
-# AWS Lambda 二进制 Layer 示例
+# AWS Lambda：CLI 单二进制装进 Layer，子进程调用
+
+**本示例唯一证明：把 `spoor` CLI 单二进制放进 AWS Lambda Layer（`/opt/bin/spoor`），handler 以子进程方式调用——这是 spoor 的第三种交付形态（既非 WASM、也非链接库，而是无依赖的 CLI 单二进制）在 serverless 的用法。** 解析继承 CLI 的内存/输出上限，与运行时语言无关。
 
 该 handler 期望 Linux 版 `spoor` 位于 Lambda Layer 的 `/opt/bin/spoor`。
 调用参数形如：

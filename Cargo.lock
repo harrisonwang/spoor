@@ -1713,7 +1713,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "spoor-tauri-core-example"
+name = "spoor-rust-core-embed-example"
 version = "0.1.0"
 dependencies = [
  "serde_json",

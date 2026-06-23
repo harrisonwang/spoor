@@ -6,7 +6,7 @@ members = [
     "crates/spoor-wasm",
     "bindings/python",
     "bindings/node",
-    "examples/tauri-core",
+    "examples/rust-core-embed",
 ]
 default-members = [
     "crates/spoor-core",

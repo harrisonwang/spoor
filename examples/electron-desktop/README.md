@@ -1,4 +1,6 @@
-# Electron 本地文档桌面示例
+# Electron 桌面应用：原生 Node.js binding
+
+**本示例唯一证明：在 Electron 桌面应用里用 spoor 的原生 Node.js addon `@harrisonwang/spoor` 解析文档——本机原生执行、文件不出设备，binding 是 Node addon（对照 [`../tauri-desktop`](../tauri-desktop/) 的 Rust core 直链）。** 适合 JS/Node 技术栈的桌面应用。
 
 该示例在 Electron 主进程中使用原生 Node.js binding
 `@harrisonwang/spoor`。Renderer 开启 `contextIsolation`、禁用 Node

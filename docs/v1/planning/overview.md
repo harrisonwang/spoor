@@ -102,7 +102,7 @@ spoor/
     ├── tauri-desktop/            # 完整 Tauri 2 + spoor-core 桌面应用
     ├── cloudflare-pages/         # Pages 本地 WASM + Pages Functions 边缘解析
     ├── cloudflare-worker/        # 独立 CF Worker 文档解析 API
-    └── tauri-core/               # Tauri command 形态的 Rust core 集成
+    └── rust-core-embed/          # spoor-core 最小嵌入（无框架）
 ```
 
 ## 平台命名汇总
