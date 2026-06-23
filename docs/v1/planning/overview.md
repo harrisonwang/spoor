@@ -92,12 +92,8 @@ spoor/
 │       ├── __test__/
 │       └── index.js              #     JS 入口 + 类型声明
 │
-├── wasm/                         # ─── WASM demo 与边缘示例（npm 包产物来自 crates/spoor-wasm）
-│   ├── demo/                     #     浏览器拖拽解析 demo
-│   └── cloudflare-worker/        #     CF Worker 请求时清洗示例
-│       ├── wrangler.toml
-│       └── src/
-│           └── index.ts
+├── wasm/                         # ─── spoor-wasm 浏览器开发/冒烟页（非用户示例，npm 包产物来自 crates/spoor-wasm）
+│   └── demo/                     #     拖拽解析页 + smoke.mjs WASM 契约测试
 │
 └── examples/
     ├── serverless-lambda/        # AWS Lambda（spoor-cli 二进制或 WASM）
@@ -105,6 +101,7 @@ spoor/
     ├── electron-desktop/         # 完整 Electron + Node binding 桌面应用
     ├── tauri-desktop/            # 完整 Tauri 2 + spoor-core 桌面应用
     ├── cloudflare-pages/         # Pages 本地 WASM + Pages Functions 边缘解析
+    ├── cloudflare-worker/        # 独立 CF Worker 文档解析 API
     └── tauri-core/               # Tauri command 形态的 Rust core 集成
 ```
 

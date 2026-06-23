@@ -118,12 +118,13 @@ WASM 包默认包含全部重点格式；
 
 | 示例 | 展示能力 |
 | --- | --- |
-| [`wasm/cloudflare-worker`](wasm/cloudflare-worker/) | 独立 Cloudflare Worker 文档解析 API |
+| [`examples/cloudflare-worker`](examples/cloudflare-worker/) | 独立 Cloudflare Worker 文档解析 API |
 | [`examples/tauri-desktop`](examples/tauri-desktop/) | 完整 Tauri 2 本地桌面应用 |
 | [`examples/electron-desktop`](examples/electron-desktop/) | 使用原生 Node binding 的 Electron 桌面应用 |
 | [`examples/tauri-core`](examples/tauri-core/) | Tauri command 形态的 Rust core 集成 |
 | [`examples/serverless-lambda`](examples/serverless-lambda/) | AWS Lambda Layer 中调用 CLI 二进制 |
-| [`wasm/demo`](wasm/demo/) | 底层 WASM 全格式与恶意输入回归测试 |
+
+> [`wasm/demo`](wasm/demo/) 不是用户示例，而是 `spoor-wasm` 的浏览器开发/冒烟页：CI 用 `node wasm/demo/smoke.mjs` 跑全格式与恶意输入的 WASM 契约回归。
 
 ## 限制与边界
 

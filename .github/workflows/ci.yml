@@ -72,7 +72,7 @@ jobs:
       - name: Browser package smoke test
         run: node wasm/demo/smoke.mjs
       - name: Cloudflare Worker dry run
-        working-directory: wasm/cloudflare-worker
+        working-directory: examples/cloudflare-worker
         run: |
           npm ci
           npm install --no-save --package-lock=false "$GITHUB_WORKSPACE/crates/spoor-wasm/pkg"

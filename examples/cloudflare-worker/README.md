@@ -13,7 +13,7 @@ CPU/内存限制。
 `WebAssembly.Module`。
 
 ```bash
-cd wasm/cloudflare-worker
+cd examples/cloudflare-worker
 npm ci
 npm run dev
 ```
