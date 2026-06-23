@@ -125,8 +125,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Tauri core integration
-        run: cargo run --locked -p spoor-tauri-core-example
+      - name: Rust core embed integration
+        run: cargo run --locked -p spoor-rust-core-embed-example
       - name: Lambda binary-layer integration
         run: |
           cargo build --locked -p spoor-cli
