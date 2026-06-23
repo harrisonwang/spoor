@@ -943,7 +943,14 @@ impl<'a> PdfCIDFont<'a> {
             &Object::Name(ref name) => {
                 let name = pdf_to_utf8(name);
                 dlog!("encoding {:?}", name);
-                assert!(name == "Identity-H");
+                // Identity-H/V are a 2-byte identity codespace. For other predefined
+                // CMaps (e.g. UniGB-UTF16-H, GBK-EUC-H) we don't bundle the CMap
+                // tables, so degrade to the same 2-byte identity codespace and rely
+                // on the font's ToUnicode map for the actual text — never panic, so
+                // one CJK font can't abort the whole document.
+                if name != "Identity-H" && name != "Identity-V" {
+                    dlog!("unbundled CMap {:?}; falling back to 2-byte identity", name);
+                }
                 ByteMapping { codespace: vec![CodeRange{width: 2, start: 0, end: 0xffff }], cid: vec![CIDRange{ src_code_lo: 0, src_code_hi: 0xffff, dst_CID_lo: 0 }]}
             }
             &Object::Stream(ref stream) => {
@@ -1396,7 +1403,16 @@ fn make_colorspace<'a>(doc: &'a Document, name: &[u8], resources: &'a Dictionary
         b"Pattern" => ColorSpace::Pattern,
         _ => {
             let colorspaces: &Dictionary = get(&doc, resources, b"ColorSpace");
-            let cs: &Object = maybe_get_obj(doc, colorspaces, &name[..]).unwrap_or_else(|| panic!("missing colorspace {:?}", &name[..]));
+            // Colorspace is not used in spoor's output (text ignores color; SVG
+            // fills are fixed), so any unknown/missing/malformed colorspace
+            // degrades to DeviceGray rather than panicking and aborting the doc.
+            let cs: &Object = match maybe_get_obj(doc, colorspaces, &name[..]) {
+                Some(cs) => cs,
+                None => {
+                    dlog!("missing colorspace {:?}; using DeviceGray", &name[..]);
+                    return ColorSpace::DeviceGray;
+                }
+            };
             if let Ok(cs) = cs.as_array() {
                 let cs_name = pdf_to_utf8(cs[0].as_name().expect("first arg must be a name"));
                 match cs_name.as_ref() {
@@ -1493,17 +1509,24 @@ fn make_colorspace<'a>(doc: &'a Document, name: &[u8], resources: &'a Dictionary
                     "DeviceRGB" => ColorSpace::DeviceRGB,
                     "DeviceCMYK" => ColorSpace::DeviceCMYK,
                     _ => {
-                        panic!("color_space {:?} {:?} {:?}", name, cs_name, cs)
+                        // e.g. DeviceN — unused by spoor; degrade, don't panic.
+                        dlog!("unsupported array colorspace {:?} {:?}; using DeviceGray", name, cs_name);
+                        ColorSpace::DeviceGray
                     }
                 }
             } else if let Ok(cs) = cs.as_name() {
                 match pdf_to_utf8(cs).as_ref() {
                     "DeviceRGB" => ColorSpace::DeviceRGB,
                     "DeviceGray" => ColorSpace::DeviceGray,
-                    _ => panic!()
+                    "DeviceCMYK" => ColorSpace::DeviceCMYK,
+                    other => {
+                        dlog!("unsupported named colorspace {:?}; using DeviceGray", other);
+                        ColorSpace::DeviceGray
+                    }
                 }
             } else {
-                panic!();
+                dlog!("colorspace neither array nor name; using DeviceGray");
+                ColorSpace::DeviceGray
             }
         }
     }
@@ -2354,8 +2377,26 @@ pub fn extract_spans_from_mem_by_page_range(buffer: &[u8], page_range: Option<(u
             }
         }
         let mut collector = LayoutCollector::new();
-        output_doc_inner(page_num, object_id, &doc, &mut processor, &mut collector, &empty_resources)?;
-        pages.push((page_number, collector.into_page()));
+        // Per-page panic isolation: the vendored engine still has many panic
+        // sites; one malformed page must not abort the whole document. A panicking
+        // page is skipped (left out of the span map, so the caller falls back to
+        // its flat text), while genuine errors (decryption, work budget) still
+        // propagate.
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            output_doc_inner(
+                page_num,
+                object_id,
+                &doc,
+                &mut processor,
+                &mut collector,
+                &empty_resources,
+            )
+        }));
+        match outcome {
+            Ok(Ok(())) => pages.push((page_number, collector.into_page())),
+            Ok(Err(error)) => return Err(error),
+            Err(_) => dlog!("page {} panicked during span extraction; skipping", page_number),
+        }
     }
     Ok(pages)
 }
@@ -2447,9 +2488,28 @@ fn extract_text_by_page_range(doc: &Document, page_range: Option<(usize, usize)>
             }
         }
         let mut s = String::new();
-        let mut output = PlainTextOutput::new(&mut s);
-        output_doc_inner(page_num, object_id, doc, &mut processor, &mut output, &empty_resources)?;
-        pages.push((page_number, s));
+        // Per-page panic isolation (see extract_spans_from_mem_by_page_range): a
+        // panicking page degrades to an empty page rather than aborting the whole
+        // document; genuine errors still propagate.
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut output = PlainTextOutput::new(&mut s);
+            output_doc_inner(
+                page_num,
+                object_id,
+                doc,
+                &mut processor,
+                &mut output,
+                &empty_resources,
+            )
+        }));
+        match outcome {
+            Ok(Ok(())) => pages.push((page_number, s)),
+            Ok(Err(error)) => return Err(error),
+            Err(_) => {
+                dlog!("page {} panicked during text extraction; using empty page", page_number);
+                pages.push((page_number, String::new()));
+            }
+        }
     }
     Ok(pages)
 }
