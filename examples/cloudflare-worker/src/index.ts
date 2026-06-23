@@ -18,7 +18,7 @@ export default {
         formats: ['docx', 'xlsx', 'pdf', 'pptx', 'html', 'epub', 'ipynb', 'markdown', 'text', 'csv'],
         endpoints: {
           'POST /': 'POST 原始文档字节解析为结构化结果',
-          'POST /extract?uri=spoor://{docx,pptx}/part/{root}/media/*': 'POST 原始 DOCX/PPTX 字节，按占位符返回单张内嵌图片字节',
+          'POST /extract?uri=<spoor:// 占位符>': 'POST 原始字节，按解析结果里的 spoor:// 占位符返回单个内嵌资源：DOCX/PPTX 图片（spoor://{docx,pptx}/part/.../media/*）、PDF 内嵌图（spoor://pdf/obj/{id}/{gen}）、PDF 整页矢量图（spoor://pdf/page/{n}，返回 SVG）',
         },
       }, { headers: responseHeaders() });
     }
@@ -61,7 +61,7 @@ export default {
       try {
         const media = extractMedia(bytes, uri, filename, contentType, undefined, MAX_REQUEST_BYTES);
         return new Response(media, {
-          headers: { ...responseHeaders(), 'content-type': mediaContentType(uri) },
+          headers: { ...responseHeaders(), 'content-type': mediaContentType(media) },
         });
       } catch (error) {
         return Response.json(normalizeError(error), { status: 422, headers: responseHeaders() });
@@ -80,12 +80,18 @@ export default {
   },
 };
 
-function mediaContentType(uri: string): string {
-  const ext = uri.split('.').pop()?.toLowerCase();
-  if (ext === 'png') return 'image/png';
-  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
-  if (ext === 'gif') return 'image/gif';
-  if (ext === 'webp') return 'image/webp';
+function mediaContentType(bytes: Uint8Array): string {
+  // 按字节魔数判定，而非 URI 后缀：PDF 整页图是 SVG、PDF 内嵌图可能是 PNG/JPEG，
+  // 它们的 spoor://pdf/... 占位符都没有扩展名可循。
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return 'image/gif';
+  if (
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) return 'image/webp';
+  const head = new TextDecoder().decode(bytes.subarray(0, 64)).trimStart().toLowerCase();
+  if (head.startsWith('<?xml') || head.startsWith('<svg')) return 'image/svg+xml';
   return 'application/octet-stream';
 }
 

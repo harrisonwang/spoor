@@ -1,4 +1,6 @@
-# Cloudflare Worker 文档解析 API
+# Cloudflare Worker：边缘文档解析 API
+
+**本示例唯一证明：在 Cloudflare Worker 这种无服务器、无文件系统、CPU/内存受限的边缘环境里，一个文件即可部署出一个全格式文档解析后端——把原始 bytes POST 进来，直接拿到 LLM 可消费的 Markdown / 表格 JSON。** 全格式解析（DOCX、XLSX、PDF、PPTX、HTML、EPUB、IPYNB）是 spoor 各示例共享的底座；这里的重点是它在边缘 headless 跑通、可原样抄作后端。
 
 Worker 接收 `POST` 原始文档 bytes。请提供 `x-filename` 和 `content-type`，
 让 spoor 能可靠检测输入。它使用发布的 `@harrisonwang/spoor-wasm`，可以不依赖
@@ -31,8 +33,13 @@ curl -X POST http://localhost:8787 \
 部署到 `workers.dev`：
 
 ```bash
+# 永久部署到你的账户
 npx wrangler login
 npm run deploy
+
+# 或：免登录的一次性预览（临时账户，60 分钟后自动销毁，适合 agent/CI 快速验证）
+# 注意：--temporary 需要较新的 wrangler（实测 4.103.0 可用），且该 flag 不在 `deploy --help` 中列出。
+npx wrangler deploy --temporary
 ```
 
 线上地址为 `spoor-document-cleaner.harrisonwang.workers.dev`。示例没有声明
