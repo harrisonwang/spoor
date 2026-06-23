@@ -66,18 +66,20 @@ impl ImageExtractError {
 /// (index 0 = page 1). A load failure yields all-empty lists.
 #[cfg(test)]
 pub(crate) fn discover_images(bytes: &[u8], page_count: usize) -> Vec<Vec<PageImage>> {
-    discover_images_for_page_range(bytes, page_count, None)
+    let Ok(doc) = Document::load_mem(bytes) else {
+        return vec![Vec::new(); page_count];
+    };
+    discover_images_from_doc(&doc, page_count, None)
 }
 
-pub(crate) fn discover_images_for_page_range(
-    bytes: &[u8],
+/// Image discovery over an already-loaded document — the shared-`Document` entry
+/// point for the single-parse path.
+pub(crate) fn discover_images_from_doc(
+    doc: &Document,
     page_count: usize,
     page_range: Option<(usize, usize)>,
 ) -> Vec<Vec<PageImage>> {
     let mut per_page = vec![Vec::new(); page_count];
-    let Ok(doc) = Document::load_mem(bytes) else {
-        return per_page;
-    };
     let mut selected_index = 0usize;
     for (page_num, page_id) in doc.get_pages() {
         let page_number = page_num as usize;
@@ -89,7 +91,7 @@ pub(crate) fn discover_images_for_page_range(
         let Some(slot) = per_page.get_mut(selected_index) else {
             break;
         };
-        collect_page_images(&doc, page_id, slot);
+        collect_page_images(doc, page_id, slot);
         selected_index += 1;
     }
     per_page

@@ -2360,12 +2360,25 @@ pub fn pdf_total_pages(buffer: &[u8]) -> Option<usize> {
     Some(doc.get_pages().len())
 }
 
+/// Load and decrypt a PDF once so a caller can drive every per-page pass (text,
+/// spans, images, page count) from a single parse instead of re-loading the
+/// document for each. The lifetime of the returned `Document` bounds those passes.
+pub(crate) fn load_pdf(buffer: &[u8]) -> Result<Document, OutputError> {
+    let mut doc = Document::load_mem(buffer)?;
+    maybe_decrypt(&mut doc)?;
+    Ok(doc)
+}
+
 /// Extract positioned text spans per page (1-based page numbers), honoring the
 /// same optional page range as the flat-text path. Lets callers reconstruct
 /// reading order without changing the existing text extraction.
 pub fn extract_spans_from_mem_by_page_range(buffer: &[u8], page_range: Option<(usize, usize)>) -> Result<Vec<(usize, EnginePage)>, OutputError> {
-    let mut doc = Document::load_mem(buffer)?;
-    maybe_decrypt(&mut doc)?;
+    extract_spans_by_page_range(&load_pdf(buffer)?, page_range)
+}
+
+/// Span extraction over an already-loaded document — the shared-`Document` entry
+/// point for the single-parse path.
+pub(crate) fn extract_spans_by_page_range(doc: &Document, page_range: Option<(usize, usize)>) -> Result<Vec<(usize, EnginePage)>, OutputError> {
     let empty_resources = Dictionary::new();
     let mut processor = Processor::new();
     let mut pages = Vec::new();
@@ -2386,7 +2399,7 @@ pub fn extract_spans_from_mem_by_page_range(buffer: &[u8], page_range: Option<(u
             output_doc_inner(
                 page_num,
                 object_id,
-                &doc,
+                doc,
                 &mut processor,
                 &mut collector,
                 &empty_resources,
@@ -2476,7 +2489,7 @@ fn extract_text_by_pages(doc: &Document) -> Result<Vec<(usize, String)>, OutputE
     extract_text_by_page_range(doc, None)
 }
 
-fn extract_text_by_page_range(doc: &Document, page_range: Option<(usize, usize)>) -> Result<Vec<(usize, String)>, OutputError> {
+pub(crate) fn extract_text_by_page_range(doc: &Document, page_range: Option<(usize, usize)>) -> Result<Vec<(usize, String)>, OutputError> {
     let mut pages = Vec::new();
     let empty_resources = Dictionary::new();
     let mut processor = Processor::new();

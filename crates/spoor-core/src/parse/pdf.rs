@@ -32,14 +32,33 @@ pub fn extract(
     max_parse_bytes: usize,
 ) -> Result<ExtractedMarkdown> {
     let page_range = document_filter.page_range;
-    let pages = super::pdf_engine::extract_text_from_mem_by_page_range(source.bytes(), page_range)
-        .map_err(map_pdf_error)?;
+
+    // Load and decrypt the PDF once; every per-page pass below reuses this single
+    // parse instead of re-loading the document for each (text, spans, images,
+    // page count) as it did before.
+    let doc = super::pdf_engine::load_pdf(source.bytes()).map_err(map_pdf_error)?;
+    let page_count = doc.get_pages().len();
+
+    // A page slice starting past the end is a clear caller error; say so instead
+    // of letting the empty result fall through to "no extractable content".
+    if let Some((first, _)) = page_range {
+        if first > page_count {
+            return Err(StructuredError::parse_failed(
+                format!("请求的页码超出文档范围：起始页 {first} 超过总页数 {page_count}。"),
+                crate::error::ParseStage::Parse,
+            )
+            .into());
+        }
+    }
+
+    let pages =
+        super::pdf_engine::extract_text_by_page_range(&doc, page_range).map_err(map_pdf_error)?;
 
     // Best-effort: positioned spans let us rebuild reading order for multi-column
     // pages. A discovery failure just leaves the content-stream-ordered text as
     // is, so this never regresses the flat-text path.
     let span_pages: std::collections::HashMap<usize, super::pdf_engine::EnginePage> =
-        super::pdf_engine::extract_spans_from_mem_by_page_range(source.bytes(), page_range)
+        super::pdf_engine::extract_spans_by_page_range(&doc, page_range)
             .unwrap_or_default()
             .into_iter()
             .collect();
@@ -64,7 +83,7 @@ pub fn extract(
 
     // Best-effort: locate image XObjects so the renderer can mark their page
     // position and warn. A discovery failure just yields no image markers.
-    let images = pdf_media::discover_images_for_page_range(source.bytes(), pages.len(), page_range);
+    let images = pdf_media::discover_images_from_doc(&doc, pages.len(), page_range);
 
     // A vector-drawn figure (flowchart/chart/diagram) on a text-bearing page with
     // no raster image slips past both existing signals: it has text (so not
@@ -112,7 +131,7 @@ pub fn extract(
         warnings,
         // Total pages regardless of any --pages slice, so a cheap one-page peek
         // still tells the caller how big the document is.
-        page_count: super::pdf_engine::pdf_total_pages(source.bytes()),
+        page_count: Some(page_count),
         provenance,
     })
 }

@@ -213,14 +213,21 @@ fn run_parse(cli: Cli) -> Result<String> {
                 .saturating_sub(limited_diagnostics.content.len());
             let limited = limit_markdown_output(markdown, budget);
             report_output_truncation(limited.warning.as_deref());
-            // When a PDF gets truncated by the output cap, tell the user the
-            // page coverage so they can fetch a later slice with --pages instead
-            // of silently losing the tail.
-            if limited.warning.is_some() && total_pdf_pages > 0 {
+            // Whenever the agent sees fewer pages than the document holds — either
+            // truncated by the output cap or narrowed by --pages — surface the
+            // total page count so it knows to fetch the rest with --pages instead
+            // of assuming it has the whole document.
+            if total_pdf_pages > 0 {
                 let shown = limited.content.matches("## Page ").count();
-                eprintln!(
-                    "warning: PDF 共 {total_pdf_pages} 页，本次输出截断到约 {shown} 页；用 --pages <start,end> 获取后续页面。"
-                );
+                if limited.warning.is_some() {
+                    eprintln!(
+                        "warning: PDF 共 {total_pdf_pages} 页，本次输出截断到约 {shown} 页；用 --pages <start,end> 获取后续页面。"
+                    );
+                } else if shown < total_pdf_pages {
+                    eprintln!(
+                        "info: PDF 共 {total_pdf_pages} 页，本次为其中约 {shown} 页；用 --pages <start,end> 获取其他页面。"
+                    );
+                }
             }
             let mut content = limited.content;
             content.push_str(&limited_diagnostics.content);
