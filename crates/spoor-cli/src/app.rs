@@ -55,9 +55,13 @@ fn run_provenance(cli: Cli) -> Result<String> {
     request.provenance = level;
 
     let format = detect_format(&request)?;
-    if matches!(format, Format::Csv | Format::Xlsx) {
+    // Page-level provenance only exists for PDF (the only paged format). Every
+    // other format — tables and reflowable documents like DOCX alike — gets one
+    // clear error instead of tables erroring while DOCX silently returned no
+    // provenance.
+    if !matches!(format, Format::Pdf) {
         return Err(anyhow!(
-            "--provenance 暂不支持表格格式（{format}），仅用于文档型（如 PDF）。"
+            "--provenance page 仅 PDF 支持（按页定位）；当前格式为 {format}。"
         ));
     }
 
@@ -133,6 +137,14 @@ fn run_parse(cli: Cli) -> Result<String> {
     }
 
     let formats: Vec<_> = resolved.iter().map(|resolved| resolved.format).collect();
+
+    // --pages is honored only by PDF (page-oriented). On any other format it is a
+    // silent no-op, so warn — mirroring how md mode flags ignored table options,
+    // so the agent never assumes a slice was applied when it was not.
+    if cli.pages.is_some() && formats.iter().any(|format| !matches!(format, Format::Pdf)) {
+        eprintln!("warning: --pages 仅对 PDF 按页生效，其他格式已忽略");
+    }
+
     let mode = cli
         .mode
         .map(Into::into)
