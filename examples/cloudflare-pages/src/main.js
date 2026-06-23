@@ -19,8 +19,9 @@ const mediaGrid = $('#media-grid');
 const mediaHint = $('#media-hint');
 const modeButtons = [...document.querySelectorAll('.mode')];
 
-// 占位符正则：![DOCX image N](spoor://docx/part/word/media/imageN.png)
-const PLACEHOLDER = /spoor:\/\/docx\/part\/[^\s)"']+/g;
+// 占位符正则：匹配 spoor 输出的全部内嵌资源 URI，不分格式——
+// DOCX/PPTX 图片 spoor://{docx,pptx}/part/...、PDF 内嵌图 spoor://pdf/obj/...、PDF 整页矢量图 spoor://pdf/page/...
+const PLACEHOLDER = /spoor:\/\/[^\s)"']+/g;
 
 let mode = 'local';
 let parsedText = '';
@@ -186,7 +187,7 @@ function createMediaCard(uri) {
   card.className = 'media-card';
   const label = document.createElement('span');
   label.className = 'media-uri';
-  label.textContent = uri.replace('spoor://docx/part/word/media/', '');
+  label.textContent = uri.replace(/^spoor:\/\//, '');
   const slot = document.createElement('span');
   slot.className = 'media-slot';
   slot.textContent = '点击提取';
@@ -206,7 +207,8 @@ async function extractAndShow(uri, card, slot) {
     const bytes = mode === 'local'
       ? extract_media(lastBytes, uri, lastSource, undefined, undefined, 16 * 1024 * 1024)
       : await extractAtEdge(uri);
-    const url = URL.createObjectURL(new Blob([bytes]));
+    // 按字节判定 MIME——尤其 PDF 整页图是 SVG，<img> 必须拿到 image/svg+xml 才肯渲染
+    const url = URL.createObjectURL(new Blob([bytes], { type: sniffImageMime(bytes) }));
     const img = document.createElement('img');
     img.src = url;
     img.alt = uri;
@@ -250,6 +252,21 @@ function extractText(result) {
 function normalizeError(error) {
   if (error && typeof error === 'object') return error;
   return { code: 'unknown_error', message: String(error) };
+}
+
+// 按字节魔数判定 MIME（与 cloudflare-worker 的 mediaContentType 同款）。
+// 关键：PDF 整页图是 SVG，Blob 必须带 image/svg+xml，<img> 才肯渲染。
+function sniffImageMime(bytes) {
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return 'image/gif';
+  if (
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) return 'image/webp';
+  const head = new TextDecoder().decode(bytes.subarray(0, 64)).trimStart().toLowerCase();
+  if (head.startsWith('<?xml') || head.startsWith('<svg')) return 'image/svg+xml';
+  return 'application/octet-stream';
 }
 
 function setTrace(items, activeIndex = items.length - 1) {
