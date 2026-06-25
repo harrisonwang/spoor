@@ -1221,12 +1221,91 @@ struct GraphicsState<'a>
     stroke_colorspace: ColorSpace,
     stroke_color: Vec<f64>,
     line_width: f64,
+    /// Accumulated clip bounds in page user space (the same space as a glyph's
+    /// text-rendering-matrix origin). `None` means unbounded. Glyphs whose
+    /// baseline falls outside it are hidden by a clip path at render time, so a
+    /// faithful extractor must drop them instead of emitting phantom text.
+    clip: Option<ClipRect>,
+}
+
+/// Axis-aligned clip bounds in page user space. Built from `W`/`W*` clip paths.
+#[derive(Clone, Copy, Debug)]
+struct ClipRect {
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
+}
+
+impl ClipRect {
+    fn intersect(self, other: ClipRect) -> ClipRect {
+        ClipRect {
+            x0: self.x0.max(other.x0),
+            y0: self.y0.max(other.y0),
+            x1: self.x1.min(other.x1),
+            y1: self.y1.min(other.y1),
+        }
+    }
+
+    /// Whether `(x, y)` lies within the rect expanded by `margin` on every side.
+    /// The margin (about one glyph height) keeps text whose baseline sits at the
+    /// very edge of its frame, so only clearly hidden glyphs are dropped.
+    fn contains(self, x: f64, y: f64, margin: f64) -> bool {
+        x >= self.x0 - margin
+            && x <= self.x1 + margin
+            && y >= self.y0 - margin
+            && y <= self.y1 + margin
+    }
+}
+
+/// Bounding box of `path`'s control points mapped through `ctm`, or `None` for an
+/// empty path. Curve control points over-approximate the curve, so the box only
+/// ever errs large — it never clips text a true outline would keep.
+fn path_clip_rect(path: &Path, ctm: &Transform) -> Option<ClipRect> {
+    let mut raw: Vec<(f64, f64)> = Vec::new();
+    for op in &path.ops {
+        match *op {
+            PathOp::MoveTo(x, y) | PathOp::LineTo(x, y) => raw.push((x, y)),
+            PathOp::CurveTo(x1, y1, x2, y2, x, y) => {
+                raw.push((x1, y1));
+                raw.push((x2, y2));
+                raw.push((x, y));
+            }
+            PathOp::Rect(x, y, w, h) => {
+                raw.push((x, y));
+                raw.push((x + w, y + h));
+            }
+            PathOp::Close => {}
+        }
+    }
+    let mut mapped = raw.into_iter().map(|(x, y)| {
+        let p = ctm.transform_point(point2(x, y));
+        (p.x, p.y)
+    });
+    let (fx, fy) = mapped.next()?;
+    let (mut x0, mut y0, mut x1, mut y1) = (fx, fy, fx, fy);
+    for (x, y) in mapped {
+        x0 = x0.min(x);
+        y0 = y0.min(y);
+        x1 = x1.max(x);
+        y1 = y1.max(y);
+    }
+    Some(ClipRect { x0, y0, x1, y1 })
+}
+
+/// Path-painting operators that end a path and so apply a pending `W`/`W*` clip.
+fn is_clip_applying_op(op: &str) -> bool {
+    matches!(
+        op,
+        "n" | "S" | "s" | "f" | "F" | "f*" | "B" | "B*" | "b" | "b*"
+    )
 }
 
 fn show_text(gs: &mut GraphicsState, s: &[u8],
              _tlm: &Transform,
              _flip_ctm: &Transform,
              output: &mut dyn OutputDev) -> Result<(), OutputError> {
+    let clip = gs.clip;
     let ts = &mut gs.ts;
     let font = ts.font.as_ref().unwrap();
     //let encoding = font.encoding.as_ref().map(|x| &x[..]).unwrap_or(&PDFDocEncoding);
@@ -1261,7 +1340,17 @@ fn show_text(gs: &mut GraphicsState, s: &[u8],
         let is_space = c == 32 && length == 1;
         if is_space { spacing += ts.word_spacing }
 
-        output.output_character(&trm, w0, spacing, ts.font_size, &font.decode_char(c))?;
+        // Drop glyphs a clip path hides. We test the baseline origin against the
+        // clip grown by ~one ascent, so any glyph still poking into the clip
+        // (partially visible) is kept and only glyphs whose whole box is outside
+        // are dropped — never losing visible text. The text matrix still advances
+        // below, keeping any visible neighbours correctly positioned.
+        let origin = trm.transform_point(point2(0.0, 0.0));
+        let ascent = trm.m21.hypot(trm.m22) * ts.font_size * 0.8;
+        let visible = clip.is_none_or(|c| c.contains(origin.x, origin.y, ascent.max(1.0)));
+        if visible {
+            output.output_character(&trm, w0, spacing, ts.font_size, &font.decode_char(c))?;
+        }
         let tj = 0.;
         let ty = 0.;
         let tx = ts.horizontal_scaling * ((w0 - tj/1000.)* ts.font_size + spacing);
@@ -1561,7 +1650,8 @@ impl<'a> Processor<'a> {
             stroke_colorspace: ColorSpace::DeviceGray,
             line_width: 1.,
             ctm: Transform2D::identity(),
-            smask: None
+            smask: None,
+            clip: None,
         };
         //let mut ts = &mut gs.ts;
         let mut gs_stack = Vec::new();
@@ -1569,6 +1659,9 @@ impl<'a> Processor<'a> {
         // XXX: replace tlm with a point for text start
         let mut tlm = Transform2D::identity();
         let mut path = Path::new();
+        // A `W`/`W*` clip path takes effect only on the path-painting op that
+        // follows it; hold its bounds here until then.
+        let mut pending_clip: Option<ClipRect> = None;
         let flip_ctm = Transform2D::row_major(1., 0., 0., -1., 0., media_box.ury - media_box.lly);
         dlog!("MediaBox {:?}", media_box);
         for operation in &content.operations {
@@ -1834,7 +1927,11 @@ impl<'a> Processor<'a> {
                     output.stroke(&gs.ctm, &gs.stroke_colorspace, &gs.stroke_color, &path)?;
                     path.ops.clear();
                 }
-                "W" | "w*" => { dlog!("unhandled clipping operation {:?}", operation); }
+                "W" | "W*" => {
+                    // Remember the clip path's bounds; per the spec it takes
+                    // effect on the path-painting operator that follows.
+                    pending_clip = path_clip_rect(&path, &gs.ctm);
+                }
                 "n" => {
                     dlog!("discard {:?}", path);
                     path.ops.clear();
@@ -1857,6 +1954,18 @@ impl<'a> Processor<'a> {
                 }
                 _ => { dlog!("unknown operation {:?}", operation); }
 
+            }
+
+            // A `W`/`W*` clip becomes active once its path-painting operator ends
+            // the path; fold it into the graphics-state clip so later text that
+            // falls outside it is dropped the way a renderer hides it.
+            if is_clip_applying_op(operation.operator.as_ref()) {
+                if let Some(rect) = pending_clip.take() {
+                    gs.clip = Some(match gs.clip {
+                        Some(existing) => existing.intersect(rect),
+                        None => rect,
+                    });
+                }
             }
         }
         Ok(())
@@ -2608,4 +2717,56 @@ fn output_doc_inner<'a>(page_num: u32, object_id: ObjectId, doc: &'a Document, p
     p.process_stream(&doc, doc.get_page_content(object_id).unwrap(), resources, &media_box, output, page_num)?;
     output.end_page()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod clip_tests {
+    use super::{ClipRect, Path, PathOp, Transform, path_clip_rect};
+    use euclid::Transform2D;
+
+    fn rect_path(x: f64, y: f64, w: f64, h: f64) -> Path {
+        Path {
+            ops: vec![PathOp::Rect(x, y, w, h)],
+        }
+    }
+
+    #[test]
+    fn clip_rect_from_rectangle_under_identity() {
+        let r = path_clip_rect(&rect_path(36.0, 45.0, 523.0, 739.0), &Transform2D::identity())
+            .expect("rect yields a clip");
+        assert_eq!((r.x0, r.y0, r.x1, r.y1), (36.0, 45.0, 559.0, 784.0));
+    }
+
+    #[test]
+    fn clip_rect_follows_the_ctm() {
+        // A 2x scale + translate maps the rect's corners into device space.
+        let ctm: Transform = Transform2D::row_major(2.0, 0.0, 0.0, 2.0, 10.0, 20.0);
+        let r = path_clip_rect(&rect_path(0.0, 0.0, 100.0, 50.0), &ctm).expect("clip");
+        assert_eq!((r.x0, r.y0, r.x1, r.y1), (10.0, 20.0, 210.0, 120.0));
+    }
+
+    #[test]
+    fn empty_path_has_no_clip() {
+        assert!(path_clip_rect(&Path { ops: vec![] }, &Transform2D::identity()).is_none());
+    }
+
+    #[test]
+    fn intersect_takes_the_overlap() {
+        let a = ClipRect { x0: 0.0, y0: 0.0, x1: 100.0, y1: 100.0 };
+        let b = ClipRect { x0: 50.0, y0: 40.0, x1: 200.0, y1: 90.0 };
+        let c = a.intersect(b);
+        assert_eq!((c.x0, c.y0, c.x1, c.y1), (50.0, 40.0, 100.0, 90.0));
+    }
+
+    #[test]
+    fn contains_keeps_partially_visible_text_and_drops_fully_hidden() {
+        let clip = ClipRect { x0: 36.0, y0: 45.0, x1: 559.0, y1: 784.0 };
+        let margin = 12.0; // ~one ascent
+        // A baseline just below the clip (ascender still pokes in) is kept.
+        assert!(clip.contains(40.0, 45.0 - 8.0, margin));
+        // A baseline a full line below the clip (whole glyph hidden) is dropped.
+        assert!(!clip.contains(40.0, 45.0 - 16.0, margin));
+        // Comfortably inside stays inside.
+        assert!(clip.contains(300.0, 400.0, margin));
+    }
 }
