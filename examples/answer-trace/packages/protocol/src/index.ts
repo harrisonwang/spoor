@@ -144,4 +144,7 @@ export interface UploadResult {
   tokens: number
   /** 模型上下文上限(token),用于"是否超限"提示。 */
   contextLimit: number
+  /** 本次上传语料的句柄;边缘后端用 KV 存语料,前端在后续 /ask、/media 带回它。
+   *  本地内存态后端(apps/api)不返回此字段,前端缺省即回退到服务端当前语料。 */
+  corpusId?: string
 }

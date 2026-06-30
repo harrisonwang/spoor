@@ -1,0 +1,12 @@
+# 本地密钥（wrangler dev 自动读取）。复制为 .dev.vars 后填值；.dev.vars 勿提交。
+# 二选一：
+
+# A) Cloudflare Workers AI（便捷后端）
+CF_ACCOUNT_ID=""
+CF_API_TOKEN=""
+
+# B) 任意 OpenAI 兼容端点（OpenRouter / DeepSeek / z.ai…），设了优先
+# AT_BASE_URL="https://openrouter.ai/api/v1"
+# AT_API_KEY=""
+# AT_GEN_MODEL=""
+# AT_JUDGE_MODEL=""

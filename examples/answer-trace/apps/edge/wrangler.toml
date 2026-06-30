@@ -1,0 +1,31 @@
+"$schema" = "./node_modules/wrangler/config-schema.json"
+name = "answer-trace-edge"
+main = "src/index.ts"
+compatibility_date = "2026-06-12"
+workers_dev = true
+
+# 非密配置（公开值）。密钥用 `wrangler secret put`，本地用 .dev.vars，勿写进此文件。
+[vars]
+AT_GEN_MODEL = "@cf/google/gemma-4-26b-a4b-it"
+AT_JUDGE_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8"
+AT_CONTEXT_LIMIT = "32768"
+
+# 语料存储（KV）。先建命名空间再把 id 填进来：
+#   wrangler kv namespace create CORPUS
+#   wrangler kv namespace create CORPUS --preview
+[[kv_namespaces]]
+binding = "CORPUS"
+id = "5032dd81aa9745f6b39ac9c132663fb4"
+preview_id = "f6a972ad666542bf9e9e4b895654997e"
+
+# 把演示资产打进 Worker：.md 作文本、.pdf 作二进制（供 extract_media 取内置图）。
+# .wasm 由 wrangler 自动识别为 CompiledWasm，无需在此声明。
+[[rules]]
+type = "Text"
+globs = ["**/*.md"]
+fallthrough = true
+
+[[rules]]
+type = "Data"
+globs = ["**/*.pdf"]
+fallthrough = true

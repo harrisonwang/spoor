@@ -17,6 +17,15 @@ tasks:
     cmds:
       - cd apps/api && uv run uvicorn app.main:app --reload --port 8000
 
+  edge:
+    desc: 启动边缘后端 Worker (http://localhost:8787)
+    cmds:
+      - pnpm --filter @answer-trace/edge dev
+
   dev:
-    desc: 同时启动前后端
+    desc: 同时启动前端 + Python 后端
     deps: [web, api]
+
+  dev:edge:
+    desc: 同时启动前端 + 边缘 Worker 后端（前端需设 VITE_API_URL=http://localhost:8787）
+    deps: [web, edge]

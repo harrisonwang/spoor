@@ -13,6 +13,10 @@ const API =
     (import.meta.env.VITE_API_URL as string | undefined) ??
     "http://localhost:8000";
 
+// 边缘后端把语料存 KV 并在 /upload 返回 corpusId;此后 /ask 带回它，定位到同一份语料。
+// 本地内存态后端(apps/api)不返回 corpusId，保持 null，后端回退到其当前语料。
+let currentCorpusId: string | null = null;
+
 // 用内置 demo.json + byd.md 拼出离线 fixture(符合新的 DemoPayload 形状)。
 // 离线时 spoor:// 图片无法提取,换成纯文本说明。
 const demoSrc = (
@@ -67,7 +71,7 @@ export async function askQuestion(question: string): Promise<AnswerTrace> {
     const res = await fetch(`${API}/api/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, corpusId: currentCorpusId ?? undefined }),
     });
     if (!res.ok) throw new Error(await detail(res));
     return (await res.json()) as AnswerTrace;
@@ -82,5 +86,7 @@ export async function uploadFiles(files: File[]): Promise<UploadResult> {
         body: form,
     });
     if (!res.ok) throw new Error(await detail(res));
-    return (await res.json()) as UploadResult;
+    const result = (await res.json()) as UploadResult;
+    currentCorpusId = result.corpusId ?? currentCorpusId;
+    return result;
 }
