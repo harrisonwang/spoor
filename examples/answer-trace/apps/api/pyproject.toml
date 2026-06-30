@@ -1,0 +1,27 @@
+[project]
+name = "answer-trace-api"
+version = "0.1.0"
+description = "answer-trace api — phase 1 转发 fixture;phase 2 经 Cloudflare Workers AI 产出 AnswerTrace"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "openai>=1.50",
+    "python-dotenv>=1.0",
+    "python-multipart>=0.0.9",
+    "pyspoor",
+    "tiktoken>=0.7",
+]
+
+[tool.uv.sources]
+pyspoor = { path = "../../../../bindings/python" }
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.uv]
+package = false

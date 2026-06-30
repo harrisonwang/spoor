@@ -134,7 +134,8 @@ mod tests {
 
     #[test]
     fn prose_is_left_untouched() {
-        let text = "这是一段正常中文，没有表格。\n第二行也是普通文字，只有单个空格分隔。\n第三行同样。";
+        let text =
+            "这是一段正常中文，没有表格。\n第二行也是普通文字，只有单个空格分隔。\n第三行同样。";
         assert_eq!(tableize(text), text);
     }
 
@@ -154,7 +155,10 @@ mod tests {
         assert!(out.contains("| 营收 | 100 | 120 |"), "row: {out}");
         // A blank line is unnecessary at the very start but required between rows;
         // here the table is the whole input, so no leading blank.
-        assert!(out.starts_with("| 科目"), "no spurious leading blank: {out}");
+        assert!(
+            out.starts_with("| 科目"),
+            "no spurious leading blank: {out}"
+        );
     }
 
     #[test]
@@ -175,8 +179,7 @@ mod tests {
 
     #[test]
     fn double_blank_splits_into_two_tables() {
-        let text =
-            "甲  1  2\n乙  3  4\n丙  5  6\n\n\n丁  7  8\n戊  9  10\n己  11  12";
+        let text = "甲  1  2\n乙  3  4\n丙  5  6\n\n\n丁  7  8\n戊  9  10\n己  11  12";
         let out = tableize(text);
         // two separator rows == two tables
         assert_eq!(out.matches("| --- | --- | --- |").count(), 2, "{out}");
@@ -197,7 +200,11 @@ mod tests {
         let out = tableize(text);
         // widest row has 4 cells → every row padded to 4 (5 pipes per line)
         for line in out.lines().filter(|l| l.starts_with('|')) {
-            assert_eq!(line.matches('|').count(), 5, "line not padded to 4 cols: {line}");
+            assert_eq!(
+                line.matches('|').count(),
+                5,
+                "line not padded to 4 cols: {line}"
+            );
         }
     }
 

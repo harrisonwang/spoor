@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spoor.dev/schema/answer-trace.v1.json",
+  "title": "AnswerTrace",
+  "description": "spoor.answer-trace.v1 — 一轮问答的 claim 级溯源结果。matcher 后端 → viewer 前端的唯一契约。",
+  "type": "object",
+  "required": ["schema", "question", "answer", "evidence", "source", "audit"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "spoor.answer-trace.v1" },
+    "question": { "type": "string" },
+    "answer": { "type": "array", "items": { "$ref": "#/$defs/answerPart" } },
+    "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
+    "source": { "$ref": "#/$defs/sourceRef" },
+    "audit": { "$ref": "#/$defs/audit" }
+  },
+  "$defs": {
+    "verdict": { "enum": ["supported", "partial", "unsupported"] },
+    "answerPart": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "text"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "text" },
+            "text": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "text", "verdict", "evidenceIds"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "claim" },
+            "text": { "type": "string" },
+            "verdict": { "$ref": "#/$defs/verdict" },
+            "evidenceIds": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      ]
+    },
+    "evidence": {
+      "oneOf": [
+        { "$ref": "#/$defs/quoteEvidence" },
+        { "$ref": "#/$defs/cellEvidence" },
+        { "$ref": "#/$defs/noEvidence" }
+      ]
+    },
+    "quoteEvidence": {
+      "type": "object",
+      "required": ["id", "kind", "verdict", "page", "before", "hit", "after"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "const": "quote" },
+        "verdict": { "$ref": "#/$defs/verdict" },
+        "page": { "type": ["integer", "null"] },
+        "before": { "type": "string" },
+        "hit": { "type": "string" },
+        "after": { "type": "string" },
+        "span": {
+          "type": "object",
+          "required": ["start", "end"],
+          "properties": {
+            "start": { "type": "integer" },
+            "end": { "type": "integer" }
+          }
+        },
+        "note": { "type": "string" }
+      }
+    },
+    "cellEvidence": {
+      "type": "object",
+      "required": ["id", "kind", "verdict", "page", "table", "row", "column", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "const": "cell" },
+        "verdict": { "$ref": "#/$defs/verdict" },
+        "page": { "type": ["integer", "null"] },
+        "table": { "type": "string" },
+        "row": { "type": "string" },
+        "column": { "type": "string" },
+        "value": { "type": "string" },
+        "note": { "type": "string" }
+      }
+    },
+    "noEvidence": {
+      "type": "object",
+      "required": ["id", "kind", "verdict", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "const": "none" },
+        "verdict": { "const": "unsupported" },
+        "page": { "type": ["integer", "null"] },
+        "reason": { "type": "string" },
+        "expectedTruth": { "type": "string" },
+        "note": { "type": "string" }
+      }
+    },
+    "sourceRef": {
+      "type": "object",
+      "required": ["documentId", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "documentId": { "type": "string" },
+        "title": { "type": "string" },
+        "pages": { "type": "integer" }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "required": ["parser", "generator", "judge", "judgedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "parser": { "type": "string" },
+        "generator": { "type": "string" },
+        "judge": { "type": "string" },
+        "judgedAt": { "type": "string" }
+      }
+    }
+  }
+}
