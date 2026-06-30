@@ -21,6 +21,8 @@ mod pdf;
 #[cfg(feature = "pdf")]
 mod pdf_layout;
 #[cfg(feature = "pdf")]
+mod pdf_tables;
+#[cfg(feature = "pdf")]
 #[rustfmt::skip]
 pub(crate) mod pdf_engine;
 #[cfg(feature = "pdf")]

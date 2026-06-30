@@ -178,7 +178,10 @@ fn render_layout(layout: &PdfLayoutDocument) -> (String, Vec<ProvenanceSpan>) {
 fn render_page(page: &PdfLayoutPage, markdown: &mut String, image_number: &mut usize) {
     let number = page.number;
     markdown.push_str(&format!("## Page {number}\n\n"));
-    markdown.push_str(page.text().trim());
+    // Recover real Markdown tables from the space-aligned columns the PDF text
+    // layer preserves; prose is left untouched. Helps the human preview and the
+    // agent reading this output equally.
+    markdown.push_str(&super::pdf_tables::tableize(page.text().trim()));
 
     for image in &page.images {
         *image_number += 1;
