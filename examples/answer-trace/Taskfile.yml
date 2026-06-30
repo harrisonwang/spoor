@@ -1,0 +1,22 @@
+version: "3"
+
+tasks:
+  setup:
+    desc: 安装前后端依赖
+    cmds:
+      - pnpm install
+      - cd apps/api && uv sync
+
+  web:
+    desc: 启动 SvelteKit (http://localhost:5173)
+    cmds:
+      - pnpm --filter @answer-trace/web dev
+
+  api:
+    desc: 启动 FastAPI (http://localhost:8000)
+    cmds:
+      - cd apps/api && uv run uvicorn app.main:app --reload --port 8000
+
+  dev:
+    desc: 同时启动前后端
+    deps: [web, api]

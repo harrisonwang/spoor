@@ -1,0 +1,16 @@
+{
+  "name": "@answer-trace/protocol",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "AnswerTrace — matcher(后端) 与 viewer(前端) 之间的唯一契约",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./schema": "./answer-trace.schema.json",
+    "./fixtures/demo.json": "./fixtures/demo.json",
+    "./fixtures/byd.md": "./fixtures/byd.md"
+  },
+  "files": ["src", "answer-trace.schema.json", "fixtures"]
+}

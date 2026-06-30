@@ -1,0 +1,16 @@
+{
+  "name": "answer-trace",
+  "private": true,
+  "version": "0.1.0",
+  "description": "答案溯源 — spoor 产物的 claim 级核验 (monorepo: SvelteKit web + FastAPI api + 共享 AnswerTrace 协议)",
+  "scripts": {
+    "dev:web": "pnpm --filter @answer-trace/web dev",
+    "build:web": "pnpm --filter @answer-trace/web build",
+    "check:web": "pnpm --filter @answer-trace/web check",
+    "dev:api": "cd apps/api && uv run uvicorn app.main:app --reload --port 8000",
+    "dev": "concurrently -n web,api -c blue,green \"pnpm dev:web\" \"pnpm dev:api\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
