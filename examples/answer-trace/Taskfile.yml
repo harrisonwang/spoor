@@ -29,3 +29,14 @@ tasks:
   dev:edge:
     desc: 同时启动前端 + 边缘 Worker 后端（前端需设 VITE_API_URL=http://localhost:8787）
     deps: [web, edge]
+
+  deploy:edge:
+    desc: 部署边缘 Worker 到 Cloudflare（先 wrangler secret put 配模型密钥）
+    cmds:
+      - pnpm --filter @answer-trace/edge deploy
+
+  deploy:web:
+    desc: 构建并部署前端到 Cloudflare Pages（需先 export VITE_API_URL=<Worker 公网地址>）
+    cmds:
+      - pnpm --filter @answer-trace/web build
+      - pnpm --filter @answer-trace/web deploy
