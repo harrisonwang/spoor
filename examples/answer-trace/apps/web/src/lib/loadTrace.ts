@@ -29,7 +29,7 @@ export const fixture: DemoPayload = {
         pages: demoSrc.pages.length,
         markdown: offlineMarkdown,
         tokens: Math.round(offlineMarkdown.length * 0.6), // 离线粗估
-        contextLimit: 8192,
+        contextLimit: 32768,
     },
     traces: (demo as { traces: AnswerTrace[] }).traces,
 };

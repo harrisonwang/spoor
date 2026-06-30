@@ -4,8 +4,8 @@ tasks:
   setup:
     desc: 安装前后端依赖
     cmds:
-      - pnpm install
-      - cd apps/api && uv sync
+      - pnpm install --frozen-lockfile
+      - cd apps/api && uv sync --locked
 
   web:
     desc: 启动 SvelteKit (http://localhost:5173)

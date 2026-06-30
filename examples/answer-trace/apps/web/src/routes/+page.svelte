@@ -17,7 +17,7 @@
   let currentMarkdown = $state('')
   let currentTitle = $state('')
   let currentTokens = $state(0)
-  let currentContextLimit = $state(8192)
+  let currentContextLimit = $state(32768)
 
   // 是否已准备就绪(有语料 + 可提问)
   let ready = $derived(!!currentMarkdown)

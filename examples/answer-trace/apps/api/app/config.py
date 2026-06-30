@@ -14,7 +14,7 @@ CF_ACCOUNT_ID = os.getenv("CF_ACCOUNT_ID", "")
 CF_API_TOKEN = os.getenv("CF_API_TOKEN", "")
 
 # 模型上下文上限(token),仅用于前端"是否超限"提示;按所选模型设。
-CONTEXT_LIMIT = int(os.getenv("AT_CONTEXT_LIMIT", "8192"))
+CONTEXT_LIMIT = int(os.getenv("AT_CONTEXT_LIMIT", "32768"))
 
 
 def base_url() -> str:

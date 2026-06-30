@@ -9,12 +9,9 @@ dependencies = [
     "openai>=1.50",
     "python-dotenv>=1.0",
     "python-multipart>=0.0.9",
-    "pyspoor",
+    "pyspoor==0.8.20",
     "tiktoken>=0.7",
 ]
-
-[tool.uv.sources]
-pyspoor = { path = "../../../../bindings/python" }
 
 [dependency-groups]
 dev = ["pytest>=8"]

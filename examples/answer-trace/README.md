@@ -29,12 +29,21 @@ answer-trace/
 pnpm install
 cd apps/api && uv sync && cd ../..
 
-# 启动(两个终端,或装了 go-task 后 `task dev`)
+# 一条命令同时启动前后端
+pnpm dev
+
+# 或装了 go-task 后
+task dev
+
+# 也可以分别在两个终端启动
 cd apps/api && uv run uvicorn app.main:app --reload --port 8000   # http://localhost:8000
 pnpm --filter @answer-trace/web dev                               # http://localhost:5173
 ```
 
 web 会先用内置 fixture 立即渲染,再向 api 刷新;**api 没起也能独立看**(右上角标「内置 fixture / 实时·api」)。
+
+如果项目目录被移动或重命名后出现 `Failed to spawn: uvicorn`，在 `apps/api` 下执行
+`uv sync --reinstall --locked`，重写虚拟环境内带绝对路径的启动脚本。
 
 ### 真问真答(phase 2,经 Cloudflare Workers AI)
 
@@ -46,7 +55,7 @@ cd apps/api && cp .env.example .env   # 填 CF_ACCOUNT_ID 与 CF_API_TOKEN
 
 没填凭据时 `/api/ask` 返回 503、前端给友好提示;内置三轮 demo 不受影响。Workers AI 走 REST,不必部署到 CF Workers。
 
-底部 **📎 可多文件上传**:经 **pyspoor**(`bindings/python`,maturin 构建,`uv sync` 自动装)把 PDF/DOCX/XLSX 解析成 markdown 作为「当前依据」,之后的问答与「定位原文」都针对上传文件。「定位原文」对**所有**回答(内置 / 实时 / 上传)都生效——抽屉只渲染命中所在那一页并定位。
+底部 **📎 可多文件上传**:经 **pyspoor**(由 `uv sync` 从 PyPI 安装预编译 wheel,无需本地 Rust/maturin)把 PDF/DOCX/XLSX 解析成 markdown 作为「当前依据」,之后的问答与「定位原文」都针对上传文件。「定位原文」对**所有**回答(内置 / 实时 / 上传)都生效——抽屉只渲染命中所在那一页并定位。
 
 ## 协议:`spoor.answer-trace.v1`
 

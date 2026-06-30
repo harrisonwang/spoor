@@ -43,7 +43,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "openai", specifier = ">=1.50" },
-    { name = "pyspoor", directory = "../../../../bindings/python" },
+    { name = "pyspoor", specifier = "==0.8.20" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "tiktoken", specifier = ">=0.7" },
@@ -563,8 +563,14 @@ wheels = [
 
 [[package]]
 name = "pyspoor"
-version = "0.8.19"
-source = { directory = "../../../../bindings/python" }
+version = "0.8.20"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/02/39/65af319954e7193001e7ab93def62e604a9151251f8dad974ee40509a49c/pyspoor-0.8.20-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:e1b3a845cdbbaede2724bfdb3b83c025b09a69777888b3d3e3641a92a11f9c05", size = 1492950, upload-time = "2026-06-30T01:35:01.574Z" },
+    { url = "https://files.pythonhosted.org/packages/f2/36/a81177d22fe5b2ccee2a94b33c8d58dc6f387e8c01f8c25475845c83f2ff/pyspoor-0.8.20-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:0da9a536aafe31a9e8a972ab84f512e799a79cf35341c6601373cf37ef1a6f00", size = 1463019, upload-time = "2026-06-30T01:35:02.893Z" },
+    { url = "https://files.pythonhosted.org/packages/52/57/875fd64e2372d286b451dc2b6d1e10f60ff456838bd3b65c25e9dfe7047e/pyspoor-0.8.20-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a1019311d1275fab2639da880712f4c724ebea504703cff5e6996c9aaad46e84", size = 1577302, upload-time = "2026-06-30T01:35:04.477Z" },
+    { url = "https://files.pythonhosted.org/packages/b7/f9/bb3da73395a48983a038758a4cf3bf1568fbb319026a4b4fa494fc843ab8/pyspoor-0.8.20-cp39-abi3-win_amd64.whl", hash = "sha256:d5da1a33a49c22347c39d6905ae87221d05f5bb8ab8f23f0dd87b1c7f3572a9f", size = 1478198, upload-time = "2026-06-30T01:35:05.78Z" },
+]
 
 [[package]]
 name = "pytest"
