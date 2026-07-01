@@ -1,0 +1,17 @@
+"$schema" = "./node_modules/wrangler/config-schema.json"
+name = "answer-trace-pages"
+pages_build_output_dir = "./build"
+compatibility_date = "2026-06-12"
+
+# 非密配置（公开值）。密钥用 `wrangler pages secret put`，本地用 .dev.vars。
+[vars]
+AT_GEN_MODEL = "@cf/google/gemma-4-26b-a4b-it"
+AT_JUDGE_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8"
+AT_CONTEXT_LIMIT = "32768"
+
+# 语料 KV（可复用 apps/edge 那个命名空间，或新建）：
+#   wrangler kv namespace create CORPUS
+[[kv_namespaces]]
+binding = "CORPUS"
+id = "5032dd81aa9745f6b39ac9c132663fb4"
+preview_id = "f6a972ad666542bf9e9e4b895654997e"

@@ -1,0 +1,37 @@
+{
+  "name": "@answer-trace/pages",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "answer-trace on Cloudflare Pages — 前端(SvelteKit 静态) + Pages Functions 后端合一，含分级核验",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:functions": "tsc -p functions/tsconfig.json",
+    "test": "vitest run",
+    "dev:pages": "npm run build && wrangler pages dev",
+    "deploy": "npm run build && wrangler pages deploy"
+  },
+  "dependencies": {
+    "@answer-trace/protocol": "workspace:*",
+    "@floating-ui/dom": "^1.6.12",
+    "@harrisonwang/spoor-wasm": "^0.8.17",
+    "marked": "^14.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240620.0",
+    "@sveltejs/adapter-static": "^3.0.0",
+    "@sveltejs/kit": "^2.8.0",
+    "@sveltejs/vite-plugin-svelte": "^4.0.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "svelte": "^5.1.0",
+    "svelte-check": "^4.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.1.0",
+    "wrangler": "^4.103.0"
+  }
+}

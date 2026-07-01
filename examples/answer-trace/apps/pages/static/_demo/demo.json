@@ -1,0 +1,143 @@
+{
+  "source": {
+    "documentId": "byd-2024-research",
+    "title": "比亚迪2024年报点评.pdf",
+    "pages": [
+      {
+        "number": 1,
+        "title": "投资要点",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "runs": [
+              { "text": "◼ Q4 业绩符合市场预期。公司 24 年营收 " },
+              { "text": "7771 亿元，同增 29%", "refId": "a", "status": "supported" },
+              { "text": "，归母净利润 403 亿元，同增 34%，" },
+              { "text": "毛利率 19.4%", "refId": "d", "status": "partial" },
+              { "text": "，同减 0.8pct，归母净利率 5.2%……" }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "runs": [
+              { "text": "◼ 研发费用持续高增，经营性现金流亮眼。公司 24 年期间费用 971 亿元，同增 27%……" },
+              { "text": "24 年经营性净现金流 1335 亿元，同降 21%", "refId": "b", "status": "supported" },
+              { "text": "，其中 Q4 经营性现金流 772 亿元……" }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "runs": [
+              { "text": "◼ 盈利预测与投资评级：" },
+              { "text": "我们基本维持此前对公司 25-26 年归母净利润 531/651 亿元", "refId": "e", "status": "supported" },
+              { "text": "的预期……维持「买入」评级。" }
+            ]
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "title": "现金流量表",
+        "blocks": [
+          {
+            "type": "table",
+            "name": "现金流量表（百万元）",
+            "columns": ["2024A", "2025E", "2026E", "2027E"],
+            "rows": [
+              {
+                "label": "经营活动现金流",
+                "cells": [
+                  { "value": "133,454", "refId": "c", "status": "supported" },
+                  { "value": "160,557" },
+                  { "value": "(141,271)" },
+                  { "value": "178,650" }
+                ]
+              },
+              {
+                "label": "投资活动现金流",
+                "cells": [
+                  { "value": "(129,082)" },
+                  { "value": "(76,474)" },
+                  { "value": "(63,100)" },
+                  { "value": "(52,735)" }
+                ]
+              },
+              {
+                "label": "筹资活动现金流",
+                "cells": [
+                  { "value": "(10,268)" },
+                  { "value": "47,781" },
+                  { "value": "85" },
+                  { "value": "(4,431)" }
+                ]
+              },
+              {
+                "label": "现金净增加额",
+                "cells": [
+                  { "value": "(6,255)" },
+                  { "value": "131,505" },
+                  { "value": "(204,286)" },
+                  { "value": "121,484" }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "title": "全文检索说明",
+        "blocks": [
+          {
+            "type": "note",
+            "text": "当前原文三页中未检索到「9999 / 9,999」。无法核验项不会生成原文高亮，只展示未命中说明与可核验真值。"
+          }
+        ]
+      }
+    ]
+  },
+  "traces": [
+    {
+      "schema": "spoor.answer-trace.v1",
+      "question": "毛利率和机构评级怎么看?",
+      "answer": [
+        { "type": "text", "text": "2024 年毛利率原文数值为 19.4%。如果概括成" },
+        { "type": "claim", "text": "毛利率接近 20%", "verdict": "partial", "evidenceIds": ["d"] },
+        { "type": "text", "text": "，系统可定位到原文数字，但这个概括口径建议人工复核。机构评级方面，东吴证券" },
+        { "type": "claim", "text": "维持「买入」评级，并预计 25–26 年归母净利润 531/651 亿元", "verdict": "supported", "evidenceIds": ["e"] },
+        { "type": "text", "text": "。" }
+      ],
+      "evidence": [
+        {
+          "id": "d", "kind": "quote", "verdict": "partial", "page": 1,
+          "before": "归母净利润 403 亿元，同增 34%，", "hit": "毛利率 19.4%", "after": "，同减 0.8pct",
+          "note": "原文为 19.4%。「接近 20%」是 AI 的概括,规则只能定位到 19.4% 这个数,无法判定概括是否成立。"
+        },
+        {
+          "id": "e", "kind": "quote", "verdict": "supported", "page": 1,
+          "before": "", "hit": "我们基本维持此前对公司 25-26 年归母净利润 531/651 亿元", "after": "的预期……维持「买入」评级。"
+        }
+      ],
+      "source": { "documentId": "byd-2024-research", "title": "比亚迪2024年报点评.pdf", "pages": 3 },
+      "audit": { "parser": "spoor@0.8.18", "generator": "@cf/google/gemma-4-26b-a4b-it", "judge": "@cf/qwen/qwen3-30b-a3b-fp8", "judgedAt": "2026-06-29T11:00:00Z" }
+    },
+    {
+      "schema": "spoor.answer-trace.v1",
+      "question": "听说比亚迪 2024 年营收已经突破 9,999 亿元了，是真的吗?",
+      "answer": [
+        { "type": "text", "text": "系统原始回答中出现了" },
+        { "type": "claim", "text": "2024 年营收已达 9,999 亿元，再创历史新高", "verdict": "unsupported", "evidenceIds": ["f"] },
+        { "type": "text", "text": "这个说法。溯源结果显示该结论无法核验:原文全文检索没有找到「9999 / 9,999」,可核验的实际营收为 7,771 亿元。" }
+      ],
+      "evidence": [
+        {
+          "id": "f", "kind": "none", "verdict": "unsupported", "page": null,
+          "reason": "原文三页全文检索「9999 / 9,999」均无结果,找不到任何出处,疑似模型杜撰。",
+          "expectedTruth": "实际营收为 7,771 亿元(见第 1 页)。"
+        }
+      ],
+      "source": { "documentId": "byd-2024-research", "title": "比亚迪2024年报点评.pdf", "pages": 3 },
+      "audit": { "parser": "spoor@0.8.18", "generator": "@cf/google/gemma-4-26b-a4b-it", "judge": "@cf/qwen/qwen3-30b-a3b-fp8", "judgedAt": "2026-06-29T11:00:00Z" }
+    }
+  ]
+}

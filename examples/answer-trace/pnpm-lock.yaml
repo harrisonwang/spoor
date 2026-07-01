@@ -34,6 +34,58 @@ importers:
         specifier: ^4.103.0
         version: 4.105.0(@cloudflare/workers-types@4.20260629.1)
 
+  apps/pages:
+    dependencies:
+      '@answer-trace/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@floating-ui/dom':
+        specifier: ^1.6.12
+        version: 1.7.6
+      '@harrisonwang/spoor-wasm':
+        specifier: ^0.8.17
+        version: 0.8.18
+      marked:
+        specifier: ^14.1.0
+        version: 14.1.4
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20240620.0
+        version: 4.20260629.1
+      '@sveltejs/adapter-static':
+        specifier: ^3.0.0
+        version: 3.0.10(@sveltejs/kit@2.68.0(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.56.4)(vite@5.4.21(lightningcss@1.32.0)))(svelte@5.56.4)(typescript@5.9.3)(vite@5.4.21(lightningcss@1.32.0)))
+      '@sveltejs/kit':
+        specifier: ^2.8.0
+        version: 2.68.0(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.56.4)(vite@5.4.21(lightningcss@1.32.0)))(svelte@5.56.4)(typescript@5.9.3)(vite@5.4.21(lightningcss@1.32.0))
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^4.0.0
+        version: 4.0.4(svelte@5.56.4)(vite@5.4.21(lightningcss@1.32.0))
+      '@tailwindcss/vite':
+        specifier: ^4.0.0
+        version: 4.3.1(vite@5.4.21(lightningcss@1.32.0))
+      svelte:
+        specifier: ^5.1.0
+        version: 5.56.4
+      svelte-check:
+        specifier: ^4.0.0
+        version: 4.7.1(svelte@5.56.4)(typescript@5.9.3)
+      tailwindcss:
+        specifier: ^4.0.0
+        version: 4.3.1
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(lightningcss@1.32.0)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(lightningcss@1.32.0)
+      wrangler:
+        specifier: ^4.103.0
+        version: 4.105.0(@cloudflare/workers-types@4.20260629.1)
+
   apps/web:
     dependencies:
       '@answer-trace/protocol':

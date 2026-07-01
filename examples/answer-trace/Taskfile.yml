@@ -40,3 +40,13 @@ tasks:
     cmds:
       - pnpm --filter @answer-trace/web build
       - pnpm --filter @answer-trace/web deploy
+
+  pages:
+    desc: 全栈本地（前端 + Pages Functions 同源，http://localhost:8788），含分级核验
+    cmds:
+      - pnpm --filter @answer-trace/pages run dev:pages
+
+  deploy:pages:
+    desc: 构建并部署 Pages 项目（前端+Functions 合一，先 wrangler pages secret put 配模型密钥）
+    cmds:
+      - pnpm --filter @answer-trace/pages run deploy

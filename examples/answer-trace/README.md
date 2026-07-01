@@ -11,12 +11,17 @@
 ```
 answer-trace/
   apps/
-    web/        # SvelteKit + Tailwind + Floating UI(对话式 + 内联 claim + 证据 popover + 原文抽屉)
-    api/        # FastAPI:/api/demo · /api/ask(Workers AI 真问真答)· /api/upload(pyspoor 解析上传文件)
+    web/        # SvelteKit 前端(对话式 + 内联 claim + 证据 popover + 原文抽屉)
+    api/        # FastAPI 后端(pyspoor)：/api/demo · /api/ask · /api/upload
+    edge/       # 边缘后端：独立 Cloudflare Worker(spoor-wasm + KV)，前端跨源调
+    pages/      # ★ Cloudflare Pages：前端(静态) + Pages Functions 后端合一，同源一次部署；
+                #   并升级为分级核验（金档数值/单位归一 + 银档语义蕴含）
   packages/
     protocol/   # 共享协议:answer-trace.schema.json + TS 类型 + pydantic + 真实 fixture
   Taskfile.yml  pnpm-workspace.yaml  package.json
 ```
+
+> 三种后端形态可任选：`api`(Python 本地) · `edge`(独立 Worker) · `pages`(Pages Functions 合一，含分级核验)。前端 `web` 与它们靠 `/api/*` 契约解耦。
 
 > **路线图(暂未建,需要时再加):** `apps/worker`(异步解析/核验任务)、`packages/ui`(抽成可嵌入 Svelte 组件库)、`infra/`(docker-compose + Dockerfile,部署时)、`openapi.yaml + generated/`(协议漂移了再上 codegen)、**PDF.js**(回原始 PDF 画框,配 `image` 证据)、**matcher 表格 cell 证据**(live 答案现在都走 quote 证据)、**live 答案的原文下钻**(现在仅内置三轮可「定位原文」)。
 
