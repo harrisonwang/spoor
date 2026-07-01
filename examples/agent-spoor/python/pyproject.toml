@@ -1,0 +1,14 @@
+[project]
+name = "agent-spoor-python"
+version = "0.1.0"
+description = "把 spoor 接入一个最小 AI Agent 的三种方式：原生工具 / MCP Server / Skill（Python 实现）"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=1.50",
+    "pyspoor==0.8.20",
+    "mcp>=1.2",
+    "python-dotenv>=1.0",
+]
+
+[tool.uv]
+package = false

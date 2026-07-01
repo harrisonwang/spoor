@@ -12,6 +12,10 @@ default-members = [
     "crates/spoor-core",
     "crates/spoor-cli",
 ]
+# 独立示例：自带 tokio/reqwest/rmcp 等重依赖，不进主 workspace，用自己的 Cargo.lock。
+exclude = [
+    "examples/agent-spoor/rust",
+]
 
 [workspace.package]
 version = "0.8.20"

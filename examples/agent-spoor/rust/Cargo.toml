@@ -1,0 +1,29 @@
+[package]
+name = "spoor-agent-example-rust"
+version = "0.1.0"
+edition = "2024"
+publish = false
+default-run = "agent-spoor"
+
+[lib]
+name = "agent_spoor"
+path = "src/lib.rs"
+
+[[bin]]
+name = "agent-spoor"
+path = "src/main.rs"
+
+[[bin]]
+name = "spoor-mcp-server"
+path = "src/bin/spoor-mcp-server.rs"
+
+[dependencies]
+spoor-core = { path = "../../../crates/spoor-core" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io-std", "io-util"] }
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+async-trait = "0.1"
+dotenvy = "0.15"
+rmcp = { version = "0.9", features = ["server", "client", "transport-io", "transport-child-process"] }

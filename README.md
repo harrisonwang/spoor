@@ -123,6 +123,7 @@ WASM 包默认包含全部重点格式；
 | [`examples/electron-desktop`](examples/electron-desktop/) | 使用原生 Node binding 的 Electron 桌面应用 |
 | [`examples/rust-core-embed`](examples/rust-core-embed/) | 把 `spoor-core` 嵌入 Rust 程序的最小形态（无框架） |
 | [`examples/serverless-lambda`](examples/serverless-lambda/) | AWS Lambda Layer 中调用 CLI 二进制 |
+| [`examples/agent-spoor`](examples/agent-spoor/) | 把 spoor 接入 AI Agent 的三种方式：原生工具 / MCP Server / Skill（Node · Python · Rust） |
 
 > [`wasm/demo`](wasm/demo/) 不是用户示例，而是 `spoor-wasm` 的浏览器开发/冒烟页：CI 用 `node wasm/demo/smoke.mjs` 跑全格式与恶意输入的 WASM 契约回归。
 
